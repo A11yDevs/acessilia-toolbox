@@ -42,26 +42,27 @@ curl -X POST http://localhost:8000/v1/capabilities/document.structure.extract:ex
   -F "language=pt-BR" | python3 -m json.tool | head -50
 ```
 
-### No PDF at hand? Generate one inline
+### No PDF at hand? Generate sample documents
 
 ```bash
-python3 -c "
-import struct
-pdf = b'%%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n'
-pdf += b'2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n'
-pdf += b'3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]'
-pdf += b'/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n'
-pdf += b'4 0 obj<</Length 44>>stream\nBT /F1 24 Tf 72 760 Td(Ola Toolbox)Tj ET\nendstream\nendobj\n'
-pdf += b'5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n'
-pdf += b'xref\n0 6\n0000000000 65535 f\n'
-for i,o in enumerate([1,2,3,4,5]): pdf += b'%%010d 00000 n\n' % (o,)
-pdf += b'trailer<</Size 6/Root 1 0 R>>\nstartxref\n%%d\n%%%%EOF\n' % len(pdf)
-open('/tmp/exemplo.pdf','wb').write(pdf)
-"
+python scripts/generate_samples.py
+```
+
+This creates four PDFs in `/tmp/`:
+
+| File | Content | Purpose |
+|---|---|---|
+| `sample-simple.pdf` | One heading + one paragraph | Quick smoke test |
+| `sample-report.pdf` | ~380 words, sections, numbers | Rich structure, metadata |
+| `sample-mixed.pdf` | Lists, code block, headings | Element type diversity |
+| `sample-multi-page.pdf` | 3 pages with unique content | Page-level extraction |
+
+```bash
+# Extract the report
 curl -X POST http://localhost:8000/v1/capabilities/document.structure.extract:execute \
-  -F "file=@/tmp/exemplo.pdf" \
-  -F "language=pt-BR" | python3 -c "
-import sys,json
+  -F "file=@/tmp/sample-report.pdf" \
+  -F "language=en-US" | python3 -c "
+import sys, json
 r = json.load(sys.stdin)
 for e in r['document']['elements']:
     print(f\"  [{e['type']}] {e['text']}\")
@@ -72,8 +73,13 @@ print(f\"  -> {r['provenance']['duration_ms']}ms via {r['provenance']['provider_
 Example output:
 
 ```
-  [heading] Documento de teste
-  -> 1872ms via 1.32.0
+  [heading] Annual Report 2025
+  [paragraph] This report summarizes the financial performance...
+  [heading] 1. Executive Summary
+  [paragraph] Revenue grew 15% year-over-year...
+  [heading] 2. Financial Highlights
+  [paragraph] Total assets: $18.7M  |  Net income: $3.2M  |  EPS: $1.45
+  -> 2110ms via 1.32.0
 ```
 
 ---
