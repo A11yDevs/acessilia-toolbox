@@ -302,7 +302,30 @@ curl -X POST http://localhost:8000/v1/capabilities/document.structure.extract:ex
 metadata (`page_count`, `element_count`), and the list of extracted
 elements with `type` and `text`.
 
-### 5. Use the CLI (alternative to REST)
+### 5. Verify cache behavior
+
+After the first extraction, the result is cached in Valkey. Confirm
+the cache entry was created:
+
+``` bash
+docker exec acessilia-valkey valkey-cli KEYS 'acessilia:execution:*'
+```
+
+**Expected output:** one or more keys starting with
+`acessilia:execution:`. To inspect a specific entry:
+
+``` bash
+docker exec acessilia-valkey valkey-cli GET 'acessilia:execution:*' | head -c 200
+```
+
+> You can also watch cache metrics live:
+> `docker exec -it acessilia-valkey valkey-cli INFO stats | grep -i hits`
+
+Run the extraction again — it should complete much faster on a cache hit.
+You can verify the cache hit via the `provenance.cache_hit` field in the
+response.
+
+### 6. Use the CLI (alternative to REST)
 
 ``` bash
 # List capabilities
@@ -318,13 +341,13 @@ acessilia-toolbox execute document.structure.extract \
   --provenance
 ```
 
-### 6. Check caching and storage (MinIO)
+### 7. Check caching and storage (MinIO)
 
 Access the MinIO web console at http://localhost:9001 and log in with
 the credentials set in `.env`. The `acessilia` bucket should appear
 after the first artifact is stored.
 
-### 7. Provider logs
+### 8. Provider logs
 
 If something is not working, inspect the logs:
 
