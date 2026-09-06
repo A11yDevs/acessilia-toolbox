@@ -1,0 +1,203 @@
+{
+  "document": {
+    "$schema": "urn:a11y-devs:schema:processing-manifest:1.1.0",
+    "artifacts": [],
+    "created_at": "2026-09-06T14:15:32.251058Z",
+    "elements": [
+      {
+        "confidence": null,
+        "hierarchy_level": 1,
+        "id": "element-000001",
+        "metadata": {
+          "content_layer": "body",
+          "docling_class": "_ItemProxy"
+        },
+        "page_number": 1,
+        "parent_id": null,
+        "parent_ref": "#/body",
+        "provenance": [
+          {
+            "bbox": {
+              "bottom": 495.3333333333333,
+              "coord_origin": "BOTTOMLEFT",
+              "left": 284.6666666666667,
+              "right": 652.3333333333333,
+              "top": 524.3333333333334
+            },
+            "char_end": 38,
+            "char_start": 0,
+            "page_number": 1
+          }
+        ],
+        "raw_label": "section_header",
+        "reading_order": 1,
+        "source_ref": "#/texts/0",
+        "text": "SISTEMA INTERNACIONAL DE UNIDADES (SI)",
+        "type": "heading"
+      },
+      {
+        "confidence": null,
+        "hierarchy_level": 1,
+        "id": "element-000002",
+        "metadata": {
+          "content_layer": "body",
+          "docling_class": "_ItemProxy"
+        },
+        "page_number": 1,
+        "parent_id": null,
+        "parent_ref": "#/body",
+        "provenance": [
+          {
+            "bbox": {
+              "bottom": 471.0,
+              "coord_origin": "BOTTOMLEFT",
+              "left": 358.3333333333333,
+              "right": 579.6666666666667,
+              "top": 490.3333333333333
+            },
+            "char_end": 28,
+            "char_start": 0,
+            "page_number": 1
+          }
+        ],
+        "raw_label": "section_header",
+        "reading_order": 2,
+        "source_ref": "#/texts/1",
+        "text": "Grandezas e Unidades de Base",
+        "type": "heading"
+      },
+      {
+        "confidence": null,
+        "hierarchy_level": 1,
+        "id": "element-000003",
+        "metadata": {
+          "content_layer": "body",
+          "docling_class": "_ItemProxy"
+        },
+        "page_number": 1,
+        "parent_id": null,
+        "parent_ref": "#/body",
+        "provenance": [
+          {
+            "bbox": {
+              "bottom": 35.838531494140625,
+              "coord_origin": "BOTTOMLEFT",
+              "left": 85.50312805175781,
+              "right": 855.5380859375,
+              "top": 445.1348190307617
+            },
+            "char_end": 0,
+            "char_start": 0,
+            "page_number": 1
+          }
+        ],
+        "raw_label": "table",
+        "reading_order": 3,
+        "source_ref": "#/tables/0",
+        "text": null,
+        "type": "table"
+      }
+    ],
+    "extractor": {
+      "completed_at": "2026-09-06T14:15:32.251058Z",
+      "configuration": {
+        "base_url": "http://localhost:5001",
+        "capability": "document.structure.extract",
+        "component_versions": {
+          "docling": "2.124.0",
+          "docling-core": "2.93.0",
+          "docling-ibm-models": "4.0.1",
+          "docling-parse": "7.16.0",
+          "docling-serve": "1.32.0"
+        },
+        "extractor": "docling-serve"
+      },
+      "duration_ms": 10043,
+      "name": "docling",
+      "started_at": "2026-09-06T14:15:22.207410Z",
+      "version": "1.32.0"
+    },
+    "language": "pt-BR",
+    "manifest_id": "manifest-965a50c5055cb4f1-r1",
+    "obligations": [
+      {
+        "admissible_methods": [
+          "docling-table",
+          "pandoc-table",
+          "human-review"
+        ],
+        "attempts": [],
+        "dependencies": [],
+        "id": "obligation-linearize-table-000003",
+        "kind": "linearize-table",
+        "method_costs": {
+          "docling-table": 10,
+          "human-review": 100,
+          "pandoc-table": 15
+        },
+        "rationale": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis.",
+        "selected": false,
+        "status": "candidate",
+        "target_ids": [
+          "element-000003"
+        ]
+      }
+    ],
+    "observations": [
+      {
+        "evidence": {
+          "page_number": 1,
+          "raw_label": "table"
+        },
+        "id": "observation-linearize-table-000003",
+        "kind": "table-requires-processing",
+        "message": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis.",
+        "severity": "warning",
+        "target_ids": [
+          "element-000003"
+        ]
+      }
+    ],
+    "pages": [
+      {
+        "element_ids": [
+          "element-000001",
+          "element-000002",
+          "element-000003"
+        ],
+        "height": 540.0,
+        "page_number": 1,
+        "width": 960.0
+      }
+    ],
+    "revision": 1,
+    "schema_version": "1.1.0",
+    "source": {
+      "byte_size": 648946,
+      "document_id": "doc-965a50c5055cb4f1",
+      "filename": "007.pdf",
+      "media_type": "application/pdf",
+      "path": "/private/var/folders/qj/5jwqmns93svck0ttg234mrlc0000gn/T/tmps7it8iub/007.pdf",
+      "sha256": "965a50c5055cb4f138f3962f16b0821e73314458e8e707883838e6771589b10b"
+    },
+    "status": "extracted",
+    "summary": {
+      "element_count": 3,
+      "element_types": {
+        "heading": 2,
+        "table": 1
+      },
+      "obligation_count": 1,
+      "observation_count": 1,
+      "page_count": 1
+    },
+    "title": "SISTEMA INTERNACIONAL DE UNIDADES (SI)"
+  },
+  "provider_versions": {
+    "docling": "2.124.0",
+    "docling-core": "2.93.0",
+    "docling-ibm-models": "4.0.1",
+    "docling-parse": "7.16.0",
+    "docling-serve": "1.32.0"
+  }
+}
