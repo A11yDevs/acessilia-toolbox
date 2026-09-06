@@ -238,3 +238,123 @@ curl http://localhost:8000/v1/providers/mineru
 
 Press `Ctrl+C` in the terminal running uvicorn, or close the terminal
 session.
+
+## MCP Manual Testing
+
+The toolbox is also available over the Model Context Protocol (MCP) via
+a stdio transport server.
+
+### Starting the MCP server
+
+```bash
+python scripts/mcp_server.py
+```
+
+This starts listening for JSON-RPC 2.0 messages on stdin. Most MCP
+clients communicate this way.
+
+### Interactive mode
+
+```bash
+python scripts/mcp_server.py --interactive
+```
+
+This starts a REPL for manual exploration:
+
+```
+=== Acessilia Toolbox MCP Server ===
+Server: acessilia-toolbox v0.1.0
+
+=== Tools ===
+  document_structure_extract
+    Extract the logical and visual structure of a document...
+    - file: File path to the document (or artifact_id for stored content)
+    - media_type: MIME type of the file (e.g., 'application/pdf')
+    - provider: Provider ID: docling
+    - parameters: Provider-specific parameters as a JSON object
+
+=== Resources ===
+  acessilia://capabilities
+    Available Capabilities: All capabilities exposed by the toolbox
+  acessilia://providers
+    Registered Providers: All registered providers and their capabilities
+  acessilia://planning/domain
+    PDDL Domain Fragment: PDDL domain fragment for planning
+  acessilia://planning/predicates
+    PDDL Predicates: Available predicates for planning
+  acessilia://planning/capabilities/document.structure.extract
+    PDDL Action for document.structure.extract: PDDL action fragment
+
+=== Interactive Testing ===
+Commands:
+  tools                        List tools
+  resources                    List resources
+  read <uri>                   Read a resource
+  call <tool> <json args>      Call a tool
+  quit                         Exit
+```
+
+### Testing with curl (stdio transport)
+
+Since MCP uses stdio, you can test by piping JSON-RPC requests:
+
+```bash
+# List tools
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | \
+  python scripts/mcp_server.py | python3 -m json.tool | head -30
+
+# List resources
+echo '{"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}' | \
+  python scripts/mcp_server.py | python3 -m json.tool | head -20
+
+# Read the PDDL domain
+echo '{"jsonrpc":"2.0","id":1,"method":"resources/read",
+  "params":{"uri":"acessilia://planning/domain"}}' | \
+  python scripts/mcp_server.py | python3 -c "
+import sys,json
+print(json.load(sys.stdin)['result']['contents'][0]['text'])
+"
+
+# Extract a document (call a tool)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+  "params":{"name":"document_structure_extract",
+  "arguments":{"file":"/tmp/sample-report.pdf","media_type":"application/pdf"}}}' | \
+  python scripts/mcp_server.py | python3 -c "
+import sys,json
+r = json.load(sys.stdin)
+for item in r['result']['content']:
+    print(item['text'][:500])
+"
+```
+
+### Testing with Claude Desktop or any MCP client
+
+```bash
+# Add to your Claude Desktop config (claude_desktop_config.json):
+# {
+#   "mcpServers": {
+#     "acessilia-toolbox": {
+#       "command": "python",
+#       "args": ["/path/to/acessilia-toolbox/scripts/mcp_server.py"]
+#     }
+#   }
+# }
+```
+
+Or use the `mcp` CLI tool:
+
+```bash
+pip install mcp
+mcp run scripts/mcp_server.py
+```
+
+### Testing with the mcp CLI inspector
+
+```bash
+pip install mcp
+mcp dev scripts/mcp_server.py
+```
+
+This opens an interactive inspector in the browser where you can browse
+tools, call them, and inspect resources. Ensure `DOCLING_SERVE_URL` is
+set in the environment before starting.
