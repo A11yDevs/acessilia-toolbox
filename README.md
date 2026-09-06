@@ -142,11 +142,57 @@ flowchart TB
 # List capabilities
 acessilia-toolbox capabilities
 
-# List providers
+# List providers and probe their health
 acessilia-toolbox providers --health
 
-# Execute
+# Execute a capability
 acessilia-toolbox execute document.structure.extract documento.pdf -o resultado.json
+
+# Execute with provenance on stderr
+acessilia-toolbox execute document.structure.extract documento.pdf --provenance
+```
+
+### Test with sample documents
+
+```bash
+# Generate the sample PDFs
+python scripts/generate_samples.py
+
+# Extract the report
+acessilia-toolbox execute document.structure.extract /tmp/sample-report.pdf \
+  -o /tmp/report.json --provenance 2>/tmp/provenance.json
+
+# Inspect the output
+python3 -c "
+import json
+d = json.load(open('/tmp/report.json'))
+for e in d['elements']:
+    print(f\"  [{e['type']}] {e['text'][:80]}\")
+"
+
+# Extract the multi-page document
+acessilia-toolbox execute document.structure.extract /tmp/sample-multi-page.pdf \
+  -o /tmp/multi.json
+python3 -c "
+import json
+d = json.load(open('/tmp/multi.json'))
+print(f\"Pages: {d['summary']['page_count']}, Elements: {d['summary']['element_count']}\")
+"
+
+# List capabilities as JSON
+acessilia-toolbox capabilities --json | python3 -m json.tool | head -20
+
+# List providers as JSON (credentials redacted)
+acessilia-toolbox providers --json | python3 -m json.tool
+```
+
+Example output:
+
+```
+$ acessilia-toolbox execute document.structure.extract /tmp/sample-report.pdf \
+    --provenance 2>/dev/null
+document.structure.extract@1 via docling -> /tmp/sample-report.structured-document.json
+pages: 1; elements: 7; obligations: 0
 ```
 
 ## Documentation
