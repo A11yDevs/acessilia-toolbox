@@ -1,0 +1,58 @@
+"""Application factory and configuration."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from acessilia_toolbox import __version__
+from acessilia_toolbox.api.rest import router
+from acessilia_toolbox.core.capability import CapabilityRegistry
+from acessilia_toolbox.core.errors import ToolboxError
+from acessilia_toolbox.core.executor import CapabilityExecutor
+from acessilia_toolbox.core.provider import ProviderRegistry
+from acessilia_toolbox.providers import create_adapter
+
+DEFAULT_CAPABILITIES_DIR = Path("capabilities")
+DEFAULT_PROVIDERS_CONFIG = Path("providers-config.yaml")
+
+DESCRIPTION = """
+Deterministic, stateless capability layer for agentic systems.
+
+Capabilities describe what can be done; providers implement it. The toolbox
+executes and normalizes, while goals, planning and provider choice stay with
+the agentic core.
+""".strip()
+
+
+def create_app(
+    capabilities: CapabilityRegistry | None = None,
+    providers: ProviderRegistry | None = None,
+) -> FastAPI:
+    app = FastAPI(
+        title="Acessilia Toolbox",
+        version=__version__,
+        description=DESCRIPTION,
+        openapi_url="/v1/openapi.json",
+        docs_url="/v1/docs",
+    )
+
+    app.state.capabilities = capabilities or CapabilityRegistry.from_directory(
+        Path(os.getenv("TOOLBOX_CAPABILITIES_DIR", DEFAULT_CAPABILITIES_DIR))
+    )
+    app.state.providers = providers or ProviderRegistry.from_file(
+        Path(os.getenv("TOOLBOX_PROVIDERS_CONFIG", DEFAULT_PROVIDERS_CONFIG))
+    )
+    app.state.executor = CapabilityExecutor(
+        app.state.capabilities, app.state.providers, create_adapter
+    )
+
+    @app.exception_handler(ToolboxError)
+    async def _toolbox_error(_: Request, error: ToolboxError) -> JSONResponse:
+        return JSONResponse(status_code=error.http_status, content=error.to_payload())
+
+    app.include_router(router)
+    return app
