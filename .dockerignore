@@ -1,0 +1,29 @@
+# Build artefacts — the image ships only what pyproject.toml declares.
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# The dataset is large and meant for testing, not production.
+tests/fixtures/dataset/
+
+# Git and CI artefacts.
+.git/
+.gitmodules
+.github/
+
+# Environment and credentials.
+.env
+.env.example
+
+# Provider configuration references secrets via environment variables,
+# so the default config file is not needed at runtime.
+providers-config.yaml
+
+# macOS artefacts.
+.DS_Store

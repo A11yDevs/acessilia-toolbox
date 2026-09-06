@@ -1,6 +1,3 @@
-# Provider topology. Values may reference environment variables as ${VAR};
-# keep credentials in the environment, never in this file.
-
 providers:
   - id: docling
     version: "1.32"
