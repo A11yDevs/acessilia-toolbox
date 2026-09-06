@@ -89,10 +89,13 @@ def test_expand_env_resolves_placeholders(monkeypatch: pytest.MonkeyPatch) -> No
     assert expand_env(600) == 600
 
 
-def test_expand_env_fails_loudly_on_unset_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_expand_env_preserves_placeholders_for_unset_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing variables are kept as-is so the registry stays loadable."""
     monkeypatch.delenv("TOOLBOX_ABSENT", raising=False)
-    with pytest.raises(ConfigurationError):
-        expand_env("${TOOLBOX_ABSENT}")
+    assert expand_env("${TOOLBOX_ABSENT}") == "${TOOLBOX_ABSENT}"
+    assert expand_env({"a": ["${TOOLBOX_ABSENT}"]}) == {"a": ["${TOOLBOX_ABSENT}"]}
 
 
 def test_from_mapping_requires_a_providers_list() -> None:

@@ -20,6 +20,11 @@ from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import InvalidInputError
 from acessilia_toolbox.core.executor import CapabilityExecutor
+from acessilia_toolbox.core.pddl import (
+    capability_action,
+    domain_fragment,
+    predicates_list,
+)
 from acessilia_toolbox.core.provider import ProviderHealth, ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
 
@@ -227,3 +232,32 @@ async def _resolve_input(
         payload, ref = runner.retrieve_artifact(artifact_id)
         return payload, ref.filename or "artifact", ref.media_type
     raise InvalidInputError("a file or an artifact_id is required")
+
+
+@router.get("/planning/domain", tags=["planning"])
+def planning_domain(
+    registry: Annotated[CapabilityRegistry, Depends(capabilities)],
+) -> Response:
+    return Response(
+        content=domain_fragment(registry.manifests()),
+        media_type="text/plain",
+    )
+
+
+@router.get("/planning/capabilities/{capability_id}", tags=["planning"])
+def planning_capability_action(
+    capability_id: str,
+    registry: Annotated[CapabilityRegistry, Depends(capabilities)],
+    version: int | None = None,
+) -> Response:
+    return Response(
+        content=capability_action(registry.get(capability_id, version)),
+        media_type="text/plain",
+    )
+
+
+@router.get("/planning/predicates", tags=["planning"])
+def planning_predicates(
+    registry: Annotated[CapabilityRegistry, Depends(capabilities)],
+) -> list[str]:
+    return predicates_list(registry)

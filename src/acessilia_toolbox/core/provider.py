@@ -213,18 +213,16 @@ def _is_secret(key: str) -> bool:
 
 
 def expand_env(value: Any) -> Any:
-    """Resolve `${VAR}` placeholders so secrets stay out of the config file."""
+    """Resolve `${VAR}` placeholders. Missing variables are kept as-is so the
+    registry stays loadable even when optional providers are not configured;
+    they will fail naturally when actually used.
+    """
     if isinstance(value, str):
 
         def _replace(match: re.Match[str]) -> str:
             name = match.group(1)
             resolved = os.environ.get(name)
-            if resolved is None:
-                raise ConfigurationError(
-                    f"environment variable {name} is referenced but not set",
-                    variable=name,
-                )
-            return resolved
+            return resolved if resolved is not None else match.group(0)
 
         return ENV_PLACEHOLDER.sub(_replace, value)
     if isinstance(value, dict):

@@ -17,7 +17,7 @@ from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.cache import create_cache
-from acessilia_toolbox.providers.storage import create_artifact_store
+from acessilia_toolbox.providers.storage import create_artifact_store as _create_store
 
 DEFAULT_CAPABILITIES_DIR = Path("capabilities")
 DEFAULT_PROVIDERS_CONFIG = Path("providers-config.yaml")
@@ -71,11 +71,25 @@ def create_app(
 
 
 def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
-    """Pick the provider bound to artifact.store, if any is configured."""
     candidates = providers.for_capability("artifact.store")
-    return create_artifact_store(candidates[0]) if candidates else None
+    if not candidates:
+        return None
+    descriptor = candidates[0]
+    if _is_unresolved(dict(descriptor.config)):
+        return None
+    store = _create_store(descriptor)
+    return store if isinstance(store, ArtifactStore) else None
 
 
 def _cache_from(providers: ProviderRegistry) -> ExecutionCache | None:
     candidates = [d for d in providers.descriptors() if d.transport == "redis"]
-    return create_cache(candidates[0]) if candidates else None
+    if not candidates:
+        return None
+    descriptor = candidates[0]
+    if _is_unresolved({"endpoint": descriptor.endpoint or ""}):
+        return None
+    return create_cache(descriptor)
+
+
+def _is_unresolved(values: dict[str, object]) -> bool:
+    return any("${" in str(v) for v in values.values())
