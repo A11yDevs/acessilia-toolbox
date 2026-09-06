@@ -1,0 +1,21 @@
+# Providers run out of process so the toolbox image stays model-free.
+services:
+  docling-serve:
+    image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.32.0}
+    container_name: docling-serve
+    ports:
+      - "${DOCLING_SERVE_PORT:-5001}:5001"
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "${DOCLING_SERVE_ENABLE_UI:-false}"
+    volumes:
+      # Models are downloaded on first request and cached here.
+      - docling-models:/root/.cache/docling
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+volumes:
+  docling-models:
