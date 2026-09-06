@@ -10,11 +10,14 @@ from fastapi.responses import JSONResponse
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.api.rest import router
+from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import ToolboxError
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
+from acessilia_toolbox.providers.cache import create_cache
+from acessilia_toolbox.providers.storage import create_artifact_store
 
 DEFAULT_CAPABILITIES_DIR = Path("capabilities")
 DEFAULT_PROVIDERS_CONFIG = Path("providers-config.yaml")
@@ -31,6 +34,9 @@ the agentic core.
 def create_app(
     capabilities: CapabilityRegistry | None = None,
     providers: ProviderRegistry | None = None,
+    *,
+    cache: ExecutionCache | None = None,
+    store: ArtifactStore | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Acessilia Toolbox",
@@ -46,8 +52,14 @@ def create_app(
     app.state.providers = providers or ProviderRegistry.from_file(
         Path(os.getenv("TOOLBOX_PROVIDERS_CONFIG", DEFAULT_PROVIDERS_CONFIG))
     )
+    app.state.store = store if store is not None else _store_from(app.state.providers)
+    app.state.cache = cache if cache is not None else _cache_from(app.state.providers)
     app.state.executor = CapabilityExecutor(
-        app.state.capabilities, app.state.providers, create_adapter
+        app.state.capabilities,
+        app.state.providers,
+        create_adapter,
+        cache=app.state.cache,
+        store=app.state.store,
     )
 
     @app.exception_handler(ToolboxError)
@@ -56,3 +68,14 @@ def create_app(
 
     app.include_router(router)
     return app
+
+
+def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
+    """Pick the provider bound to artifact.store, if any is configured."""
+    candidates = providers.for_capability("artifact.store")
+    return create_artifact_store(candidates[0]) if candidates else None
+
+
+def _cache_from(providers: ProviderRegistry) -> ExecutionCache | None:
+    candidates = [d for d in providers.descriptors() if d.transport == "redis"]
+    return create_cache(candidates[0]) if candidates else None

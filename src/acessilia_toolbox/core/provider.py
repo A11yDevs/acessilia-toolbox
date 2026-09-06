@@ -96,6 +96,11 @@ class ProviderAdapter(Protocol):
         parameters: Mapping[str, Any] | None = None,
     ) -> Any: ...
 
+    def versions(self) -> dict[str, str]:
+        """Provider and component versions, queried before execution so a cache
+        lookup can account for an upgrade."""
+        ...
+
     def health(self) -> ProviderHealth: ...
 
 

@@ -1,0 +1,28 @@
+id: artifact.store
+version: 1
+description: >-
+  Store content in object storage and return its content-addressable reference.
+
+input:
+  schema: artifact/binary@1
+
+output:
+  schema: artifact/reference@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: false
+  timeout_hint_seconds: 60
+
+semantics:
+  requires:
+    - content_available
+  produces:
+    - artifact_stored
+
+providers:
+  - id: filesystem
+  - id: minio

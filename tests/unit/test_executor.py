@@ -81,6 +81,9 @@ class StubProvider:
             provider=self.descriptor.id, healthy=True, checked_at=datetime.now(UTC)
         )
 
+    def versions(self) -> dict[str, str]:
+        return {"provider": "1.32-stub"}
+
 
 @pytest.fixture
 def descriptor() -> ProviderDescriptor:

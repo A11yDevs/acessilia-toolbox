@@ -16,3 +16,26 @@ providers:
       - image/png
       - image/jpeg
       - image/tiff
+
+  - id: minio
+    version: "2025.04"
+    transport: s3
+    endpoint: ${MINIO_URL}
+    capabilities:
+      - artifact.store
+      - artifact.retrieve
+    config:
+      bucket: acessilia
+      access_key: ${MINIO_ACCESS_KEY}
+      secret_key: ${MINIO_SECRET_KEY}
+
+  - id: valkey
+    version: "8"
+    transport: redis
+    endpoint: ${VALKEY_URL}
+    capabilities:
+      - cache.get
+      - cache.put
+    config:
+      db: 0
+      ttl_seconds: 604800

@@ -6,20 +6,20 @@ import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi.responses import Response
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.api.schemas import (
-    ArtifactRef,
     CapabilityDetail,
     CapabilitySummary,
     ErrorResponse,
     ExecutionResponse,
     HealthResponse,
 )
+from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import InvalidInputError
 from acessilia_toolbox.core.executor import CapabilityExecutor
-from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.provider import ProviderHealth, ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
 
@@ -88,13 +88,14 @@ def get_capability(
 async def execute_capability(
     capability_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
-    file: Annotated[UploadFile, File(description="Document to process")],
+    file: Annotated[UploadFile | None, File(description="Document to process")] = None,
+    artifact_id: Annotated[str | None, Form(description="Stored input")] = None,
     provider: Annotated[str | None, Form()] = None,
     parameters: Annotated[str | None, Form(description="JSON object")] = None,
     language: Annotated[str, Form()] = "pt-BR",
     version: Annotated[int | None, Form()] = None,
 ) -> ExecutionResponse:
-    payload = await file.read()
+    payload, filename, media_type = await _resolve_input(runner, file, artifact_id)
     if len(payload) > MAX_UPLOAD_BYTES:
         raise InvalidInputError(
             f"upload exceeds {MAX_UPLOAD_BYTES} bytes", capability=capability_id
@@ -103,25 +104,69 @@ async def execute_capability(
     result = runner.execute(
         capability_id,
         payload,
-        filename=file.filename or "upload",
-        media_type=file.content_type or "application/octet-stream",
+        filename=filename,
+        media_type=media_type,
         provider_id=provider,
         capability_version=version,
         parameters=_parse_parameters(parameters),
         language=language,
     )
 
-    document = json.dumps(result.document, ensure_ascii=False).encode("utf-8")
     return ExecutionResponse(
         status=result.status,
         capability=result.capability,
         provider=result.provider,
-        artifacts=[
-            ArtifactRef(artifact_id=fingerprint_bytes(document), size=len(document))
-        ],
+        artifacts=result.artifacts,
         document=result.document,
         provenance=result.provenance,
     )
+
+
+@router.post(
+    "/artifacts",
+    response_model=ArtifactRef,
+    responses=ERROR_RESPONSES,
+    tags=["artifacts"],
+)
+async def store_artifact(
+    runner: Annotated[CapabilityExecutor, Depends(executor)],
+    file: Annotated[UploadFile, File(description="Content to store")],
+) -> ArtifactRef:
+    payload = await file.read()
+    if not payload:
+        raise InvalidInputError("empty payload")
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise InvalidInputError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    return runner.store_artifact(
+        payload,
+        media_type=file.content_type or "application/octet-stream",
+        filename=file.filename,
+    )
+
+
+@router.get("/artifacts/{artifact_id}", responses=ERROR_RESPONSES, tags=["artifacts"])
+def retrieve_artifact(
+    artifact_id: str,
+    runner: Annotated[CapabilityExecutor, Depends(executor)],
+) -> Response:
+    payload, ref = runner.retrieve_artifact(artifact_id)
+    headers = {"ETag": ref.artifact_id}
+    if ref.filename:
+        headers["Content-Disposition"] = f'attachment; filename="{ref.filename}"'
+    return Response(content=payload, media_type=ref.media_type, headers=headers)
+
+
+@router.get(
+    "/artifacts/{artifact_id}/metadata",
+    response_model=ArtifactRef,
+    responses=ERROR_RESPONSES,
+    tags=["artifacts"],
+)
+def artifact_metadata(
+    artifact_id: str,
+    runner: Annotated[CapabilityExecutor, Depends(executor)],
+) -> ArtifactRef:
+    return runner.retrieve_artifact(artifact_id)[1]
 
 
 @router.get("/providers", tags=["providers"])
@@ -162,3 +207,23 @@ def _parse_parameters(raw: str | None) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise InvalidInputError("parameters must be a JSON object")
     return parsed
+
+
+async def _resolve_input(
+    runner: CapabilityExecutor,
+    file: UploadFile | None,
+    artifact_id: str | None,
+) -> tuple[bytes, str, str]:
+    """Accept either a direct upload or a reference to stored content."""
+    if file is not None and artifact_id:
+        raise InvalidInputError("provide either a file or an artifact_id, not both")
+    if file is not None:
+        return (
+            await file.read(),
+            file.filename or "upload",
+            file.content_type or "application/octet-stream",
+        )
+    if artifact_id:
+        payload, ref = runner.retrieve_artifact(artifact_id)
+        return payload, ref.filename or "artifact", ref.media_type
+    raise InvalidInputError("a file or an artifact_id is required")

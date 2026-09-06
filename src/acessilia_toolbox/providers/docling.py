@@ -71,6 +71,14 @@ class DoclingProvider:
             },
         )
 
+    def versions(self) -> dict[str, str]:
+        with self._client(timeout=10.0) as client:
+            reported = self._server_versions(client)
+        return {
+            "provider": _pick_version(reported, self.descriptor.version),
+            **_components(reported),
+        }
+
     def health(self) -> ProviderHealth:
         checked_at = datetime.now(UTC)
         try:

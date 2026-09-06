@@ -61,6 +61,9 @@ class StubProvider:
             provider=self.descriptor.id, healthy=True, checked_at=datetime.now(UTC)
         )
 
+    def versions(self) -> dict[str, str]:
+        return {"provider": "1.32.0"}
+
 
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

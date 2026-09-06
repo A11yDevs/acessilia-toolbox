@@ -1,0 +1,26 @@
+id: artifact.retrieve
+version: 1
+description: >-
+  Retrieve previously stored content by its content-addressable identifier.
+
+input:
+  schema: artifact/reference@1
+
+output:
+  schema: artifact/binary@1
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: false
+  timeout_hint_seconds: 60
+
+semantics:
+  requires:
+    - artifact_stored
+  produces:
+    - content_available
+
+providers:
+  - id: filesystem
+  - id: minio

@@ -6,16 +6,22 @@ runs it, normalizes the output and records provenance.
 
 from __future__ import annotations
 
+import json
 import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
+from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactStore, ExecutionCache, NullCache
 from acessilia_toolbox.core.cache import compute_cache_key
 from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
-from acessilia_toolbox.core.errors import InvalidInputError, UnsupportedMediaTypeError
+from acessilia_toolbox.core.errors import (
+    ConfigurationError,
+    InvalidInputError,
+    UnsupportedMediaTypeError,
+)
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes, fingerprint_parameters
 from acessilia_toolbox.core.normalization import build_processing_manifest
 from acessilia_toolbox.core.provenance import ExecutionProvenance
@@ -38,6 +44,7 @@ class CapabilityResult(BaseModel):
     provider: str
     document: dict[str, Any]
     provenance: ExecutionProvenance
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
 
 
 class CapabilityExecutor:
@@ -46,10 +53,15 @@ class CapabilityExecutor:
         capabilities: CapabilityRegistry,
         providers: ProviderRegistry,
         adapter_factory: AdapterFactory,
+        *,
+        cache: ExecutionCache | None = None,
+        store: ArtifactStore | None = None,
     ) -> None:
         self._capabilities = capabilities
         self._providers = providers
         self._adapter_factory = adapter_factory
+        self._cache = cache or NullCache()
+        self._store = store
 
     def execute(
         self,
@@ -69,6 +81,24 @@ class CapabilityExecutor:
         descriptor = self._providers.resolve(manifest.id, provider_id)
         adapter = self._adapter_factory(descriptor)
 
+        input_fingerprint = fingerprint_bytes(payload)
+        versions = _versions_of(adapter)
+        provider_version = versions.pop("provider", descriptor.version)
+        cache_key = compute_cache_key(
+            capability_id=manifest.id,
+            capability_version=manifest.version,
+            provider_id=descriptor.id,
+            provider_version=provider_version,
+            input_fingerprints=[input_fingerprint],
+            parameters=parameters,
+            model_versions=versions,
+        )
+
+        if manifest.execution.cacheable:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                return _restore(cached, cache_key)
+
         extraction = adapter.execute(
             manifest.id,
             payload,
@@ -84,44 +114,78 @@ class CapabilityExecutor:
             source.write_bytes(payload)
             document = build_processing_manifest(source, extraction, language=language)
 
-        input_fingerprint = fingerprint_bytes(payload)
         document_payload = document.model_dump(mode="json", by_alias=True)
-        model_versions = _model_versions(extraction.configuration)
+        serialized = json.dumps(document_payload, ensure_ascii=False).encode("utf-8")
 
-        return CapabilityResult(
+        artifacts: list[ArtifactRef] = []
+        if self._store is not None:
+            artifacts.append(
+                self._store.put(
+                    serialized,
+                    media_type="application/json",
+                    filename=f"{Path(filename).stem}.structured-document.json",
+                )
+            )
+        else:
+            artifacts.append(
+                ArtifactRef.of(serialized, media_type="application/json")
+            )
+
+        result = CapabilityResult(
             capability=manifest.key,
             provider=descriptor.id,
             document=document_payload,
+            artifacts=artifacts,
             provenance=ExecutionProvenance(
                 capability=manifest.id,
                 capability_version=manifest.version,
                 provider=descriptor.id,
                 provider_version=extraction.version,
                 input_fingerprints=[input_fingerprint],
+                output_fingerprints=[artifacts[0].artifact_id],
                 parameters_hash=fingerprint_parameters(parameters),
-                model_versions=model_versions,
+                model_versions=versions,
                 started_at=extraction.started_at,
                 completed_at=extraction.completed_at,
                 duration_ms=extraction.duration_ms,
-                cache_key=compute_cache_key(
-                    capability_id=manifest.id,
-                    capability_version=manifest.version,
-                    provider_id=descriptor.id,
-                    provider_version=extraction.version,
-                    input_fingerprints=[input_fingerprint],
-                    parameters=parameters,
-                    model_versions=model_versions,
-                ),
+                cache_key=cache_key,
             ),
         )
 
+        if manifest.execution.cacheable:
+            self._cache.put(cache_key, result.model_dump(mode="json"))
+        return result
 
-def _model_versions(configuration: Mapping[str, Any]) -> dict[str, str]:
-    """Component versions reported by the provider, used to invalidate cache."""
-    components = configuration.get("component_versions")
-    if not isinstance(components, Mapping):
+    def store_artifact(
+        self, payload: bytes, *, media_type: str, filename: str | None = None
+    ) -> ArtifactRef:
+        return self._require_store().put(
+            payload, media_type=media_type, filename=filename
+        )
+
+    def retrieve_artifact(self, artifact_id: str) -> tuple[bytes, ArtifactRef]:
+        store = self._require_store()
+        return store.get(artifact_id), store.stat(artifact_id)
+
+    def _require_store(self) -> ArtifactStore:
+        if self._store is None:
+            raise ConfigurationError("no artifact storage provider is configured")
+        return self._store
+
+
+def _versions_of(adapter: ProviderAdapter) -> dict[str, str]:
+    """Query provider versions, tolerating adapters that cannot report them."""
+    try:
+        return dict(adapter.versions())
+    except Exception:
         return {}
-    return {str(key): str(value) for key, value in components.items()}
+
+
+def _restore(cached: dict[str, Any], cache_key: str) -> CapabilityResult:
+    result = CapabilityResult.model_validate(cached)
+    result.provenance.cache_hit = True
+    result.provenance.cache_key = cache_key
+    return result
 
 
 def _validate_input(

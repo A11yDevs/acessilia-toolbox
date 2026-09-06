@@ -40,6 +40,9 @@ class VersionedProvider:
 
     def health(self) -> Any: ...
 
+    def versions(self) -> dict[str, str]:
+        return {"provider": self._components["docling-serve"], **self._components}
+
 
 def cache_key_for(components: dict[str, str]) -> str:
     descriptor = ProviderDescriptor.model_validate(

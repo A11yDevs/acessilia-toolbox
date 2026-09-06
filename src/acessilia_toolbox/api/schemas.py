@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityManifest
 from acessilia_toolbox.core.provenance import ExecutionProvenance
 
@@ -59,18 +60,6 @@ class CapabilityDetail(CapabilitySummary):
             produces=manifest.semantics.produces,
             timeout_hint_seconds=manifest.execution.timeout_hint_seconds,
         )
-
-
-class ArtifactRef(BaseModel):
-    """Inline result descriptor.
-
-    Object storage arrives with the artifact capabilities; until then the
-    document travels inline and `artifact_id` is its content fingerprint.
-    """
-
-    artifact_id: str
-    media_type: str = "application/json"
-    size: int
 
 
 class ExecutionResponse(BaseModel):

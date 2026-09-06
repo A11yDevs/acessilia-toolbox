@@ -72,6 +72,9 @@ class StubProvider:
             checked_at=datetime.now(UTC),
         )
 
+    def versions(self) -> dict[str, str]:
+        return {"provider": "1.32.0", "docling": "2.124.0"}
+
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
