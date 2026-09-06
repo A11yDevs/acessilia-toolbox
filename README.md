@@ -21,23 +21,23 @@ docker run -d --name docling-serve -p 5001:5001 \
 export DOCLING_SERVE_URL=http://localhost:5001
 
 # 4. Start the toolbox
-uvicorn "acessilia_toolbox.api.app:create_app" --factory --host 0.0.0.0 --port 8000
+uvicorn "acessilia_toolbox.api.app:create_app" --factory --host 0.0.0.0 --port 8002
 
 # 5. Open Swagger UI
-open http://localhost:8000/v1/docs
+open http://localhost:8002/v1/docs
 ```
 
 ### Test in one command
 
 ```bash
 # Health check
-curl http://localhost:8000/v1/health
+curl http://localhost:8002/v1/health
 
 # List capabilities
-curl http://localhost:8000/v1/capabilities | python3 -m json.tool
+curl http://localhost:8002/v1/capabilities | python3 -m json.tool
 
 # Extract a document (replace with any PDF)
-curl -X POST http://localhost:8000/v1/capabilities/document.structure.extract:execute \
+curl -X POST http://localhost:8002/v1/capabilities/document.structure.extract:execute \
   -F "file=@/path/to/document.pdf" \
   -F "language=pt-BR" | python3 -m json.tool | head -50
 ```

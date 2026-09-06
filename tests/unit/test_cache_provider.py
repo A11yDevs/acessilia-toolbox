@@ -31,11 +31,12 @@ class FakeRedis:
             raise ConnectionError("valkey unreachable")
         return self.entries.get(key)
 
-    def setex(self, key: str, ttl: int, value: str) -> None:
+    def set(self, key: str, value: str, ex: int | None = None) -> None:
         if self.failing:
             raise ConnectionError("valkey unreachable")
         self.entries[key] = value
-        self.expirations[key] = ttl
+        if ex is not None:
+            self.expirations[key] = ex
 
 
 def descriptor(**overrides: Any) -> ProviderDescriptor:

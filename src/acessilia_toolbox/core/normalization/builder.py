@@ -1,8 +1,7 @@
 """Builds the canonical structured document from a provider extraction.
 
-Text that ends up inside the manifest — obligation rationales, observation
-messages — stays in Portuguese: it is content for pt-BR accessibility
-reviewers, and it is part of every versioned snapshot.
+Obligation rationales and observation messages are in English by default and
+internationalized via gettext (.po) files in the project locale directory.
 """
 
 from __future__ import annotations
@@ -27,7 +26,6 @@ from acessilia_toolbox.core.normalization.models import (
     Provenance,
     SourceDocument,
 )
-from acessilia_toolbox.core.normalization.sanitizer import sanitize_text
 from acessilia_toolbox.core.normalization.table_ast import (
     normalize_table_ast,
     rows_from_table_ast,
@@ -60,27 +58,27 @@ LABEL_TO_TYPE = {
 OBLIGATION_BY_TYPE = {
     "picture": (
         "describe-image",
-        "A imagem deve receber descrição ou ser marcada como decorativa.",
+        "The image must receive a description or be marked as decorative.",
         ["vision-description", "human-review"],
     ),
     "table": (
         "linearize-table",
-        "A tabela deve ter cabeçalhos e ordem de leitura verificáveis.",
+        "The table must have headers and a verifiable reading order.",
         ["docling-table", "pandoc-table", "human-review"],
     ),
     "formula": (
         "verbalize-formula",
-        "A fórmula deve possuir representação matemática acessível e verbalização.",
+        "The formula must have an accessible mathematical representation and verbalization.",
         ["mathml", "latex-verbalizer", "human-review"],
     ),
     "code": (
         "preserve-code-semantics",
-        "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "The code block must preserve indentation, language, and literal reading.",
         ["pandoc-code", "human-review"],
     ),
     "unknown": (
         "review-structure",
-        "O elemento não classificado requer inspeção estrutural.",
+        "The unclassified element requires structural inspection.",
         ["docling-retry", "pymupdf-region", "human-review"],
     ),
 }
@@ -104,9 +102,25 @@ CALL_OUT_MIN_INDENT_RATIO = 0.015
 CALL_OUT_MAX_WIDTH_RATIO = 0.9
 CALL_OUT_MAX_VERTICAL_GAP = 28.0
 KNOWN_CALLOUT_TITLES = {
+    # English
     "note", "warning", "tip", "important", "caution",
+    "info", "hint", "notice", "reminder", "attention",
+    # Portuguese
     "dica", "importante", "atenção", "aviso", "nota",
     "observação", "observacao", "informação", "informacao",
+    # Spanish
+    "nota", "aviso", "importante", "consejo", "advertencia",
+    "información", "informacion", "observación", "observacion",
+    "atención", "atencion", "pista", "recordatorio",
+    # French
+    "note", "important", "avertissement", "conseil",
+    "information", "remarque", "attention", "astuce", "rappel",
+    # German
+    "hinweis", "wichtig", "achtung", "tipp", "notiz",
+    "erinnerung", "information", "warnung",
+    # Italian
+    "nota", "importante", "attenzione", "consiglio",
+    "informazione", "osservazione", "promemoria", "avviso",
 }
 
 
@@ -212,7 +226,7 @@ def _build_elements(document: Any, *, enable_callouts: bool = True) -> list[Mani
 
 
 def _normalize_callout_groups(elements: list[ManifestElement]) -> None:
-    """Agrupa elementos visualmente indentados como callouts."""
+    """Groups visually indented elements as callouts."""
     by_page: dict[int, list[ManifestElement]] = {}
     for element in elements:
         if element.page_number is not None:
@@ -517,7 +531,7 @@ def _derive_processing_needs(
         if previous and level > previous + 1:
             suffix = element_id.removeprefix("element-")
             message = (
-                f"A hierarquia de títulos salta do nível {previous} para o nível "
+                f"Heading hierarchy skips from level {previous} to level "
                 f"{level}."
             )
             observations.append(
@@ -580,8 +594,11 @@ def _item_text(item: Any, element_type: str) -> str | None:
         if isinstance(value, str) and value.strip():
             if element_type == "code":
                 return value.replace("\r\n", "\n").replace("\r", "\n")
-            cleaned = sanitize_text(value)
-            return cleaned or None
+            cleaned = value.replace("\r\n", "\n").replace("\r", "\n")
+            cleaned = re.sub(
+                r"[\u0000-\u0008\u000b\u000c\u000e-\u001f]", "", cleaned
+            )
+            return cleaned.strip() or None
     return None
 
 
@@ -751,7 +768,13 @@ def _infer_title(source_path: Path, elements: list[ManifestElement]) -> str:
 
 def _looks_like_chapter_heading(text: str) -> bool:
     normalized = text.strip().upper()
-    return bool(re.match(r"^CAP[ÍI]TULO\s+\d+", normalized))
+    return bool(re.match(
+        r"^(?:"
+        r"CAP[ÍI]TULO|CAPITULO|CHAPTER|CHAPITRE|"
+        r"KAPITEL|CAPÍTULO|CAPITOLO"
+        r")\s+\d+",
+        normalized,
+    ))
 
 
 def _page_count(document: Any) -> int:

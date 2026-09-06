@@ -21,6 +21,8 @@ CAPABILITIES_DIR = PROJECT_ROOT / "capabilities"
 
 PROVIDER_ENDPOINTS = {
     "docling": os.getenv("DOCLING_SERVE_URL", "http://localhost:5001"),
+    "minio": os.getenv("MINIO_URL", "http://localhost:9000"),
+    "valkey": os.getenv("VALKEY_URL", "redis://localhost:6379"),
 }
 
 
@@ -77,7 +79,7 @@ def sample_pdf_bytes() -> bytes:
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
         b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
         b"<< /Length 68 >>\nstream\nBT /F1 24 Tf 72 760 Td "
-        b"(Documento de teste) Tj ET\nendstream",
+        b"(Test document) Tj ET\nendstream",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
     ]
 

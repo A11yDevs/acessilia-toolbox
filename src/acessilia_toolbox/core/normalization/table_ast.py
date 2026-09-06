@@ -129,7 +129,7 @@ def table_ast_from_block(block: dict[str, Any]) -> dict[str, Any] | None:
 def split_header_and_body(
     table_ast: dict[str, Any], *, infer_legacy_header: bool = True
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    """Separa header, body e footer de um table_ast."""
+    """Split header, body and footer from a table_ast."""
     header = list(table_ast.get("header") or [])
     body = list(table_ast.get("body") or [])
     footer = list(table_ast.get("footer") or [])
@@ -165,14 +165,14 @@ def linearize_table_for_text(block: dict[str, Any]) -> list[str]:
                 f"{headers[cell_index]}: {value}"
                 for cell_index, value in enumerate(cells)
             )
-            lines.append(f"Linha {index}: {joined}")
+            lines.append(f"Row {index}: {joined}")
         else:
-            lines.append(f"Linha {index}: {' | '.join(cells)}")
+            lines.append(f"Row {index}: {' | '.join(cells)}")
 
     for row in footer_rows:
         footer_text = " | ".join(_row_texts(row))
         if footer_text:
-            lines.append(f"Rodapé: {footer_text}")
+            lines.append(f"Footer: {footer_text}")
 
     if not lines:
         for text_row in rows_from_table_ast(table_ast):

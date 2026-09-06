@@ -105,18 +105,18 @@ def test_extracts_table_ast_metadata(tmp_path: Path) -> None:
                 "table",
                 "#/tables/0",
                 text="",
-                rows=[["Nome", "Valor"], ["Taxa", "10%"]],
+                rows=[["Name", "Value"], ["Rate", "10%"]],
                 table={
-                    "caption": "Resumo",
+                    "caption": "Summary",
                     "header": [
                         {
                             "cells": [
-                                {"text": "Nome", "scope": "col"},
-                                {"text": "Valor", "scope": "col"},
+                                {"text": "Name", "scope": "col"},
+                                {"text": "Value", "scope": "col"},
                             ]
                         }
                     ],
-                    "body": [{"cells": [{"text": "Taxa"}, {"text": "10%"}]}],
+                    "body": [{"cells": [{"text": "Rate"}, {"text": "10%"}]}],
                 },
                 prov=[provenance(box=bbox(50, 100, 550, 200), charspan=None)],
             ),
@@ -139,7 +139,7 @@ def test_table_elements_carry_a_linearization_obligation(tmp_path: Path) -> None
                 "table",
                 "#/tables/0",
                 text="",
-                rows=[["Nome", "Valor"]],
+                rows=[["Name", "Value"]],
                 prov=[provenance(charspan=None)],
             ),
         ]

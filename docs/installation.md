@@ -106,7 +106,7 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 | `VALKEY_URL` | `redis://localhost:6379` | Valkey cache endpoint |
 | `VALKEY_PORT` | `6379` | Valkey port |
 | `TOOLBOX_HOST` | `0.0.0.0` | uvicorn listen address |
-| `TOOLBOX_PORT` | `8000` | Toolbox HTTP port |
+| `TOOLBOX_PORT` | `8002` | Toolbox HTTP port |
 
 ### 4. Load the configuration
 
@@ -253,7 +253,7 @@ is working.
 ### 1. Toolbox health check
 
 ``` bash
-curl http://localhost:8000/v1/health | python3 -m json.tool
+curl http://localhost:8002/v1/health | python3 -m json.tool
 ```
 
 **Expected response:**
@@ -267,7 +267,7 @@ curl http://localhost:8000/v1/health | python3 -m json.tool
 ### 2. List registered capabilities
 
 ``` bash
-curl http://localhost:8000/v1/capabilities | python3 -m json.tool
+curl http://localhost:8002/v1/capabilities | python3 -m json.tool
 ```
 
 Should show a list containing `document.structure.extract` with its
@@ -276,7 +276,7 @@ metadata (description, input/output schema, etc.).
 ### 3. List providers and check health
 
 ``` bash
-curl http://localhost:8000/v1/providers | python3 -m json.tool
+curl http://localhost:8002/v1/providers | python3 -m json.tool
 ```
 
 Should list docling, minio and valkey with their respective endpoints
@@ -293,7 +293,7 @@ python scripts/generate_samples.py
 Then run the extraction:
 
 ``` bash
-curl -X POST http://localhost:8000/v1/capabilities/document.structure.extract:execute \
+curl -X POST http://localhost:8002/v1/capabilities/document.structure.extract:execute \
   -F "file=@/tmp/sample-simple.pdf" \
   -F "language=pt-BR" | python3 -m json.tool | head -60
 ```

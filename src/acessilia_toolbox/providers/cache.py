@@ -52,10 +52,10 @@ class RedisExecutionCache:
 
     def put(self, key: str, value: dict[str, Any]) -> None:
         try:
-            self._client.setex(
+            self._client.set(
                 KEY_PREFIX + key,
-                self.ttl,
                 json.dumps(value, ensure_ascii=False),
+                ex=self.ttl,
             )
         except Exception:
             # A cache write failure must not fail the execution.

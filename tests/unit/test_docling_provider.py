@@ -19,7 +19,7 @@ DOCUMENT = {
         {
             "self_ref": "#/texts/0",
             "label": "title",
-            "text": "Documento",
+            "text": "Document",
             "level": 1,
             "prov": [
                 {

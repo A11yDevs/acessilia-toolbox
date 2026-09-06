@@ -17,13 +17,12 @@ tests/fixtures/dataset/
 .gitmodules
 .github/
 
-# Environment and credentials.
+# Environment credentials never ship in the image.
 .env
 .env.example
 
-# Provider configuration references secrets via environment variables,
-# so the default config file is not needed at runtime.
-providers-config.yaml
+# Provider configuration default is safe to ship; secrets come via env vars.
+# providers-config.yaml — shipped with the image.
 
 # macOS artefacts.
 .DS_Store

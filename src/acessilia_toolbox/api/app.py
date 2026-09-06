@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -12,12 +13,14 @@ from acessilia_toolbox import __version__
 from acessilia_toolbox.api.rest import router
 from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
-from acessilia_toolbox.core.errors import ToolboxError
+from acessilia_toolbox.core.errors import ToolboxError, ConfigurationError
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.cache import create_cache
 from acessilia_toolbox.providers.storage import create_artifact_store as _create_store
+
+LOG = logging.getLogger(__name__)
 
 DEFAULT_CAPABILITIES_DIR = Path("capabilities")
 DEFAULT_PROVIDERS_CONFIG = Path("providers-config.yaml")
@@ -77,7 +80,11 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
     descriptor = candidates[0]
     if _is_unresolved(dict(descriptor.config)):
         return None
-    store = _create_store(descriptor)
+    try:
+        store = _create_store(descriptor)
+    except ConfigurationError as exc:
+        LOG.warning("artifact store disabled: %s", exc)
+        return None
     return store if isinstance(store, ArtifactStore) else None
 
 
@@ -88,7 +95,11 @@ def _cache_from(providers: ProviderRegistry) -> ExecutionCache | None:
     descriptor = candidates[0]
     if _is_unresolved({"endpoint": descriptor.endpoint or ""}):
         return None
-    return create_cache(descriptor)
+    try:
+        return create_cache(descriptor)
+    except ConfigurationError as exc:
+        LOG.warning("execution cache disabled: %s", exc)
+        return None
 
 
 def _is_unresolved(values: dict[str, object]) -> bool:

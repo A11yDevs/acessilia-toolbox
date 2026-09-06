@@ -84,7 +84,7 @@ def _default_items() -> list[tuple[SimpleNamespace, int]]:
         item(
             "title",
             "#/texts/0",
-            text="Documento de teste",
+            text="Test document",
             level=1,
             prov=[provenance()],
         ),

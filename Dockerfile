@@ -19,15 +19,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
-# Core install (without the optional storage/cache extras).
-RUN pip install --upgrade pip && pip install . && rm -rf ~/.cache
+# Core install without ML runtimes or provider client libraries.
+# API extras bring only uvicorn and FastAPI; storage (boto3) and
+# cache (redis) stay optional.
+RUN pip install --upgrade pip && pip install "." && rm -rf ~/.cache
 
 # === Production image: stateless, model-free, ~200 MB ===
 FROM base AS production
+
+# Which pip extras to install. Override at build time to enable optional
+# provider client libraries such as storage (boto3) or cache (redis).
+#   docker build --build-arg TOOLBOX_EXTRAS="api,storage,cache" ...
+ARG TOOLBOX_EXTRAS=api
+
+RUN if [ -n "$TOOLBOX_EXTRAS" ]; then \
+        pip install --no-cache-dir ".[${TOOLBOX_EXTRAS}]"; \
+    fi
+
 COPY . .
-EXPOSE 8000
-ENV DOCLING_SERVE_URL=http://docling-serve:5001
-CMD ["uvicorn", "acessilia_toolbox.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8002
+ENV TOOLBOX_PORT=8002
+CMD ["sh", "-c", "uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port ${TOOLBOX_PORT:-8002}"]
 
 # === Test image ===
 FROM base AS test
