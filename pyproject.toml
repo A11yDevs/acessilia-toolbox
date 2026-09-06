@@ -1,0 +1,102 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "acessilia-toolbox"
+version = "0.1.0"
+description = "Deterministic, stateless capability layer exposing tools and providers to agentic systems over REST and MCP."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [{ name = "A11yDevs" }]
+keywords = ["accessibility", "capabilities", "mcp", "pddl", "document-structure"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+
+# Provider isolation (constitution, principle 4): no docling, torch or other
+# heavyweight extraction runtimes belong here. Providers run out of process.
+dependencies = [
+    "pydantic>=2.7",
+    "jsonschema>=4.21",
+    "httpx>=0.28",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+]
+dev = [
+    "acessilia-toolbox[api]",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML",
+    "types-jsonschema",
+]
+
+[project.scripts]
+acessilia-toolbox = "acessilia_toolbox.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/A11yDevs/acessilia-toolbox"
+Documentation = "https://github.com/A11yDevs/acessilia-toolbox/tree/main/docs"
+Issues = "https://github.com/A11yDevs/acessilia-toolbox/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+acessilia_toolbox = ["py.typed"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--strict-markers --strict-config"
+markers = [
+    "contract: provider contract conformance; requires a live provider",
+    "integration: exercises the REST/MCP facade end to end",
+    "snapshot: compares semantic output against versioned expectations",
+    "statelessness: verifies replicas hold no durable state",
+    "pddl: validates published planning semantics",
+]
+
+[tool.coverage.run]
+source = ["src/acessilia_toolbox"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "TID", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["acessilia_toolbox"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+strict = false
