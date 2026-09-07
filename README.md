@@ -3,6 +3,10 @@
 **A stateless, composable toolbox for exposing deterministic
 capabilities to agentic systems via REST and MCP.**
 
+[![CI](https://github.com/A11yDevs/acessilia-toolbox/actions/workflows/ci.yml/badge.svg)](https://github.com/A11yDevs/acessilia-toolbox/actions/workflows/ci.yml)
+[![Delivery](https://github.com/A11yDevs/acessilia-toolbox/actions/workflows/delivery.yml/badge.svg)](https://github.com/A11yDevs/acessilia-toolbox/actions/workflows/delivery.yml)
+[![GHCR](https://img.shields.io/badge/GHCR-acessilia--toolbox-blue?logo=github)](https://github.com/orgs/A11yDevs/packages?repo_name=acessilia-toolbox)
+
 ---
 
 ## Quick start
@@ -98,7 +102,60 @@ any other vendor.
 | **Toolbox** | Mediates between agents and providers — validates, routes, caches, normalizes |
 | **Agentic Core** | Owns goals, planning, provider selection — **outside** the toolbox |
 
-## Architecture
+---
+
+## Development
+
+### From source (hot-reload)
+
+For fast iteration with live code reloading:
+
+```bash
+# Terminal 1: providers via Docker
+docker compose up -d docling-serve minio valkey
+
+# Terminal 2: toolbox with hot-reload
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env
+# edit .env with credentials
+uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
+```
+
+### Full Docker Compose (providers + toolbox)
+
+```bash
+cp .env.docker .env
+docker compose up --build -d
+curl http://localhost:8002/v1/health
+```
+
+📄 See [`docs/dev-workflow.md`](docs/dev-workflow.md) for detailed instructions.
+
+### Auto-update (staging)
+
+The staging environment auto-updates via a systemd timer that checks for new
+images every 5 minutes:
+
+```bash
+./scripts/setup-homologacao.sh
+```
+
+📄 See [`docs/auto-update.md`](docs/auto-update.md) for setup and management.
+
+### CI/CD
+
+| Workflow | Trigger | Action |
+|---|---|---|
+| **CI** | PR/push to `main`, `develop`, `release/**` | Lint + type check + pytest |
+| **Delivery** | Push to `main`, `develop`, `release/**` | Build + smoke test + push to GHCR |
+| **Release** | Tag `v*` | Build + push + GitHub Release |
+
+📄 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the Git Flow model.
+
+---
+
+## What it can do today
 
 ```mermaid
 flowchart TB

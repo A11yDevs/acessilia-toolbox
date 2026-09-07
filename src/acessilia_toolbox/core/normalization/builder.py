@@ -109,17 +109,17 @@ KNOWN_CALLOUT_TITLES = {
     "dica", "importante", "atenção", "aviso", "nota",
     "observação", "observacao", "informação", "informacao",
     # Spanish
-    "nota", "aviso", "importante", "consejo", "advertencia",
+    "consejo", "advertencia",
     "información", "informacion", "observación", "observacion",
     "atención", "atencion", "pista", "recordatorio",
     # French
-    "note", "important", "avertissement", "conseil",
-    "information", "remarque", "attention", "astuce", "rappel",
+    "avertissement", "conseil",
+    "information", "remarque", "astuce", "rappel",
     # German
     "hinweis", "wichtig", "achtung", "tipp", "notiz",
-    "erinnerung", "information", "warnung",
+    "erinnerung", "warnung",
     # Italian
-    "nota", "importante", "attenzione", "consiglio",
+    "attenzione", "consiglio",
     "informazione", "osservazione", "promemoria", "avviso",
 }
 

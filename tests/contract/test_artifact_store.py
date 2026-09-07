@@ -8,7 +8,6 @@ so it can run in both CI (with containers) and local dev (without).
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 

@@ -15,7 +15,6 @@ from acessilia_toolbox.core.errors import ConfigurationError
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers.cache import (
-    KEY_PREFIX,
     RedisExecutionCache,
     create_cache,
 )

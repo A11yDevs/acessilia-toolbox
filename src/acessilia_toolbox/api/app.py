@@ -13,7 +13,7 @@ from acessilia_toolbox import __version__
 from acessilia_toolbox.api.rest import router
 from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
-from acessilia_toolbox.core.errors import ToolboxError, ConfigurationError
+from acessilia_toolbox.core.errors import ConfigurationError, ToolboxError
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
