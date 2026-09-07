@@ -2,6 +2,8 @@
 
 Thank you for contributing to Acessilia Toolbox.
 
+> ⚠️ **This document is being superseded by [`CONTRIBUTING.md`](../CONTRIBUTING.md)**, which defines the full Git Flow model, branch strategy, CI/CD pipeline, and team rules adopted from the Acessilia Core project.
+
 ## Workflow
 
 ``` text

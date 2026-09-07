@@ -9,6 +9,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
+# Build metadata injected by CI (optional, for provenance labels).
+ARG GIT_COMMIT
+ARG IMAGE_TAG
+ENV GIT_COMMIT=${GIT_COMMIT} IMAGE_TAG=${IMAGE_TAG}
+
 # System dependencies for the filesystem artifact store (poppler-utils for
 # the PDF builder). GL libraries are not required: the toolbox ships no ML
 # runtimes, and PyMuPDF is not a mandatory dependency.

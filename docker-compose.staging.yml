@@ -1,15 +1,20 @@
-# Providers run out of process so the toolbox image stays model-free.
+# docker-compose.staging.yml — Acessilia Toolbox staging environment.
+#
+# Uses a pre-published GHCR image. The container is automatically updated
+# by the scripts/staging-update.sh script triggered by a systemd user timer.
+#
+# Usage:
+#   docker compose -f docker-compose.staging.yml up -d
+#   docker compose -f docker-compose.staging.yml logs -f
+#
+# To track a specific branch (e.g. during BHS):
+#   TRACK_BRANCH=release/0.1.0 docker compose -f docker-compose.staging.yml up -d
+
 services:
-  # ── Toolbox (build local) ──────────────────────────────────────
+  # ── Toolbox ──────────────────────────────────────────────────────
   toolbox:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
-      args:
-        TOOLBOX_EXTRAS: api
-    image: acessilia-toolbox:local
-    container_name: acessilia-toolbox
+    image: ghcr.io/a11ydevs/acessilia-toolbox:${TRACK_TAG:-develop}
+    container_name: acessilia-toolbox-staging
     ports:
       - "${TOOLBOX_PORT:-8002}:8002"
     environment:
@@ -22,13 +27,6 @@ services:
       VALKEY_URL: ${VALKEY_URL:-redis://acessilia-valkey:6379}
     env_file:
       - .env
-    depends_on:
-      docling-serve:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8002/v1/health"]
@@ -37,16 +35,15 @@ services:
       retries: 3
       start_period: 15s
 
-  # ── Providers ──────────────────────────────────────────────────
+  # ── Providers ────────────────────────────────────────────────────
   docling-serve:
     image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.32.0}
-    container_name: docling-serve
+    container_name: docling-serve-staging
     ports:
       - "${DOCLING_SERVE_PORT:-5001}:5001"
     environment:
       DOCLING_SERVE_ENABLE_UI: "${DOCLING_SERVE_ENABLE_UI:-false}"
     volumes:
-      # Models are downloaded on first request and cached here.
       - docling-models:/root/.cache/docling
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:5001/health')"]
@@ -55,10 +52,9 @@ services:
       retries: 30
       start_period: 60s
 
-  # Artifact storage. Credentials come from the environment, never from here.
   minio:
     image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
-    container_name: acessilia-minio
+    container_name: acessilia-minio-staging
     command: server /data --console-address ":9001"
     ports:
       - "${MINIO_PORT:-9000}:9000"
@@ -75,10 +71,9 @@ services:
       retries: 10
       start_period: 10s
 
-  # Operational cache. Persistent state lives here, not inside the toolbox.
   valkey:
     image: ${VALKEY_IMAGE:-valkey/valkey:8-alpine}
-    container_name: acessilia-valkey
+    container_name: acessilia-valkey-staging
     ports:
       - "${VALKEY_PORT:-6379}:6379"
     volumes:

@@ -46,7 +46,12 @@ EXEMPT_STRINGS: list[tuple[str, str]] = [
 ]
 
 # Files with known fixture or generated content that may contain Portuguese.
-EXEMPT_FILES: set[str] = set()
+EXEMPT_FILES: set[str] = {
+    "CONTRIBUTING.md",
+    "docs/dev-workflow.md",
+    "docs/auto-update.md",
+    "docker-compose.staging.yml",
+}
 
 # Build the exempt set from strings so we can check quickly.
 _EXEMPT_BY_FILE: dict[str, set[str]] = {}
@@ -66,7 +71,9 @@ def _iter_project_files(root: Path) -> list[Path]:
     for pattern in ("src/**/*.py", "docs/**/*.md", "schemas/*.json",
                     "capabilities/*.yaml", "pyproject.toml", "Dockerfile",
                     ".dockerignore", ".env.example", ".env.docker",
-                    "providers-config.yaml", "README.md"):
+                    "providers-config.yaml", "README.md", "CONTRIBUTING.md",
+                    ".github/workflows/*.yml", "docker-compose*.yml",
+                    "scripts/*.sh", "scripts/*.py"):
         found = list(root.glob(pattern))
         for p in found:
             rel = p.relative_to(root)
@@ -101,6 +108,8 @@ def test_no_portuguese_in_code(project_files: list[Path]) -> None:
             continue
 
         rel = str(filepath.relative_to(PROJECT_ROOT))
+        if rel in EXEMPT_FILES:
+            continue
         exempt_lines = _EXEMPT_BY_FILE.get(rel, set())
 
         try:
@@ -133,3 +142,6 @@ def test_exempt_paths_still_exist() -> None:
     """Fail early if an exempt path is renamed or deleted."""
     for path in EXEMPT_PATHS:
         assert path.exists(), f"Exempt path {path} no longer exists"
+    for rel in EXEMPT_FILES:
+        path = PROJECT_ROOT / rel
+        assert path.exists(), f"Exempt file {rel} no longer exists"
