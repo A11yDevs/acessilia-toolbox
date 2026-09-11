@@ -69,7 +69,7 @@ jobs:
           push: false
           tags: ${{ env.LOCAL_IMAGE }}
           build-args: |
-            TOOLBOX_EXTRAS=api
+            TOOLBOX_EXTRAS=api,storage,cache
           cache-from: type=gha,scope=production
 
       - name: Verify installed packages
@@ -116,7 +116,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            TOOLBOX_EXTRAS=api
+            TOOLBOX_EXTRAS=api,storage,cache
           cache-from: type=gha,scope=production
 
   release:

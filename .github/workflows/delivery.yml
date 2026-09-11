@@ -75,7 +75,7 @@ jobs:
           push: false
           tags: ${{ env.LOCAL_IMAGE }}
           build-args: |
-            TOOLBOX_EXTRAS=api
+            TOOLBOX_EXTRAS=api,storage,cache
             GIT_COMMIT=${{ github.sha }}
             IMAGE_TAG=${{ steps.tags.outputs.branch }}
           cache-from: type=gha,scope=production
@@ -130,7 +130,7 @@ jobs:
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.revision=${{ github.sha }}
           build-args: |
-            TOOLBOX_EXTRAS=api
+            TOOLBOX_EXTRAS=api,storage,cache
             GIT_COMMIT=${{ github.sha }}
             IMAGE_TAG=${{ steps.tags.outputs.branch }}
           cache-from: type=gha,scope=production
