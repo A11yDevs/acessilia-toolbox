@@ -74,6 +74,7 @@ markers = [
     "snapshot: compares semantic output against versioned expectations",
     "statelessness: verifies replicas hold no durable state",
     "pddl: validates published planning semantics",
+    "e2e: end-to-end test against a remote Toolbox instance",
 ]
 
 [tool.coverage.run]
