@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        TOOLBOX_EXTRAS: api
+        TOOLBOX_EXTRAS: api,storage,cache
     image: acessilia-toolbox:local
     container_name: acessilia-toolbox
     ports:
@@ -16,10 +16,10 @@ services:
       TOOLBOX_PORT: 8002
       TOOLBOX_PROVIDERS_CONFIG: /app/providers-config.yaml
       DOCLING_SERVE_URL: ${DOCLING_SERVE_URL:-http://docling-serve:5001}
-      MINIO_URL: ${MINIO_URL:-http://acessilia-minio:9000}
+      MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      VALKEY_URL: ${VALKEY_URL:-redis://acessilia-valkey:6379}
+      VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
     env_file:
       - .env
     depends_on:
