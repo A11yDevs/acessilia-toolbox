@@ -84,6 +84,25 @@ services:
       timeout: 5s
       retries: 10
 
+      # ── One-shot bucket init ──────────────────────────────────────
+  minio-init:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    container_name: acessilia-minio-init-staging
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY}
+        mc mb local/acessilia --ignore-existing
+        echo "✅ Bucket acessilia criado/verificado"
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   docling-models:
   minio-data:
