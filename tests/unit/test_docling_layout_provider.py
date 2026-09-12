@@ -27,7 +27,8 @@ SAMPLE_DOCUMENT = {
         {
             "self_ref": "#/texts/1",
             "label": {"value": "paragraph"},
-            "text": "This is a long paragraph with enough text to be classified as text_clean. " * 10,
+            "text": ("This is a long paragraph with enough text "
+                      "to be classified as text_clean. " * 10),
             "level": 1,
             "confidence": 0.95,
             "prov": [{"page": 1, "bbox": [50, 120, 500, 200]}],
