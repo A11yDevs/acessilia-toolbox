@@ -25,6 +25,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
+      TOOLBOX_API_KEY: ${TOOLBOX_API_KEY}
     env_file:
       - .env
     restart: unless-stopped

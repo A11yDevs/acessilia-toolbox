@@ -34,6 +34,44 @@ If asynchronous job state is exposed through the Toolbox, its
 authoritative state must live in an external state service rather than
 process memory.
 
+## Authentication
+
+The REST API supports optional Bearer token authentication via the
+`TOOLBOX_API_KEY` environment variable.
+
+- **If `TOOLBOX_API_KEY` is empty or unset** (default): authentication is
+  disabled. All endpoints are accessible without credentials. This is
+  intended for development and trusted internal networks.
+- **If `TOOLBOX_API_KEY` is set**: every endpoint **except `GET /v1/health`**
+  requires an `Authorization: Bearer <token>` header matching the
+  configured key.
+
+### Usage
+
+``` bash
+# Generate a key
+openssl rand -hex 32
+
+# Set it in .env
+TOOLBOX_API_KEY=7a9b8c3d2e1f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8
+
+# Authenticated request
+curl -H "Authorization: Bearer 7a9b8c3d2e1f..." \
+  http://localhost:8002/v1/capabilities
+
+# Health check remains public
+curl http://localhost:8002/v1/health
+```
+
+### Error responses
+
+| Status | Code | Meaning |
+|--------|------|---------|
+| 401 | `authorization_failed` | Missing, malformed, or invalid token |
+
+The OpenAPI document at `/v1/openapi.json` includes the security scheme
+and can be explored interactively at `/v1/docs` (Swagger UI).
+
 ## Execution request
 
 ``` json
