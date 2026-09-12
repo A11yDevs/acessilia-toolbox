@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -215,10 +215,13 @@ class DoclingLayoutProvider:
                 "regions": regions,
             })
 
+        region_count = 0
+        for p in pages_output:
+            region_count += len(cast(list[dict[str, Any]], p.get("regions", [])))
         return {
             "pages": pages_output,
             "page_count": len(pages_output),
-            "region_count": sum(len(p["regions"]) for p in pages_output),
+            "region_count": region_count,
         }
 
     def _get_label(self, item: dict[str, Any]) -> str:

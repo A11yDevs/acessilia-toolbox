@@ -22,4 +22,4 @@ def create_adapter(descriptor: ProviderDescriptor) -> ProviderAdapter:
     return adapter(descriptor)
 
 
-__all__ = ["ADAPTERS", "DoclingProvider", "DoclingLayoutProvider", "create_adapter"]
+__all__ = ["ADAPTERS", "DoclingLayoutProvider", "DoclingProvider", "create_adapter"]
