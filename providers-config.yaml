@@ -29,6 +29,28 @@ providers:
       - image/jpeg
       - image/tiff
 
+  - id: docling-math
+    version: "1.32"
+    transport: http
+    endpoint: ${DOCLING_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 300
+    capabilities:
+      - math.recognize
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+
+  - id: pure-math
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - math.convert
+      - math.verbalize
+    media_types:
+      - text/plain
+
   - id: minio
     version: "2025.04"
     transport: s3
