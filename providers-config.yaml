@@ -14,6 +14,21 @@ providers:
       - image/jpeg
       - image/tiff
 
+  - id: docling-layout
+    version: "1.32"
+    transport: http
+    endpoint: ${DOCLING_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities:
+      - document.layout.analyze
+    media_types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - image/png
+      - image/jpeg
+      - image/tiff
+
   - id: minio
     version: "2025.04"
     transport: s3
