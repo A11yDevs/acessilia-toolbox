@@ -1,11 +1,13 @@
 """Thin adapters binding external providers to capability contracts."""
 
+from collections.abc import Callable
+
 from acessilia_toolbox.core.errors import ProviderNotFoundError
 from acessilia_toolbox.core.provider import ProviderAdapter, ProviderDescriptor
 from acessilia_toolbox.providers.docling import DoclingProvider
 from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
 
-ADAPTERS = {
+ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "docling": DoclingProvider,
     "docling-layout": DoclingLayoutProvider,
 }
