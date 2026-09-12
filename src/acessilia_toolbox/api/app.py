@@ -80,7 +80,8 @@ def create_app(
             "ApiKeyAuth": {
                 "type": "http",
                 "scheme": "bearer",
-                "description": "Bearer token matching TOOLBOX_API_KEY. Leave empty to disable auth.",
+                "description": "Bearer token matching TOOLBOX_API_KEY. "
+                "Leave empty to disable auth.",
             }
         }
     }
