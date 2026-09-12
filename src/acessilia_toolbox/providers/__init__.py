@@ -3,8 +3,12 @@
 from acessilia_toolbox.core.errors import ProviderNotFoundError
 from acessilia_toolbox.core.provider import ProviderAdapter, ProviderDescriptor
 from acessilia_toolbox.providers.docling import DoclingProvider
+from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
 
-ADAPTERS = {"docling": DoclingProvider}
+ADAPTERS = {
+    "docling": DoclingProvider,
+    "docling-layout": DoclingLayoutProvider,
+}
 
 
 def create_adapter(descriptor: ProviderDescriptor) -> ProviderAdapter:
@@ -18,4 +22,4 @@ def create_adapter(descriptor: ProviderDescriptor) -> ProviderAdapter:
     return adapter(descriptor)
 
 
-__all__ = ["ADAPTERS", "DoclingProvider", "create_adapter"]
+__all__ = ["ADAPTERS", "DoclingProvider", "DoclingLayoutProvider", "create_adapter"]
