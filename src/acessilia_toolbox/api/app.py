@@ -75,7 +75,7 @@ def create_app(
     app.include_router(router)
 
     # OpenAPI security scheme for Bearer token auth.
-    app.openapi_components = {
+    app.openapi_components = {  # type: ignore[attr-defined]
         "securitySchemes": {
             "ApiKeyAuth": {
                 "type": "http",
@@ -85,7 +85,7 @@ def create_app(
             }
         }
     }
-    app.openapi_security = [{"ApiKeyAuth": []}]
+    app.openapi_security = [{"ApiKeyAuth": []}]  # type: ignore[attr-defined]
 
     if not TOOLBOX_API_KEY:
         LOG.warning(
