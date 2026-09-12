@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import Response
 
 from acessilia_toolbox import __version__
+from acessilia_toolbox.api.auth import require_api_key
 from acessilia_toolbox.api.schemas import (
     CapabilityDetail,
     CapabilitySummary,
@@ -28,7 +29,11 @@ from acessilia_toolbox.core.pddl import (
 from acessilia_toolbox.core.provider import ProviderHealth, ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
 
-router = APIRouter(prefix="/v1")
+# Public router: endpoints that do not require authentication.
+public_router = APIRouter(prefix="/v1")
+
+# Authenticated router: every endpoint requires a valid API key.
+router = APIRouter(prefix="/v1", dependencies=[Depends(require_api_key)])
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {"model": ErrorResponse},
@@ -58,7 +63,7 @@ def executor(request: Request) -> CapabilityExecutor:
     return instance
 
 
-@router.get("/health", response_model=HealthResponse, tags=["health"])
+@public_router.get("/health", response_model=HealthResponse, tags=["health"])
 def health() -> HealthResponse:
     return HealthResponse(status="healthy", version=__version__)
 
