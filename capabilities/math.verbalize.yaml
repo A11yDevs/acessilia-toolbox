@@ -1,0 +1,31 @@
+id: math.verbalize
+version: 1
+description: >-
+  Convert LaTeX mathematical expressions into natural language text (pt-BR)
+  for accessibility purposes.
+
+input:
+  schema: artifact/latex@1
+  media_types:
+    - application/json
+
+output:
+  schema: artifact/verbalized@1
+  media_types:
+    - text/plain
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 15
+
+semantics:
+  requires:
+    - math_recognized
+  produces:
+    - math_verbalized
+
+providers:
+  - id: pure-math
+    version: "1.0+"

@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from acessilia_toolbox import __version__
-from acessilia_toolbox.api.rest import router
+from acessilia_toolbox.api.rest import public_router, router
 from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import ConfigurationError, ToolboxError
@@ -32,6 +32,8 @@ Capabilities describe what can be done; providers implement it. The toolbox
 executes and normalizes, while goals, planning and provider choice stay with
 the agentic core.
 """.strip()
+
+TOOLBOX_API_KEY = os.getenv("TOOLBOX_API_KEY", "")
 
 
 def create_app(
@@ -69,7 +71,28 @@ def create_app(
     async def _toolbox_error(_: Request, error: ToolboxError) -> JSONResponse:
         return JSONResponse(status_code=error.http_status, content=error.to_payload())
 
+    app.include_router(public_router)
     app.include_router(router)
+
+    # OpenAPI security scheme for Bearer token auth.
+    app.openapi_components = {  # type: ignore[attr-defined]
+        "securitySchemes": {
+            "ApiKeyAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "Bearer token matching TOOLBOX_API_KEY. "
+                "Leave empty to disable auth.",
+            }
+        }
+    }
+    app.openapi_security = [{"ApiKeyAuth": []}]  # type: ignore[attr-defined]
+
+    if not TOOLBOX_API_KEY:
+        LOG.warning(
+            "No TOOLBOX_API_KEY set — all REST endpoints are unauthenticated. "
+            "Set TOOLBOX_API_KEY in your environment to enable Bearer token auth."
+        )
+
     return app
 
 

@@ -29,7 +29,7 @@ providers:
       - image/jpeg
       - image/tiff
 
-  - id: pymupdf-pdf
+- id: pymupdf-pdf
     version: "1.24"
     transport: in_process
     capabilities:
@@ -37,6 +37,19 @@ providers:
       - pdf.render
     media_types:
       - application/pdf
+
+  - id: docling-math
+    version: "1.32"
+    transport: http
+    endpoint: ${DOCLING_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 300
+    capabilities:
+      - math.recognize
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
 
   - id: docling-ocr
     version: "1.32"
@@ -75,6 +88,16 @@ providers:
       - accessibility.mark
     media_types:
       - application/json
+
+  - id: pure-math
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - math.convert
+      - math.verbalize
+    media_types:
+      - application/json
+      - text/plain
 
   - id: minio
     version: "2025.04"

@@ -66,6 +66,13 @@ class ArtifactNotFoundError(ToolboxError):
     http_status = 404
 
 
+class AuthorizationError(ToolboxError):
+    """The request lacks valid authentication credentials."""
+
+    code = "authorization_failed"
+    http_status = 401
+
+
 class ProviderUnavailableError(ToolboxError):
     code = "provider_unavailable"
     http_status = 503
