@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.pure_text import (
@@ -13,7 +11,6 @@ from acessilia_toolbox.providers.pure_text import (
     _apply_markers,
     _cleanup_whitespace,
     _overlaps_clean,
-    _postprocess_text,
 )
 
 

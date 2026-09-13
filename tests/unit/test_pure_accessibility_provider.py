@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.pure_accessibility import (
