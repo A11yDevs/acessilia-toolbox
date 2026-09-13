@@ -4,7 +4,7 @@ description: >-
   Render a single PDF page into a PNG image at the specified DPI resolution.
 
 input:
-  schema: artifact/page@1
+  schema: artifact/document@1
   media_types:
     - application/pdf
 

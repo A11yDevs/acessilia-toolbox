@@ -80,7 +80,7 @@ class PyMuPDFProvider:
             return {"provider": self.descriptor.version}
         return {
             "provider": self.descriptor.version,
-            "pymupdf": fitz.version,
+            "pymupdf": str(fitz.version[0]),
         }
 
     def health(self) -> ProviderHealth:
@@ -106,10 +106,11 @@ class PyMuPDFProvider:
         max_pages = int(params.get("max_pages", 50))
         dpi = int(params.get("dpi", 150))
 
+        pages: list[dict[str, Any]] = []
+        total = 0
         doc = fitz.open(stream=payload, filetype="pdf")
         try:
             total = min(len(doc), max_pages)
-            pages = []
             for i in range(total):
                 page = doc[i]
                 pix = page.get_pixmap(dpi=dpi)
@@ -137,6 +138,8 @@ class PyMuPDFProvider:
         dpi = int(params.get("dpi", 150))
         page_number = int(params.get("page_number", 1))
 
+        width = height = 0.0
+        png_bytes = b""
         doc = fitz.open(stream=payload, filetype="pdf")
         try:
             if page_number < 1 or page_number > len(doc):
