@@ -29,6 +29,15 @@ providers:
       - image/jpeg
       - image/tiff
 
+  - id: pymupdf-pdf
+    version: "1.24"
+    transport: in_process
+    capabilities:
+      - pdf.split
+      - pdf.render
+    media_types:
+      - application/pdf
+
   - id: minio
     version: "2025.04"
     transport: s3
