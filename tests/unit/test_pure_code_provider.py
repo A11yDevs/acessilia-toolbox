@@ -1,7 +1,6 @@
 """pure-code provider behavior for code normalization."""
 
-from __future__ import annotations
-
+from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.pure_code import (
@@ -21,7 +20,7 @@ def descriptor(**overrides: object) -> ProviderDescriptor:
     return ProviderDescriptor.model_validate({**base, **overrides})
 
 
-def extract(adapter: PureCodeProvider, code: str, **params: object):
+def extract(adapter: PureCodeProvider, code: str, **params: object) -> ExtractionResult:
     return adapter.execute(
         "code.normalize",
         code.encode("utf-8"),

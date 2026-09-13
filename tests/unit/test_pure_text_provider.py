@@ -1,9 +1,9 @@
 """pure-text provider behavior for text postprocessing."""
 
-from __future__ import annotations
-
 import json
+from typing import Any
 
+from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.pure_text import (
@@ -24,7 +24,7 @@ def descriptor(**overrides: object) -> ProviderDescriptor:
     return ProviderDescriptor.model_validate({**base, **overrides})
 
 
-def extract(adapter: PureTextProvider, document: dict):
+def extract(adapter: PureTextProvider, document: dict[str, Any]) -> ExtractionResult:
     return adapter.execute(
         "text.postprocess",
         json.dumps(document).encode("utf-8"),

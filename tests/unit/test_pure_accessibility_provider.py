@@ -1,9 +1,9 @@
 """pure-accessibility provider behavior for accessibility marking."""
 
-from __future__ import annotations
-
 import json
+from typing import Any
 
+from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.pure_accessibility import (
@@ -22,7 +22,7 @@ def descriptor(**overrides: object) -> ProviderDescriptor:
     return ProviderDescriptor.model_validate({**base, **overrides})
 
 
-def extract(adapter: PureAccessibilityProvider, document: dict):
+def extract(adapter: PureAccessibilityProvider, document: dict[str, Any]) -> ExtractionResult:
     return adapter.execute(
         "accessibility.mark",
         json.dumps(document).encode("utf-8"),
@@ -150,7 +150,7 @@ class TestPureAccessibilityProvider:
         assert isinstance(adapter, PureAccessibilityProvider)
 
     def test_empty_document_scores_100(self) -> None:
-        empty = {"pages": {}}
+        empty: dict[str, Any] = {"pages": {}}
         adapter = PureAccessibilityProvider(descriptor())
         result = extract(adapter, empty)
 

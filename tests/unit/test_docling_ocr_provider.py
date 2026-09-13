@@ -1,6 +1,7 @@
 """docling-ocr adapter behavior, exercised over a simulated transport."""
+# mypy: disable-error-code="index"
 
-from __future__ import annotations
+from collections.abc import Callable
 
 import httpx
 import pytest
@@ -10,6 +11,7 @@ from acessilia_toolbox.core.errors import (
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
+from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.docling_ocr import DoclingOcrProvider
@@ -63,7 +65,7 @@ def descriptor(**overrides: object) -> ProviderDescriptor:
     return ProviderDescriptor.model_validate({**base, **overrides})
 
 
-def provider_with(handler) -> DoclingOcrProvider:
+def provider_with(handler: Callable[[httpx.Request], httpx.Response]) -> DoclingOcrProvider:
     adapter = DoclingOcrProvider(descriptor())
     transport = httpx.MockTransport(handler)
     adapter._client = lambda timeout=None: httpx.Client(  # type: ignore[method-assign]
@@ -85,7 +87,7 @@ def convert_handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json=SAMPLE_RESPONSE)
 
 
-def extract(adapter: DoclingOcrProvider):
+def extract(adapter: DoclingOcrProvider) -> ExtractionResult:
     return adapter.execute(
         "document.ocr",
         b"fake-image-data",
