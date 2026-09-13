@@ -104,9 +104,6 @@ def _content_fingerprint(text: str) -> str:
     return hashlib.md5(normalized.encode("utf-8")).hexdigest()
 
 
-
-
-
 # ---------------------------------------------------------------------------
 # Whitespace cleanup
 # ---------------------------------------------------------------------------

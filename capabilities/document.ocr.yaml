@@ -30,5 +30,5 @@ semantics:
     - ocr_text_available
 
 providers:
-  - id: docling
+  - id: docling-ocr
     version: "1.32+"

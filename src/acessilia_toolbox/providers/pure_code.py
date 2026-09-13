@@ -118,16 +118,6 @@ def _detect_language(code: str, filename: str = "") -> str:
 # Code normalization
 # ---------------------------------------------------------------------------
 
-# Patterns that indicate a line is likely code (not prose)
-_CODE_LINE_PATTERNS = re.compile(
-    r"^(?:\s{2,}|[\t]|def |class |function |import |from |return |"
-    r"if |elif |else:|for |while |try:|except |finally:|with |"
-    r"public |private |protected |static |void |int |string |"
-    r"var |let |const |fn |func |package |namespace |using |"
-    r"#include|SELECT |FROM |WHERE |INSERT|CREATE|"
-    r"```|>>> |\.\.\. )"
-)
-
 
 def _normalize_code(code: str, language: str = "") -> dict[str, Any]:
     """Normalize a code block: clean, reflow, detect language."""
