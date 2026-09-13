@@ -38,6 +38,44 @@ providers:
     media_types:
       - application/pdf
 
+  - id: docling-ocr
+    version: "1.32"
+    transport: http
+    endpoint: ${DOCLING_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities:
+      - document.ocr
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - application/pdf
+
+  - id: pure-code
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - code.normalize
+    media_types:
+      - text/plain
+
+  - id: pure-text
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - text.postprocess
+    media_types:
+      - application/json
+
+  - id: pure-accessibility
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - accessibility.mark
+    media_types:
+      - application/json
+
   - id: minio
     version: "2025.04"
     transport: s3

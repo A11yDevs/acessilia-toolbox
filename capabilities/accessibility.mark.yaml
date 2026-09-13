@@ -1,0 +1,33 @@
+id: accessibility.mark
+version: 1
+description: >-
+  Analyze document elements and generate accessibility obligations and
+  annotations. Identifies missing alt text for images, missing linearization
+  for tables, missing verbalization for formulas, and missing language
+  annotation for code blocks.
+
+input:
+  schema: artifact/structured-document@1
+  media_types:
+    - application/json
+
+output:
+  schema: artifact/accessibility-report@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires:
+    - structured_document_available
+  produces:
+    - accessibility_annotated
+
+providers:
+  - id: pure-python
+    version: "1.0+"
