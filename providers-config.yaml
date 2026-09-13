@@ -29,7 +29,7 @@ providers:
       - image/jpeg
       - image/tiff
 
-- id: pymupdf-pdf
+  - id: pymupdf-pdf
     version: "1.24"
     transport: in_process
     capabilities:
