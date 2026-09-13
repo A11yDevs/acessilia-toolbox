@@ -26,5 +26,5 @@ semantics:
     - math_converted
 
 providers:
-  - id: pure-python
+  - id: pure-math
     version: "1.0+"

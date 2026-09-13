@@ -337,7 +337,6 @@ _LATEX_VERBALIZE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"_"), "subscrito"),
     (re.compile(r"\{"), ""),
     (re.compile(r"\}"), ""),
-    (re.compile(r"\}"), ""),
     (re.compile(r"\\text\{([^}]*)\}"), r"\1"),
     (re.compile(r"\\mathrm\{([^}]*)\}"), r"\1"),
     (re.compile(r"\\mathbf\{([^}]*)\}"), r"\1"),

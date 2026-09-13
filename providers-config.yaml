@@ -49,6 +49,7 @@ providers:
       - math.convert
       - math.verbalize
     media_types:
+      - application/json
       - text/plain
 
   - id: minio

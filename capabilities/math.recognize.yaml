@@ -28,5 +28,5 @@ semantics:
     - math_recognized
 
 providers:
-  - id: docling
+  - id: docling-math
     version: "1.32+"
