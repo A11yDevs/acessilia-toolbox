@@ -152,10 +152,15 @@ def _postprocess_text(document: dict[str, Any]) -> dict[str, Any]:
         page_num = page.get("page_number", 0) or page.get("page_no", 0)
         elements = page.get("elements", []) or page.get("items", []) or page.get("regions", [])
 
+        # Remove overlapping elements before processing
+        cleaned = _overlaps_clean(elements)
+        removed = len(elements) - len(cleaned)
+        result["overlap_removed_count"] += removed
+
         page_text_parts: list[str] = []
         page_markers: list[str] = []
 
-        for elem in elements:
+        for elem in cleaned:
             elem_type = elem.get("type", "") or elem.get("label", "")
             text = elem.get("text", "") or elem.get("content", "")
 

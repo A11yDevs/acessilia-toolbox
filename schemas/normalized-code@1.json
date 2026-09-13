@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:normalized-code:1.0.0",
+  "title": "Normalized Code",
+  "description": "A normalized code block with detected language, cleaned content, and line statistics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "original",
+    "normalized",
+    "language",
+    "line_count",
+    "blank_line_count",
+    "character_count"
+  ],
+  "properties": {
+    "original": {
+      "type": "string",
+      "description": "Original raw code before normalization."
+    },
+    "normalized": {
+      "type": "string",
+      "description": "Cleaned and normalized code content."
+    },
+    "language": {
+      "type": "string",
+      "description": "Detected or provided programming language."
+    },
+    "line_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of code lines."
+    },
+    "blank_line_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of blank lines in the normalized code."
+    },
+    "character_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total character count of normalized code."
+    }
+  }
+}
