@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:image:1.0.0",
+  "title": "Image",
+  "description": "A rendered page image encoded as base64 PNG with metadata.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "page_number",
+    "width",
+    "height",
+    "image_bytes_base64",
+    "size_bytes",
+    "source_filename"
+  ],
+  "properties": {
+    "page_number": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-based page number within the source document."
+    },
+    "width": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Image width in pixels."
+    },
+    "height": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Image height in pixels."
+    },
+    "image_bytes_base64": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/=]+$",
+      "description": "PNG image data, base64-encoded."
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Byte size of the decoded PNG image."
+    },
+    "source_filename": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Original filename of the source PDF document."
+    }
+  }
+}

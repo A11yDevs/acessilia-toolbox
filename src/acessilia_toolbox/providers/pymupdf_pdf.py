@@ -7,6 +7,7 @@ pages to PNG images.
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
@@ -20,7 +21,7 @@ from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
 try:
-    import fitz  # type: ignore[import-untyped]
+    import pymupdf as fitz  # type: ignore[import-untyped]
 except ImportError:
     fitz = None
 
@@ -166,5 +167,4 @@ class PyMuPDFProvider:
 
 
 def _b64encode(data: bytes) -> str:
-    import base64
     return base64.b64encode(data).decode("ascii")
