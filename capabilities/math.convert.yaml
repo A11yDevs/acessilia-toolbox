@@ -1,0 +1,30 @@
+id: math.convert
+version: 1
+description: >-
+  Convert mathematical expressions between LaTeX and MathML notation.
+
+input:
+  schema: artifact/latex@1
+  media_types:
+    - application/json
+
+output:
+  schema: artifact/mathml@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires:
+    - math_recognized
+  produces:
+    - math_converted
+
+providers:
+  - id: pure-math
+    version: "1.0+"

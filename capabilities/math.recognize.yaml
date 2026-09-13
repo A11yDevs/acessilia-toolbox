@@ -1,0 +1,32 @@
+id: math.recognize
+version: 1
+description: >-
+  Recognize mathematical expressions from images and convert them to LaTeX notation.
+
+input:
+  schema: artifact/image@1
+  media_types:
+    - image/png
+    - image/jpeg
+    - image/tiff
+
+output:
+  schema: artifact/latex@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 300
+
+semantics:
+  requires:
+    - image_readable
+  produces:
+    - math_recognized
+
+providers:
+  - id: docling-math
+    version: "1.32+"

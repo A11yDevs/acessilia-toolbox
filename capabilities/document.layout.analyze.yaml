@@ -1,0 +1,37 @@
+id: document.layout.analyze
+version: 1
+description: >-
+  Extract and classify the visual layout regions of a document page into
+  semantic categories: text_clean, text_scanned, embedded_image, table,
+  formula, code_block, list_block, callout_box, unknown, and ignore.
+
+input:
+  schema: artifact/document@1
+  media_types:
+    - application/pdf
+    - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+    - image/png
+    - image/jpeg
+    - image/tiff
+
+output:
+  schema: artifact/layout-analysis@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 600
+
+semantics:
+  requires:
+    - document_available
+  produces:
+    - layout_available
+    - regions_classified
+
+providers:
+  - id: docling
+    version: "1.32+"

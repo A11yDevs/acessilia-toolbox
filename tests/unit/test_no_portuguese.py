@@ -43,6 +43,16 @@ EXEMPT_STRINGS: list[tuple[str, str]] = [
     # Schema description — canonical name
     ("src/acessilia_toolbox/core/normalization/models.py", "Acessilia structural extractor"),
     ("schemas/structured-document@1.json", "Acessilia structural extractor"),
+    # LaTeX verbalizer — pt-BR output for math accessibility
+    ("src/acessilia_toolbox/providers/pure_math.py", "somatório"),
+    ("src/acessilia_toolbox/providers/pure_math.py", "produtório"),
+    ("src/acessilia_toolbox/providers/pure_math.py", "épsilon"),
+    ("src/acessilia_toolbox/providers/pure_math.py", "rô"),
+    ("src/acessilia_toolbox/providers/pure_math.py", "ômega"),
+    ("src/acessilia_toolbox/providers/pure_math.py", "união"),
+    ("src/acessilia_toolbox/providers/pure_math.py", "interseção"),
+    ("src/acessilia_toolbox/providers/pure_math.py", "não pertence a"),
+    ("src/acessilia_toolbox/providers/pure_math.py", "reticências"),
 ]
 
 # Files with known fixture or generated content that may contain Portuguese.

@@ -14,6 +14,44 @@ providers:
       - image/jpeg
       - image/tiff
 
+  - id: docling-layout
+    version: "1.32"
+    transport: http
+    endpoint: ${DOCLING_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities:
+      - document.layout.analyze
+    media_types:
+      - application/pdf
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - image/png
+      - image/jpeg
+      - image/tiff
+
+  - id: docling-math
+    version: "1.32"
+    transport: http
+    endpoint: ${DOCLING_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 300
+    capabilities:
+      - math.recognize
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+
+  - id: pure-math
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - math.convert
+      - math.verbalize
+    media_types:
+      - application/json
+      - text/plain
+
   - id: minio
     version: "2025.04"
     transport: s3
