@@ -1,0 +1,34 @@
+id: document.ocr
+version: 1
+description: >-
+  Perform OCR on document images or pages, extracting recognized text
+  with confidence scores and bounding boxes.
+
+input:
+  schema: artifact/image@1
+  media_types:
+    - image/png
+    - image/jpeg
+    - image/tiff
+    - application/pdf
+
+output:
+  schema: artifact/ocr-result@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 600
+
+semantics:
+  requires:
+    - image_readable
+  produces:
+    - ocr_text_available
+
+providers:
+  - id: docling-ocr
+    version: "1.32+"

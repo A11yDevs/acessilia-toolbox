@@ -29,6 +29,15 @@ providers:
       - image/jpeg
       - image/tiff
 
+  - id: pymupdf-pdf
+    version: "1.24"
+    transport: in_process
+    capabilities:
+      - pdf.split
+      - pdf.render
+    media_types:
+      - application/pdf
+
   - id: docling-math
     version: "1.32"
     transport: http
@@ -41,6 +50,44 @@ providers:
       - image/png
       - image/jpeg
       - image/tiff
+
+  - id: docling-ocr
+    version: "1.32"
+    transport: http
+    endpoint: ${DOCLING_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities:
+      - document.ocr
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - application/pdf
+
+  - id: pure-code
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - code.normalize
+    media_types:
+      - text/plain
+
+  - id: pure-text
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - text.postprocess
+    media_types:
+      - application/json
+
+  - id: pure-accessibility
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - accessibility.mark
+    media_types:
+      - application/json
 
   - id: pure-math
     version: "1.0"

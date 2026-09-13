@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:page-collection:1.0.0",
+  "title": "PageCollection",
+  "description": "A collection of individual PDF pages, each rendered as a PNG image encoded in base64.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pages",
+    "page_count",
+    "source_filename"
+  ],
+  "properties": {
+    "pages": {
+      "type": "array",
+      "description": "Individual pages, each with metadata and a base64-encoded PNG rendering.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "page_number",
+          "width",
+          "height",
+          "image_bytes_base64",
+          "size_bytes"
+        ],
+        "properties": {
+          "page_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based page number within the source document."
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Page width in points (1/72 inch)."
+          },
+          "height": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Page height in points (1/72 inch)."
+          },
+          "image_bytes_base64": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9+/=]+$",
+            "description": "PNG image of the page, base64-encoded."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Byte size of the decoded PNG image."
+          }
+        }
+      }
+    },
+    "page_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of pages in this collection."
+    },
+    "source_filename": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Original filename of the source PDF document."
+    }
+  }
+}

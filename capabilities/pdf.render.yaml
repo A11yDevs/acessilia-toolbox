@@ -1,0 +1,30 @@
+id: pdf.render
+version: 1
+description: >-
+  Render a single PDF page into a PNG image at the specified DPI resolution.
+
+input:
+  schema: artifact/document@1
+  media_types:
+    - application/pdf
+
+output:
+  schema: artifact/image@1
+  media_types:
+    - image/png
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 60
+
+semantics:
+  requires:
+    - document_available
+  produces:
+    - page_rendered
+
+providers:
+  - id: pymupdf-pdf
+    version: "1.24+"

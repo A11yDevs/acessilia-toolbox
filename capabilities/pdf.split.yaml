@@ -1,0 +1,31 @@
+id: pdf.split
+version: 1
+description: >-
+  Split a multi-page PDF document into individual single-page PDF files,
+  each containing exactly one page.
+
+input:
+  schema: artifact/document@1
+  media_types:
+    - application/pdf
+
+output:
+  schema: artifact/page-collection@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 120
+
+semantics:
+  requires:
+    - document_available
+  produces:
+    - pages_split
+
+providers:
+  - id: pymupdf-pdf
+    version: "1.24+"

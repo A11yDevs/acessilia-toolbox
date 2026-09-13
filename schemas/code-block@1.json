@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:code-block:1.0.0",
+  "title": "Code Block",
+  "description": "A code block extracted from a document, with optional language hint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code"
+  ],
+  "properties": {
+    "code": {
+      "type": "string",
+      "description": "Raw code content, possibly with markdown fences or shell prompts."
+    },
+    "language": {
+      "type": "string",
+      "description": "Optional language hint (e.g. python, javascript)."
+    },
+    "filename": {
+      "type": "string",
+      "description": "Optional source filename for language detection."
+    }
+  }
+}

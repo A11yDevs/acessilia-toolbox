@@ -1,0 +1,31 @@
+id: code.normalize
+version: 1
+description: >-
+  Normalize code blocks extracted from documents: reflow flattened code,
+  detect language, clean up line noise, and restore proper indentation.
+
+input:
+  schema: artifact/code-block@1
+  media_types:
+    - text/plain
+
+output:
+  schema: artifact/normalized-code@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires:
+    - code_detected
+  produces:
+    - code_normalized
+
+providers:
+  - id: pure-python
+    version: "1.0+"

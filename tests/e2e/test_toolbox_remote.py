@@ -206,3 +206,197 @@ class TestPddl:
         base = _skip_if_no_url()
         resp = httpx.get(f"{base}/v1/planning/predicates", timeout=10)
         assert resp.status_code == 200
+
+
+class TestPdfSplit:
+    """POST /v1/capabilities/pdf.split:execute"""
+
+    def test_split_returns_page_collection(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.split:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                timeout=120,
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "succeeded"
+        doc = data["document"]
+        assert doc["page_count"] >= 1
+        assert len(doc["pages"]) == doc["page_count"]
+
+    def test_split_each_page_has_required_fields(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.split:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                timeout=120,
+            )
+        data = resp.json()
+        for page in data["document"]["pages"]:
+            assert "page_number" in page
+            assert "width" in page
+            assert "height" in page
+            assert "image_bytes_base64" in page
+            assert "size_bytes" in page
+            assert page["image_bytes_base64"][:4] == "iVBO"
+
+    def test_split_page_numbers_are_sequential(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.split:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                timeout=120,
+            )
+        data = resp.json()
+        numbers = [p["page_number"] for p in data["document"]["pages"]]
+        assert numbers == list(range(1, len(numbers) + 1))
+
+    def test_split_respects_max_pages_parameter(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.split:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": '{"max_pages": 1}'},
+                timeout=120,
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["document"]["page_count"] == 1
+
+    def test_split_returns_provenance(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.split:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                timeout=120,
+            )
+        data = resp.json()
+        prov = data.get("provenance", {})
+        assert "duration_ms" in prov
+        assert "provider_version" in prov
+
+
+class TestPdfRender:
+    """POST /v1/capabilities/pdf.render:execute"""
+
+    def test_render_returns_png_image(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.render:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": '{"page_number": 1}'},
+                timeout=120,
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "succeeded"
+        doc = data["document"]
+        assert doc["page_number"] == 1
+        assert doc["width"] > 0
+        assert doc["height"] > 0
+        assert doc["size_bytes"] > 0
+        assert doc["image_bytes_base64"][:4] == "iVBO"
+
+    def test_render_respects_page_number(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.render:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": '{"page_number": 2}'},
+                timeout=120,
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["document"]["page_number"] == 2
+
+    def test_render_out_of_range_returns_error(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.render:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": '{"page_number": 999}'},
+                timeout=120,
+            )
+        assert resp.status_code != 200
+
+    def test_render_respects_dpi(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            low_resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.render:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": '{"page_number": 1, "dpi": 72}'},
+                timeout=120,
+            )
+        with open(pdf_path, "rb") as f:
+            high_resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.render:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": '{"page_number": 1, "dpi": 300}'},
+                timeout=120,
+            )
+        low_size = low_resp.json()["document"]["size_bytes"]
+        high_size = high_resp.json()["document"]["size_bytes"]
+        assert low_size < high_size
+
+    def test_render_returns_provenance(self) -> None:
+        base = _skip_if_no_url()
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.render:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": '{"page_number": 1}'},
+                timeout=120,
+            )
+        data = resp.json()
+        prov = data.get("provenance", {})
+        assert "duration_ms" in prov
+        assert "provider_version" in prov
+
+
+class TestNewCapabilitiesInListing:
+    """Verify the new capabilities appear in the listing."""
+
+    def test_pdf_split_is_listed(self) -> None:
+        base = _skip_if_no_url()
+        resp = httpx.get(f"{base}/v1/capabilities", timeout=10)
+        ids = [c["id"] for c in resp.json()]
+        assert "pdf.split" in ids
+
+    def test_pdf_render_is_listed(self) -> None:
+        base = _skip_if_no_url()
+        resp = httpx.get(f"{base}/v1/capabilities", timeout=10)
+        ids = [c["id"] for c in resp.json()]
+        assert "pdf.render" in ids
+
+    def test_pymupdf_provider_is_listed(self) -> None:
+        base = _skip_if_no_url()
+        resp = httpx.get(f"{base}/v1/providers", timeout=10)
+        ids = [p["id"] for p in resp.json()]
+        assert "pymupdf-pdf" in ids
+
+    def test_pymupdf_provider_is_healthy(self) -> None:
+        base = _skip_if_no_url()
+        resp = httpx.get(f"{base}/v1/providers/pymupdf-pdf/health", timeout=10)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["healthy"] is True

@@ -107,14 +107,21 @@ class CapabilityExecutor:
             parameters=parameters,
         )
 
-        # The builder reads the source from disk to derive size and digest, so
-        # the in-memory payload is staged under its original name.
-        with tempfile.TemporaryDirectory() as staging:
-            source = Path(staging) / filename
-            source.write_bytes(payload)
-            document = build_processing_manifest(source, extraction, language=language)
+        # Capabilities that return a plain dict (e.g. pdf.split, pdf.render)
+        # skip the processing-manifest builder and use the document directly.
+        if isinstance(extraction.document, dict):
+            document_payload = extraction.document
+            artifact_suffix = f"{Path(filename).stem}.json"
+        else:
+            # The builder reads the source from disk to derive size and digest, so
+            # the in-memory payload is staged under its original name.
+            with tempfile.TemporaryDirectory() as staging:
+                source = Path(staging) / filename
+                source.write_bytes(payload)
+                document = build_processing_manifest(source, extraction, language=language)
+            document_payload = document.model_dump(mode="json", by_alias=True)
+            artifact_suffix = f"{Path(filename).stem}.structured-document.json"
 
-        document_payload = document.model_dump(mode="json", by_alias=True)
         serialized = json.dumps(document_payload, ensure_ascii=False).encode("utf-8")
 
         artifacts: list[ArtifactRef] = []
@@ -123,7 +130,7 @@ class CapabilityExecutor:
                 self._store.put(
                     serialized,
                     media_type="application/json",
-                    filename=f"{Path(filename).stem}.structured-document.json",
+                    filename=artifact_suffix,
                 )
             )
         else:

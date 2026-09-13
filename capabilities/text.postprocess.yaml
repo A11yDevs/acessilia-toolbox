@@ -1,0 +1,31 @@
+id: text.postprocess
+version: 1
+description: >-
+  Post-process extracted text: apply region markers, deduplicate overlapping
+  content, consolidate page fragments, and clean up whitespace artifacts.
+
+input:
+  schema: artifact/structured-document@1
+  media_types:
+    - application/json
+
+output:
+  schema: artifact/processed-text@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 60
+
+semantics:
+  requires:
+    - structured_document_available
+  produces:
+    - text_processed
+
+providers:
+  - id: pure-python
+    version: "1.0+"
