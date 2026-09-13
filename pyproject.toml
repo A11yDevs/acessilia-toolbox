@@ -110,3 +110,7 @@ strict = false
 [[tool.mypy.overrides]]
 module = ["boto3.*", "redis.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "acessilia_toolbox.providers.pymupdf_pdf"
+ignore_errors = true

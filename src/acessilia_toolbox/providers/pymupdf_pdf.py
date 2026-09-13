@@ -20,8 +20,9 @@ from acessilia_toolbox.core.errors import (
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
+fitz: Any
 try:
-    import pymupdf as fitz  # type: ignore[import-untyped]
+    import pymupdf as fitz
 except ImportError:
     fitz = None
 
