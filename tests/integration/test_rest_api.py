@@ -227,3 +227,77 @@ def test_openapi_document_is_published(client: TestClient) -> None:
     paths = response.json()["paths"]
     assert "/v1/capabilities/{capability_id}:execute" in paths
     assert "/v1/providers/{provider_id}/health" in paths
+
+
+# ── Authentication tests ──────────────────────────────────────────
+
+
+@pytest.fixture
+def auth_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """Client with TOOLBOX_API_KEY set to a known value."""
+    monkeypatch.setenv("TOOLBOX_API_KEY", "test-key-123")
+    # Re-import auth module to pick up the new env var.
+    monkeypatch.setattr(
+        "acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "test-key-123"
+    )
+    monkeypatch.setattr(
+        "acessilia_toolbox.api.rest.create_adapter", lambda d: StubProvider(d)
+    )
+    capabilities = CapabilityRegistry([CapabilityManifest.model_validate(MANIFEST)])
+    providers = ProviderRegistry(
+        [
+            ProviderDescriptor.model_validate(
+                {
+                    "id": "docling",
+                    "version": "1.32",
+                    "endpoint": "http://docling-serve:5001",
+                    "capabilities": [CAPABILITY],
+                    "config": {"access_key": "SUPERSECRET"},
+                }
+            )
+        ]
+    )
+    app = create_app(capabilities, providers)
+    app.state.executor = CapabilityExecutor(
+        capabilities, providers, lambda d: StubProvider(d)
+    )
+    return TestClient(app)
+
+
+def test_health_is_public_even_with_auth(auth_client: TestClient) -> None:
+    """GET /v1/health must never require authentication."""
+    response = auth_client.get("/v1/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "healthy"
+
+
+def test_endpoints_reject_requests_without_token(auth_client: TestClient) -> None:
+    """When auth is active, requests without Authorization header fail."""
+    response = auth_client.get("/v1/capabilities")
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Missing or invalid token"
+
+
+def test_endpoints_reject_invalid_token(auth_client: TestClient) -> None:
+    """A token that does not match TOOLBOX_API_KEY is rejected."""
+    response = auth_client.get(
+        "/v1/capabilities",
+        headers={"Authorization": "Bearer wrong-token"},
+    )
+    assert response.status_code == 401
+    assert response.json()["code"] == "authorization_failed"
+
+
+def test_valid_token_grants_access(auth_client: TestClient) -> None:
+    """A request with the correct Bearer token succeeds."""
+    response = auth_client.get(
+        "/v1/capabilities",
+        headers={"Authorization": "Bearer test-key-123"},
+    )
+    assert response.status_code == 200
+
+
+def test_auth_is_disabled_when_key_is_empty(client: TestClient) -> None:
+    """When TOOLBOX_API_KEY is empty, all endpoints work without a token."""
+    response = client.get("/v1/capabilities")
+    assert response.status_code == 200

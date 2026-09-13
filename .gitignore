@@ -219,3 +219,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .github/rulesets/*.json
+.DS_Store
+
+# Local development overrides (credentials, local endpoints)
+.env.local

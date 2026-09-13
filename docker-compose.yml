@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        TOOLBOX_EXTRAS: api
+        TOOLBOX_EXTRAS: api,storage,cache
     image: acessilia-toolbox:local
     container_name: acessilia-toolbox
     ports:
@@ -16,10 +16,11 @@ services:
       TOOLBOX_PORT: 8002
       TOOLBOX_PROVIDERS_CONFIG: /app/providers-config.yaml
       DOCLING_SERVE_URL: ${DOCLING_SERVE_URL:-http://docling-serve:5001}
-      MINIO_URL: ${MINIO_URL:-http://acessilia-minio:9000}
+      MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      VALKEY_URL: ${VALKEY_URL:-redis://acessilia-valkey:6379}
+      VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
+      TOOLBOX_API_KEY: ${TOOLBOX_API_KEY}
     env_file:
       - .env
     depends_on:
@@ -88,6 +89,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+      # ── One-shot bucket init ──────────────────────────────────────
+  minio-init:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    container_name: acessilia-minio-init
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY}
+        mc mb local/acessilia --ignore-existing
+        echo "✅ Bucket acessilia criado/verificado"
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
 
 volumes:
   docling-models:
