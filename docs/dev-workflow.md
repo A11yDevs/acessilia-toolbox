@@ -24,19 +24,22 @@ The `docker-compose.yml` at the project root starts the Toolbox **with local bui
 cp .env.example .env
 # Edit .env with credentials (MINIO_ACCESS_KEY, MINIO_SECRET_KEY...)
 
-# 2. Build and start all services
-docker compose up --build -d
+# 2. Build and start all services (toolbox + providers)
+docker compose --profile toolbox up --build -d
 
 # 3. Verify everything is working
 curl http://localhost:8002/v1/health
 ```
+
+> O serviço `toolbox` usa o profile `toolbox` para não subir automaticamente.
+> Use `docker compose up -d docling-serve minio valkey` para rodar apenas os providers.
 
 ### Development with hot-reload
 
 For interactive development, you can run the Toolbox outside the container (with uvicorn hot-reload) while providers run in Docker:
 
 ```bash
-# Terminal 1: Providers via Docker
+# Terminal 1: Providers via Docker (toolbox não sobe — tem profile "toolbox")
 docker compose up -d docling-serve minio valkey
 
 # Terminal 2: Toolbox with hot-reload
@@ -48,7 +51,7 @@ export VALKEY_URL=redis://localhost:6379
 uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
 ```
 
-> The `--reload` flag makes uvicorn restart the server automatically on every source code change.
+> O `--reload` flag makes uvicorn restart the server automatically on every source code change.
 
 ### Stop the environment
 

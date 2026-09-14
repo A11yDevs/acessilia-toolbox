@@ -126,9 +126,13 @@ uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 800
 
 ```bash
 cp .env.docker .env
-docker compose up --build -d
+docker compose --profile toolbox up --build -d
 curl http://localhost:8002/v1/health
 ```
+
+> O serviço `toolbox` usa o profile `toolbox` para não subir junto com os providers.
+> Use `docker compose up -d docling-serve minio valkey` para rodar apenas os providers
+> (ideal para hot-reload com a toolbox rodando localmente via `uvicorn --reload`).
 
 📄 See [`docs/dev-workflow.md`](docs/dev-workflow.md) for detailed instructions.
 
