@@ -70,6 +70,57 @@ def build_parser() -> argparse.ArgumentParser:
     execute.add_argument(
         "--provenance", action="store_true", help="Print provenance to stderr."
     )
+
+    dataset = commands.add_parser("dataset", help="Dataset operations.")
+    dataset_sub = dataset.add_subparsers(dest="dataset_command", required=True)
+
+    ds_list = dataset_sub.add_parser("list", help="List available datasets.")
+    ds_list.add_argument("--json", action="store_true", help="Emit JSON.")
+
+    ds_describe = dataset_sub.add_parser("describe", help="Describe a dataset.")
+    ds_describe.add_argument("id", help="Dataset identifier.")
+    ds_describe.add_argument("--revision", help="Git/HF revision to pin.")
+    ds_describe.add_argument("--json", action="store_true", help="Emit JSON.")
+
+    ds_splits = dataset_sub.add_parser("list-splits", help="List dataset splits.")
+    ds_splits.add_argument("id", help="Dataset identifier.")
+    ds_splits.add_argument("--revision", help="Git/HF revision to pin.")
+    ds_splits.add_argument("--json", action="store_true", help="Emit JSON.")
+
+    ds_items = dataset_sub.add_parser("list-items", help="List items in a split.")
+    ds_items.add_argument("id", help="Dataset identifier.")
+    ds_items.add_argument("split", help="Split name.")
+    ds_items.add_argument("--revision", help="Git/HF revision to pin.")
+    ds_items.add_argument("--limit", type=int, default=100, help="Max items.")
+    ds_items.add_argument("--offset", type=int, default=0, help="Pagination offset.")
+    ds_items.add_argument("--json", action="store_true", help="Emit JSON.")
+
+    ds_item = dataset_sub.add_parser("get-item", help="Get a full item.")
+    ds_item.add_argument("id", help="Dataset identifier.")
+    ds_item.add_argument("split", help="Split name.")
+    ds_item.add_argument("item-id", help="Item identifier.")
+    ds_item.add_argument("--revision", help="Git/HF revision to pin.")
+    ds_item.add_argument("--json", action="store_true", help="Emit JSON.")
+
+    ds_artifact = dataset_sub.add_parser("get-artifact", help="Get artifact bytes.")
+    ds_artifact.add_argument("id", help="Dataset identifier.")
+    ds_artifact.add_argument("path", help="Artifact path within dataset.")
+    ds_artifact.add_argument("--revision", help="Git/HF revision to pin.")
+    ds_artifact.add_argument("-o", "--output", type=Path, help="Output file path.")
+
+    ds_sample = dataset_sub.add_parser("sample", help="Sample items from a split.")
+    ds_sample.add_argument("id", help="Dataset identifier.")
+    ds_sample.add_argument("split", help="Split name.")
+    ds_sample.add_argument("--revision", help="Git/HF revision to pin.")
+    ds_sample.add_argument("-n", type=int, default=5, help="Number of samples.")
+    ds_sample.add_argument("--json", action="store_true", help="Emit JSON.")
+
+    ds_sync = dataset_sub.add_parser("sync", help="Mirror dataset artifacts to local store.")
+    ds_sync.add_argument("id", help="Dataset identifier.")
+    ds_sync.add_argument("--revision", help="Git/HF revision to pin.")
+    ds_sync.add_argument("--split", help="Sync only this split.")
+    ds_sync.add_argument("--json", action="store_true", help="Emit JSON.")
+
     return parser
 
 
@@ -82,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
             return _list_capabilities(args)
         if args.command == "providers":
             return _list_providers(args)
+        if args.command == "dataset":
+            return _dataset_command(args)
         return _execute(args)
     except ToolboxError as error:
         print(f"{error.code}: {error.message}", file=sys.stderr)
@@ -163,6 +216,129 @@ def _execute(args: argparse.Namespace) -> int:
     if args.provenance:
         print(json.dumps(result.provenance.to_payload(), indent=2), file=sys.stderr)
     return EXIT_OK
+
+
+def _dataset_command(args: argparse.Namespace) -> int:
+    """Dispatch dataset subcommands."""
+    executor = CapabilityExecutor(
+        CapabilityRegistry.from_directory(args.capabilities_dir),
+        ProviderRegistry.from_file(args.providers_config),
+        create_adapter,
+    )
+
+    cmd = args.dataset_command
+    provider = "dataset-github"
+
+    if cmd == "list":
+        result = executor.execute(
+            "dataset.list", b"{}", filename="query.json", media_type="application/json",
+            provider_id=provider,
+        )
+        _print_json(result.document, args)
+        return EXIT_OK
+
+    if cmd == "describe":
+        result = executor.execute(
+            "dataset.describe", b"{}", filename="query.json", media_type="application/json",
+            provider_id=provider,
+            parameters={"dataset_id": args.id, "revision": args.revision},
+        )
+        _print_json(result.document, args)
+        return EXIT_OK
+
+    if cmd == "list-splits":
+        result = executor.execute(
+            "dataset.list_splits", b"{}", filename="query.json", media_type="application/json",
+            provider_id=provider,
+            parameters={"dataset_id": args.id, "revision": args.revision},
+        )
+        _print_json(result.document, args)
+        return EXIT_OK
+
+    if cmd == "list-items":
+        result = executor.execute(
+            "dataset.list_items", b"{}", filename="query.json", media_type="application/json",
+            provider_id=provider,
+            parameters={
+                "dataset_id": args.id,
+                "split": args.split,
+                "revision": args.revision,
+                "limit": args.limit,
+                "offset": args.offset,
+            },
+        )
+        _print_json(result.document, args)
+        return EXIT_OK
+
+    if cmd == "get-item":
+        result = executor.execute(
+            "dataset.get_item", b"{}", filename="query.json", media_type="application/json",
+            provider_id=provider,
+            parameters={
+                "dataset_id": args.id,
+                "split": args.split,
+                "item_id": args.item_id,
+                "revision": args.revision,
+            },
+        )
+        _print_json(result.document, args)
+        return EXIT_OK
+
+    if cmd == "get-artifact":
+        result = executor.execute(
+            "dataset.get_artifact", b"{}", filename="query.json", media_type="application/json",
+            provider_id=provider,
+            parameters={
+                "dataset_id": args.id,
+                "artifact_path": args.path,
+                "revision": args.revision,
+            },
+        )
+        doc = result.document
+        payload = bytes.fromhex(doc["payload"])
+        if args.output:
+            args.output.write_bytes(payload)
+            print(f"artifact saved to {args.output}")
+        else:
+            sys.stdout.buffer.write(payload)
+        return EXIT_OK
+
+    if cmd == "sample":
+        result = executor.execute(
+            "dataset.sample", b"{}", filename="query.json", media_type="application/json",
+            provider_id=provider,
+            parameters={
+                "dataset_id": args.id,
+                "split": args.split,
+                "revision": args.revision,
+                "n": args.n,
+            },
+        )
+        _print_json(result.document, args)
+        return EXIT_OK
+
+    if cmd == "sync":
+        result = executor.execute(
+            "dataset.sync", b"{}", filename="query.json", media_type="application/json",
+            provider_id=provider,
+            parameters={
+                "dataset_id": args.id,
+                "revision": args.revision,
+                "split": args.split,
+            },
+        )
+        _print_json(result.document, args)
+        return EXIT_OK
+
+    print(f"unknown dataset command: {cmd}", file=sys.stderr)
+    return EXIT_USAGE
+
+
+def _print_json(data: Any, args: argparse.Namespace) -> None:
+    if getattr(args, "json", False):
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def _media_type(document: Path) -> str:

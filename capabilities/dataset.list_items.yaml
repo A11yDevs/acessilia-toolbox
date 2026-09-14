@@ -1,0 +1,28 @@
+id: dataset.list_items
+version: 1
+description: >-
+  List items in a dataset split with pagination.
+
+input:
+  schema: artifact/query@1
+
+output:
+  schema: artifact/dataset-item-list@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 60
+
+semantics:
+  requires:
+    - splits_known
+  produces:
+    - items_listed
+
+providers:
+  - id: dataset-github
+  - id: dataset-huggingface

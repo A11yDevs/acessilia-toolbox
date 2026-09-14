@@ -10,13 +10,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from acessilia_toolbox import __version__
-from acessilia_toolbox.api.rest import public_router, router
+from acessilia_toolbox.api.rest import dataset_router, public_router, router
 from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import ConfigurationError, ToolboxError
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderRegistry
-from acessilia_toolbox.providers import create_adapter
+from acessilia_toolbox.providers import configure_dataset_mirroring, create_adapter
 from acessilia_toolbox.providers.cache import create_cache
 from acessilia_toolbox.providers.storage import create_artifact_store as _create_store
 
@@ -59,6 +59,10 @@ def create_app(
     )
     app.state.store = store if store is not None else _store_from(app.state.providers)
     app.state.cache = cache if cache is not None else _cache_from(app.state.providers)
+
+    # Inject store/cache into dataset adapters for mirroring support.
+    configure_dataset_mirroring(store=app.state.store, cache=app.state.cache)
+
     app.state.executor = CapabilityExecutor(
         app.state.capabilities,
         app.state.providers,
@@ -73,6 +77,7 @@ def create_app(
 
     app.include_router(public_router)
     app.include_router(router)
+    app.include_router(dataset_router)
 
     # OpenAPI security scheme for Bearer token auth.
     app.openapi_components = {  # type: ignore[attr-defined]

@@ -1,0 +1,26 @@
+id: dataset.get_artifact
+version: 1
+description: >-
+  Retrieve the raw bytes of a dataset artifact.
+
+input:
+  schema: artifact/query@1
+
+output:
+  schema: artifact/binary@1
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 120
+
+semantics:
+  requires:
+    - item_retrieved
+  produces:
+    - artifact_available
+
+providers:
+  - id: dataset-github
+  - id: dataset-huggingface

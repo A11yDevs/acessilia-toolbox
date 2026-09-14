@@ -1,0 +1,27 @@
+id: dataset.list
+version: 1
+description: >-
+  List all datasets available through the toolbox.
+
+input:
+  schema: artifact/query@1
+
+output:
+  schema: artifact/dataset-list@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires: []
+  produces:
+    - datasets_available
+
+providers:
+  - id: dataset-github
+  - id: dataset-huggingface

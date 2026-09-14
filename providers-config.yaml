@@ -118,6 +118,36 @@ providers:
     capabilities:
       - cache.get
       - cache.put
+
+  - id: dataset-github
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - dataset.list
+      - dataset.describe
+      - dataset.list_splits
+      - dataset.list_items
+      - dataset.get_item
+      - dataset.get_artifact
+      - dataset.sample
+      - dataset.sync
+    config:
+      mirror: false
+
+  - id: dataset-huggingface
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - dataset.list
+      - dataset.describe
+      - dataset.list_splits
+      - dataset.list_items
+      - dataset.get_item
+      - dataset.get_artifact
+      - dataset.sample
+      - dataset.sync
+    config:
+      mirror: false
     config:
       db: 0
       ttl_seconds: 604800

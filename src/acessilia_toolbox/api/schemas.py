@@ -69,7 +69,7 @@ class ExecutionResponse(BaseModel):
     capability: str
     provider: str
     artifacts: list[ArtifactRef]
-    document: dict[str, Any]
+    document: Any
     provenance: ExecutionProvenance
 
 

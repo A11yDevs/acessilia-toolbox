@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from acessilia_toolbox.core.errors import CapabilityNotFoundError, ConfigurationError
 
-CAPABILITY_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$")
+CAPABILITY_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
 PREDICATE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 

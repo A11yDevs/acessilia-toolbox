@@ -88,3 +88,31 @@ class ProviderExecutionError(ToolboxError):
 
     code = "provider_execution_failed"
     http_status = 502
+
+
+class DatasetNotFoundError(ToolboxError):
+    """The requested dataset does not exist."""
+
+    code = "dataset_not_found"
+    http_status = 404
+
+
+class SplitNotFoundError(ToolboxError):
+    """The requested split does not exist in the dataset."""
+
+    code = "split_not_found"
+    http_status = 404
+
+
+class ItemNotFoundError(ToolboxError):
+    """The requested item does not exist in the split."""
+
+    code = "item_not_found"
+    http_status = 404
+
+
+class DatasetProviderError(ToolboxError):
+    """The dataset provider failed to fulfil the request."""
+
+    code = "dataset_provider_error"
+    http_status = 502
