@@ -182,7 +182,7 @@ class TestArtifacts:
 
         resp = httpx.post(
             f"{base}/v1/capabilities/document.structure.extract:execute",
-            json={
+            data={
                 "artifact_id": artifact_id,
                 "language": "pt-BR",
                 "provider": "docling",
