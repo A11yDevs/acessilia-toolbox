@@ -1,0 +1,28 @@
+id: dataset.describe
+version: 1
+description: >-
+  Get detailed metadata about a specific dataset at a given revision.
+
+input:
+  schema: artifact/query@1
+
+output:
+  schema: artifact/dataset-info@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires:
+    - datasets_available
+  produces:
+    - dataset_known
+
+providers:
+  - id: dataset-github
+  - id: dataset-huggingface

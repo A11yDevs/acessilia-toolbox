@@ -42,7 +42,7 @@ class CapabilityResult(BaseModel):
     status: str = "succeeded"
     capability: str
     provider: str
-    document: dict[str, Any]
+    document: Any
     provenance: ExecutionProvenance
     artifacts: list[ArtifactRef] = Field(default_factory=list)
 
@@ -107,9 +107,10 @@ class CapabilityExecutor:
             parameters=parameters,
         )
 
-        # Capabilities that return a plain dict (e.g. pdf.split, pdf.render)
-        # skip the processing-manifest builder and use the document directly.
-        if isinstance(extraction.document, dict):
+        # Capabilities that return a plain dict or list (e.g. pdf.split,
+        # dataset.list) skip the processing-manifest builder and use the
+        # document directly.
+        if isinstance(extraction.document, (dict, list)):
             document_payload = extraction.document
             artifact_suffix = f"{Path(filename).stem}.json"
         else:

@@ -1,0 +1,28 @@
+id: dataset.list_splits
+version: 1
+description: >-
+  List available splits for a dataset revision.
+
+input:
+  schema: artifact/query@1
+
+output:
+  schema: artifact/dataset-splits@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires:
+    - dataset_known
+  produces:
+    - splits_known
+
+providers:
+  - id: dataset-github
+  - id: dataset-huggingface

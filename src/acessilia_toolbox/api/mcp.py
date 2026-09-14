@@ -93,6 +93,10 @@ class ToolboxMCPServer:
         capability_id = name.replace("_", ".")
         manifest = self._capabilities.get(capability_id)
 
+        # Dataset capabilities use parameters, not file uploads.
+        if capability_id.startswith("dataset."):
+            return self._call_dataset_tool(capability_id, manifest, arguments)
+
         file_path = arguments.get("file", "")
         media_type = arguments.get("media_type", "application/pdf")
         provider = arguments.get("provider")
@@ -115,6 +119,40 @@ class ToolboxMCPServer:
                 media_type=media_type,
                 provider_id=provider,
                 parameters=parameters,
+            )
+            return [
+                {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                result.document, ensure_ascii=False, indent=2
+                            ),
+                        }
+                    ]
+                }
+            ]
+        except Exception as exc:
+            return [{"content": [{"type": "text", "text": f"Error: {exc}"}]}]
+
+    def _call_dataset_tool(
+        self,
+        capability_id: str,
+        manifest: Any,
+        arguments: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Execute a dataset capability via parameters (no file upload)."""
+        provider = arguments.get("provider", "dataset-github")
+        params = {k: v for k, v in arguments.items() if k != "provider"}
+
+        try:
+            result = self._executor.execute(
+                manifest.id,
+                b"{}",
+                filename="query.json",
+                media_type="application/json",
+                provider_id=provider,
+                parameters=params,
             )
             return [
                 {
@@ -170,6 +208,16 @@ class ToolboxMCPServer:
                 }
             )
 
+        # Dataset resources
+        resources.append(
+            {
+                "uri": f"{TOOLBOX_PREFIX}datasets",
+                "name": "Available Datasets",
+                "description": "All datasets available through the toolbox",
+                "mimeType": "application/json",
+            }
+        )
+
         return resources
 
     def read_resource(self, uri: str) -> str:
@@ -202,6 +250,16 @@ class ToolboxMCPServer:
             from acessilia_toolbox.core.pddl import capability_action
 
             return capability_action(manifest)
+
+        if uri == f"{TOOLBOX_PREFIX}datasets":
+            result = self._executor.execute(
+                "dataset.list",
+                b"{}",
+                filename="query.json",
+                media_type="application/json",
+                provider_id="dataset-github",
+            )
+            return json.dumps(result.document, indent=2, ensure_ascii=False)
 
         return f"Unknown resource: {uri}"
 
