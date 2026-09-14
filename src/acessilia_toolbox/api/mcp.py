@@ -46,6 +46,10 @@ def _tool_from_capability(manifest: dict[str, Any]) -> dict[str, Any]:
             "type": "object",
             "description": "Provider-specific parameters as a JSON object",
         }
+        properties["no_cache"] = {
+            "type": "boolean",
+            "description": "Skip execution cache and force re-processing",
+        }
 
     return {
         "name": action,
@@ -119,6 +123,7 @@ class ToolboxMCPServer:
                 media_type=media_type,
                 provider_id=provider,
                 parameters=parameters,
+                no_cache=arguments.get("no_cache", False),
             )
             return [
                 {

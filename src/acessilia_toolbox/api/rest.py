@@ -111,6 +111,7 @@ async def execute_capability(
     parameters: Annotated[str | None, Form(description="JSON object")] = None,
     language: Annotated[str, Form()] = "pt-BR",
     version: Annotated[int | None, Form()] = None,
+    no_cache: Annotated[bool, Form(description="Skip execution cache")] = False,
 ) -> ExecutionResponse:
     payload, filename, media_type = await _resolve_input(runner, file, artifact_id)
     if len(payload) > MAX_UPLOAD_BYTES:
@@ -127,6 +128,7 @@ async def execute_capability(
         capability_version=version,
         parameters=_parse_parameters(parameters),
         language=language,
+        no_cache=no_cache,
     )
 
     return ExecutionResponse(

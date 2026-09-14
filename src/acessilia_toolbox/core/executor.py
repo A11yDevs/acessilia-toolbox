@@ -74,6 +74,7 @@ class CapabilityExecutor:
         capability_version: int | None = None,
         parameters: Mapping[str, Any] | None = None,
         language: str = "pt-BR",
+        no_cache: bool = False,
     ) -> CapabilityResult:
         manifest = self._capabilities.get(capability_id, capability_version)
         _validate_input(manifest, payload, filename, media_type)
@@ -94,7 +95,7 @@ class CapabilityExecutor:
             model_versions=versions,
         )
 
-        if manifest.execution.cacheable:
+        if manifest.execution.cacheable and not no_cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
                 return _restore(cached, cache_key)
