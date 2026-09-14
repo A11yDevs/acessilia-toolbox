@@ -87,7 +87,7 @@ class DatasetAdapter:
     """Wraps a DatasetProvider to conform to ProviderAdapter.
 
     The executor's ``if isinstance(extraction.document, dict)`` branch handles
-    the plain dict returned here – no processing-manifest builder needed.
+    the plain dict returned here - no processing-manifest builder needed.
 
     When an ``ArtifactStore`` is supplied and the provider config has
     ``mirror: true``, artifacts are mirrored to the store on first fetch.
@@ -114,10 +114,10 @@ class DatasetAdapter:
     def execute(
         self,
         capability_id: str,
-        payload: bytes,  # noqa: ARG002 – unused, dataset ops use parameters
+        payload: bytes,
         *,
-        filename: str = "",  # noqa: ARG002
-        media_type: str = "",  # noqa: ARG002
+        filename: str = "",
+        media_type: str = "",
         parameters: Mapping[str, Any] | None = None,
     ) -> ExtractionResult:
         params = dict(parameters or {})
@@ -256,7 +256,7 @@ class DatasetAdapter:
 
         # Serialise to plain dict so the executor's dict branch handles it.
         if isinstance(result, tuple) and len(result) == 2:
-            # get_artifact returns (bytes, media_type) – wrap in a dict.
+            # get_artifact returns (bytes, media_type) - wrap in a dict.
             return {"payload": result[0].hex(), "media_type": result[1]}
         if isinstance(result, list):
             return [item.model_dump(mode="json") for item in result]
@@ -395,7 +395,7 @@ class DatasetAdapter:
 
     def _store_key(self, dataset_id: str, artifact_path: str) -> str:
         """Deterministic store key for a dataset artifact."""
-        raw = f"datasets/{dataset_id}/{artifact_path}".encode("utf-8")
+        raw = f"datasets/{dataset_id}/{artifact_path}".encode()
         return fingerprint_bytes(raw)
 
     def _meta_cache_key(self, operation: str, kw: dict[str, Any]) -> str:

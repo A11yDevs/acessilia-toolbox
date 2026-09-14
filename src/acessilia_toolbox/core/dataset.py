@@ -49,7 +49,7 @@ class SplitInfo(BaseModel):
 class ItemSummary(BaseModel):
     """Lightweight item reference returned by list operations.
 
-    Carries no artifact payloads – use `get_item` for the full item.
+    Carries no artifact payloads - use `get_item` for the full item.
     """
 
     model_config = ConfigDict(extra="forbid")

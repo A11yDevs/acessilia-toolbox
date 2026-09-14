@@ -30,7 +30,7 @@ from acessilia_toolbox.core.errors import (
 from acessilia_toolbox.core.provider import ProviderDescriptor
 
 # ---------------------------------------------------------------------------
-# Known dataset definitions – extend this dict to add a third dataset.
+# Known dataset definitions - extend this dict to add a third dataset.
 # ---------------------------------------------------------------------------
 
 DATASET_DEFS: dict[str, dict[str, Any]] = {
@@ -96,7 +96,7 @@ class GitHubDatasetProvider:
         return info
 
     def list_splits(
-        self, dataset_id: str, revision: str | None = None  # noqa: ARG002
+        self, dataset_id: str, revision: str | None = None
     ) -> Sequence[SplitInfo]:
         ddef = self._resolve_def(dataset_id)
         splits: list[SplitInfo] = []
@@ -267,11 +267,8 @@ class GitHubDatasetProvider:
 
     def _build_info(self, dataset_id: str, ddef: dict[str, Any]) -> DatasetInfo:
         return DatasetInfo(
-            id=dataset_id,
-            name=ddef["name"],
-            description=ddef["description"],
-            source=ddef["source"],
-            source_type=ddef["source_type"],
+            id=dataset_id, name=ddef["name"], description=ddef["description"],
+            source=ddef["source"], source_type=ddef["source_type"],
             default_revision=ddef["default_revision"],
             splits=list(ddef["splits"]),
         )
@@ -335,10 +332,7 @@ class GitHubDatasetProvider:
                 "png": "image/png",
             }.get(ext, "application/octet-stream")
 
-            if subdir:
-                source_path = f"input/{subdir}/{item_id}.{ext}"
-            else:
-                source_path = f"input/{item_id}.{ext}"
+            source_path = f"input/{subdir}/{item_id}.{ext}" if subdir else f"input/{item_id}.{ext}"
             artifacts.append(
                 DatasetArtifactRef(path=source_path, media_type=media)
             )

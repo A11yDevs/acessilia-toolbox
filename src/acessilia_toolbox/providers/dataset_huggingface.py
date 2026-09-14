@@ -57,7 +57,7 @@ DATASET_DEFS: dict[str, dict[str, Any]] = {
             },
             "test": {
                 "name": "Test",
-                "description": "509 pages, images only – ground truth withheld for EvalAI",
+                "description": "509 pages, images only - ground truth withheld for EvalAI",
                 "has_ground_truth": False,
                 "subdir": "test",
             },
@@ -93,7 +93,7 @@ class HuggingFaceDatasetProvider:
         return info
 
     def list_splits(
-        self, dataset_id: str, revision: str | None = None  # noqa: ARG002
+        self, dataset_id: str, revision: str | None = None
     ) -> Sequence[SplitInfo]:
         ddef = self._resolve_def(dataset_id)
         splits: list[SplitInfo] = []

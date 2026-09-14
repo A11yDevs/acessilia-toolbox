@@ -263,7 +263,7 @@ def list_datasets(
         media_type="application/json",
         provider_id="dataset-github",
     )
-    return result.document  # type: ignore[return-value]
+    return result.document  # type: ignore[no-any-return]
 
 
 @dataset_router.get("/{dataset_id}", response_model=dict[str, Any])
@@ -281,7 +281,7 @@ def describe_dataset(
         provider_id="dataset-github",
         parameters={"dataset_id": dataset_id, "revision": revision},
     )
-    return result.document  # type: ignore[return-value]
+    return result.document  # type: ignore[no-any-return]
 
 
 @dataset_router.get("/{dataset_id}/splits", response_model=list[dict[str, Any]])
@@ -299,7 +299,7 @@ def list_dataset_splits(
         provider_id="dataset-github",
         parameters={"dataset_id": dataset_id, "revision": revision},
     )
-    return result.document  # type: ignore[return-value]
+    return result.document  # type: ignore[no-any-return]
 
 
 @dataset_router.get("/{dataset_id}/splits/{split}/items", response_model=list[dict[str, Any]])
@@ -326,7 +326,7 @@ def list_dataset_items(
             "offset": offset,
         },
     )
-    return result.document  # type: ignore[return-value]
+    return result.document  # type: ignore[no-any-return]
 
 
 @dataset_router.get(
@@ -354,7 +354,7 @@ def get_dataset_item(
             "revision": revision,
         },
     )
-    return result.document  # type: ignore[return-value]
+    return result.document  # type: ignore[no-any-return]
 
 
 @dataset_router.get(
@@ -414,7 +414,7 @@ def sample_dataset(
             "n": n,
         },
     )
-    return result.document  # type: ignore[return-value]
+    return result.document  # type: ignore[no-any-return]
 
 
 @dataset_router.post(
@@ -443,7 +443,7 @@ def sync_dataset(
             "split": split,
         },
     )
-    return result.document  # type: ignore[return-value]
+    return result.document  # type: ignore[no-any-return]
 
 
 @router.get("/planning/domain", tags=["planning"])
