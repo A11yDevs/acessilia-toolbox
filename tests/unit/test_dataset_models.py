@@ -15,7 +15,10 @@ from acessilia_toolbox.core.dataset import (
 
 
 def test_dataset_info_minimal() -> None:
-    info = DatasetInfo(id="test-ds", name="Test Dataset", source="https://example.com", source_type="github")
+    info = DatasetInfo(
+        id="test-ds", name="Test Dataset",
+        source="https://example.com", source_type="github",
+    )
     assert info.id == "test-ds"
     assert info.default_revision == "main"
     assert info.splits == []

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
 
 import pytest
 
 from acessilia_toolbox.core.dataset import DatasetInfo, DatasetItem, ItemSummary, SplitInfo
-from acessilia_toolbox.core.errors import DatasetNotFoundError, ItemNotFoundError, SplitNotFoundError
+from acessilia_toolbox.core.errors import (
+    DatasetNotFoundError,
+    ItemNotFoundError,
+    SplitNotFoundError,
+)
 from acessilia_toolbox.core.provider import ProviderDescriptor
-from acessilia_toolbox.providers.dataset import DatasetAdapter, DatasetProvider
-
+from acessilia_toolbox.providers.dataset import DatasetAdapter
 
 # ---------------------------------------------------------------------------
 # Stub provider for testing the adapter
@@ -67,7 +69,10 @@ class StubDatasetProvider:
         if split != "input":
             raise SplitNotFoundError(f"unknown {split}", dataset=dataset_id, split=split)
         return [
-            ItemSummary(id=f"item_{i}", dataset=dataset_id, split=split, revision=revision or "main")
+            ItemSummary(
+                id=f"item_{i}", dataset=dataset_id, split=split,
+                revision=revision or "main",
+            )
             for i in range(offset, min(offset + limit, 10))
         ]
 
@@ -83,7 +88,9 @@ class StubDatasetProvider:
         if split != "input":
             raise SplitNotFoundError(f"unknown {split}", dataset=dataset_id, split=split)
         if item_id != "item_0":
-            raise ItemNotFoundError(f"unknown {item_id}", dataset=dataset_id, split=split, item=item_id)
+            raise ItemNotFoundError(
+                f"unknown {item_id}", dataset=dataset_id, split=split, item=item_id
+            )
         return DatasetItem(
             id="item_0",
             dataset=dataset_id,

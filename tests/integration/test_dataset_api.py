@@ -15,9 +15,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from acessilia_toolbox.api.app import create_app
-from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
+from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.dataset import DatasetInfo, DatasetItem, ItemSummary, SplitInfo
-from acessilia_toolbox.core.errors import DatasetNotFoundError, ItemNotFoundError, SplitNotFoundError
+from acessilia_toolbox.core.errors import (
+    DatasetNotFoundError,
+    ItemNotFoundError,
+    SplitNotFoundError,
+)
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import (
@@ -100,7 +104,9 @@ class StubDatasetProvider:
         if split != "input":
             raise SplitNotFoundError(f"unknown {split}", dataset=dataset_id, split=split)
         if item_id != "item_0":
-            raise ItemNotFoundError(f"unknown {item_id}", dataset=dataset_id, split=split, item=item_id)
+            raise ItemNotFoundError(
+                f"unknown {item_id}", dataset=dataset_id, split=split, item=item_id
+            )
         return DatasetItem(
             id="item_0",
             dataset=dataset_id,
@@ -159,16 +165,23 @@ class StubDatasetAdapter:
         elif capability_id == "dataset.describe":
             doc = self._provider.describe(dataset_id, revision).model_dump(mode="json")
         elif capability_id == "dataset.list_splits":
-            doc = [s.model_dump(mode="json") for s in self._provider.list_splits(dataset_id, revision)]
+            doc = [s.model_dump(mode="json")
+                   for s in self._provider.list_splits(dataset_id, revision)]
         elif capability_id == "dataset.list_items":
-            doc = [i.model_dump(mode="json") for i in self._provider.list_items(dataset_id, split, revision, limit, offset)]
+            doc = [i.model_dump(mode="json")
+                   for i in self._provider.list_items(
+                       dataset_id, split, revision, limit, offset
+                   )]
         elif capability_id == "dataset.get_item":
-            doc = self._provider.get_item(dataset_id, item_id, split, revision).model_dump(mode="json")
+            doc = self._provider.get_item(
+                dataset_id, item_id, split, revision
+            ).model_dump(mode="json")
         elif capability_id == "dataset.get_artifact":
             data, mt = self._provider.get_artifact(dataset_id, artifact_path, revision)
             doc = {"payload": data.hex(), "media_type": mt}
         elif capability_id == "dataset.sample":
-            doc = [i.model_dump(mode="json") for i in self._provider.sample(dataset_id, split, n, revision)]
+            doc = [i.model_dump(mode="json")
+                   for i in self._provider.sample(dataset_id, split, n, revision)]
         else:
             raise ValueError(f"unknown capability: {capability_id}")
 

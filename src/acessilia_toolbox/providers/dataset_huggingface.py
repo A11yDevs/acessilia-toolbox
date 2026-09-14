@@ -158,7 +158,6 @@ class HuggingFaceDatasetProvider:
 
         ref = revision or ddef["default_revision"]
         subdir = sdef["subdir"]
-        hf_repo = ddef["hf_repo"]
 
         artifacts: list[DatasetArtifactRef] = []
         annotations: list[DatasetArtifactRef] = []

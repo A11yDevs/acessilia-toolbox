@@ -10,7 +10,6 @@ import csv
 import io
 import os
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -28,7 +27,6 @@ from acessilia_toolbox.core.errors import (
     ItemNotFoundError,
     SplitNotFoundError,
 )
-from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.provider import ProviderDescriptor
 
 # ---------------------------------------------------------------------------
@@ -163,7 +161,7 @@ class GitHubDatasetProvider:
             )
 
         artifacts, annotations = self._build_artifacts(
-            dataset_id, split, row, sdef, revision
+            split, row, sdef, revision
         )
 
         return DatasetItem(
@@ -227,7 +225,7 @@ class GitHubDatasetProvider:
         items: list[DatasetItem] = []
         for row in selected:
             artifacts, annotations = self._build_artifacts(
-                dataset_id, split, row, sdef, revision
+                split, row, sdef, revision
             )
             items.append(
                 DatasetItem(
@@ -315,15 +313,12 @@ class GitHubDatasetProvider:
 
     def _build_artifacts(
         self,
-        dataset_id: str,
         split: str,
         row: dict[str, str],
         sdef: dict[str, Any],
         revision: str | None = None,
     ) -> tuple[list[DatasetArtifactRef], list[DatasetArtifactRef]]:
         """Build artifact and annotation refs for one manifest row."""
-        ddef = self._resolve_def(dataset_id)
-        ref = revision or ddef["default_revision"]
         item_id = row["id"]
         subdir = row.get("subdirectory", "")
 

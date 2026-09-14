@@ -14,8 +14,6 @@ persisted in the store for subsequent fast retrieval.  Metadata
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
@@ -25,7 +23,7 @@ from acessilia_toolbox.core.dataset import DatasetInfo, DatasetItem, ItemSummary
 from acessilia_toolbox.core.errors import DatasetProviderError, ToolboxError
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
-from acessilia_toolbox.core.provider import ProviderAdapter, ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
 # Cache key prefixes
 _META_CACHE_PREFIX = "dataset:meta:"
@@ -230,10 +228,15 @@ class DatasetAdapter:
         # Build the call signature from kw.
         sig = {
             "list_datasets": lambda: self._list_datasets_cached(cache_key),
-            "describe": lambda: self._describe_cached(kw["dataset_id"], kw.get("revision"), cache_key),
-            "list_splits": lambda: self._list_splits_cached(kw["dataset_id"], kw.get("revision"), cache_key),
+            "describe": lambda: self._describe_cached(
+                kw["dataset_id"], kw.get("revision"), cache_key
+            ),
+            "list_splits": lambda: self._list_splits_cached(
+                kw["dataset_id"], kw.get("revision"), cache_key
+            ),
             "list_items": lambda: self._list_items_cached(
-                kw["dataset_id"], kw["split"], kw.get("revision"), kw["limit"], kw["offset"], cache_key
+                kw["dataset_id"], kw["split"], kw.get("revision"),
+                kw["limit"], kw["offset"], cache_key
             ),
             "get_item": lambda: self._provider.get_item(
                 kw["dataset_id"], kw["item_id"], kw["split"], kw.get("revision")
@@ -340,7 +343,11 @@ class DatasetAdapter:
             filename=artifact_path.rsplit("/", 1)[-1],
         )
         # Also store a reference under the dataset-scoped key so we can find it.
-        ref = ArtifactRef.of(payload, media_type=media_type, filename=artifact_path.rsplit("/", 1)[-1])
+        ref = ArtifactRef.of(
+            payload,
+            media_type=media_type,
+            filename=artifact_path.rsplit("/", 1)[-1],
+        )
         self._cache.put(
             _ARTIFACT_CACHE_PREFIX + store_key,
             ref.model_dump(mode="json"),
