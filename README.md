@@ -117,9 +117,20 @@ docker compose up -d docling-serve minio valkey
 # Terminal 2: toolbox with hot-reload
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env
-# edit .env with credentials
-uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
+cp .env.example .env.local
+# Edit .env.local with real credentials (MINIO_ACCESS_KEY, MINIO_SECRET_KEY)
+# and override URLs for localhost:
+#   DOCLING_SERVE_URL=http://localhost:5001
+#   MINIO_URL=http://localhost:9000
+#   VALKEY_URL=redis://localhost:6379
+./scripts/run-local.sh
+```
+
+> The `run-local.sh` script loads `.env.local` automatically. If you prefer to run
+> `uvicorn` directly, ensure all env vars are exported first:
+> ```bash
+# export $(grep -v '^\s*#' .env.local | xargs)
+# uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
 ```
 
 ### Full Docker Compose (providers + toolbox)

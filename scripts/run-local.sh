@@ -11,8 +11,15 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
 # Load local environment variables (skip comments and blank lines)
+if [[ ! -f .env.local ]]; then
+    echo "❌ .env.local not found. Create it from .env.local.example:"
+    echo "   cp .env.local.example .env.local"
+    echo "   # Then edit .env.local with real credentials"
+    exit 1
+fi
+
 while IFS='=' read -r key value; do
-    if [[ -n "$key" && -z "${key###*}" ]]; then
+    if [[ -n "$key" ]]; then
         export "$key=$value"
     fi
 done < <(grep -v '^\s*#' .env.local | grep -v '^\s*$')

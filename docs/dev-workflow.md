@@ -43,11 +43,23 @@ For interactive development, you can run the Toolbox outside the container (with
 docker compose up -d docling-serve minio valkey
 
 # Terminal 2: Toolbox with hot-reload
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-export DOCLING_SERVE_URL=http://localhost:5001
-export MINIO_URL=http://localhost:9000
-export VALKEY_URL=redis://localhost:6379
+cp .env.example .env.local
+# Edit .env.local with real credentials and localhost URLs:
+#   MINIO_ACCESS_KEY=your-access-key
+#   MINIO_SECRET_KEY=your-secret-key
+#   DOCLING_SERVE_URL=http://localhost:5001
+#   MINIO_URL=http://localhost:9000
+#   VALKEY_URL=redis://localhost:6379
+./scripts/run-local.sh
+```
+
+> The `run-local.sh` script loads `.env.local` automatically and starts uvicorn
+> with `--reload`. If you prefer to run `uvicorn` directly, export the variables
+> first:
+> ```bash
+# export $(grep -v '^\s*#' .env.local | xargs)
+# uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
+```
 uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
 ```
 
