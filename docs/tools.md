@@ -2,23 +2,26 @@
 
 ## Overview
 
-The Toolbox exposes capabilities, not vendor APIs. The following list is
-a roadmap, not a mandatory dependency set.
+The Toolbox exposes capabilities, not vendor APIs. Providers marked
+**[implemented]** are wired in `providers-config.yaml`; the rest remain
+roadmap candidates.
 
-| Family        | Capability examples                                     | Candidate providers                      |
-|---------------|---------------------------------------------------------|------------------------------------------|
-| Document AI   | `document.structure.extract`, `document.layout.analyze` | docling-serve, MinerU                    |
-| OCR           | `document.ocr`                                          | PaddleOCR, Tesseract, Surya              |
-| PDF           | `pdf.inspect`, `pdf.render`, `pdf.extract`              | PyMuPDF, pikepdf                         |
-| Tables        | `table.extract`                                         | Docling, MinerU, PaddleOCR               |
-| Conversion    | `document.convert`                                      | Pandoc                                   |
-| Mathematics   | `math.recognize`, `math.convert`, `math.render`         | pix2tex, LaTeXML, other math services    |
-| Accessibility | `accessibility.validate`                                | veraPDF and format-specific validators   |
-| Artifacts     | `artifact.store`, `artifact.retrieve`                   | MinIO, S3, filesystem                    |
-| Cache         | `cache.get`, `cache.put`                                | Valkey, Redis, filesystem/object storage |
-| Metadata      | `artifact.metadata.extract`                             | ExifTool                                 |
-| Security      | `artifact.scan`                                         | ClamAV                                   |
-| Speech        | `speech.recognize`, `speech.synthesize`                 | sherpa-onnx, whisper.cpp, Piper          |
+| Family        | Capability examples                                     | Providers                                  | Status        |
+|---------------|---------------------------------------------------------|--------------------------------------------|---------------|
+| Document AI   | `document.structure.extract`, `document.layout.analyze` | docling-serve, MinerU                      | [implemented] |
+| OCR           | `document.ocr`                                          | docling-serve, MinerU (PaddleOCR, Surya: roadmap) | [implemented] |
+| PDF           | `pdf.split`, `pdf.render`                               | PyMuPDF                                    | [implemented] |
+| Tables        | table extraction inside `document.structure.extract`    | Docling (TableFormer), MinerU              | [implemented] |
+| Conversion    | `document.convert`                                      | Pandoc                                     | roadmap       |
+| Mathematics   | `math.recognize`, `math.convert`, `math.verbalize`      | docling-serve, pure-python (latex2mathml)  | [implemented] |
+| Music         | `music.omr`                                             | homr (in-process), Audiveris (sidecar)     | [implemented] |
+| Chemistry     | `chem.recognize`, `chem.convert`                        | docling-serve VLM (Granite Vision), pure-python mhchem | [implemented] |
+| Accessibility | `accessibility.validate`                                | pure-python checks (veraPDF: roadmap)      | [implemented] |
+| Artifacts     | `artifact.store`, `artifact.retrieve`                   | MinIO, S3                                  | [implemented] |
+| Cache         | `cache.get`, `cache.put`                                | Valkey, Redis                              | [implemented] |
+| Metadata      | `artifact.metadata.extract`                             | ExifTool                                   | roadmap       |
+| Security      | `artifact.scan`                                         | ClamAV                                     | roadmap       |
+| Speech        | `speech.recognize`, `speech.synthesize`                 | sherpa-onnx, whisper.cpp, Piper            | roadmap       |
 
 ## Docling / docling-serve
 
@@ -60,11 +63,52 @@ internal document representation.
 Separate concerns:
 
 ``` text
-math.recognize : image -> structured math
-math.convert   : LaTeX <-> MathML or equivalent
-math.render    : structured math -> SVG/PNG/etc.
-math.validate  : validate mathematical representation
+math.recognize : image -> structured math (docling-serve)
+math.convert   : LaTeX <-> MathML (pure-python, latex2mathml)
+math.verbalize : LaTeX -> natural language (pure-python, pt-BR)
 ```
+
+Note: UniMERNet — the formula recognition model used internally by
+MinerU's pipeline backend — is reached through `document.structure.extract`
+and `math.recognize` (docling-math); the Toolbox does not run it as a
+standalone service.
+
+## Tables
+
+Table extraction is exposed through `document.structure.extract` with
+Docling's TableFormer model. The `table_mode` option (`fast` |
+`accurate`) can be set in the provider's `config` (providers-config.yaml)
+or overridden per request via the `table_mode` parameter. Setting
+`pipeline: vlm` (optionally with `vlm_engine`) switches docling-serve to
+the Granite Vision backend.
+
+## Music (optical music recognition)
+
+``` text
+music.omr : sheet-music image/PDF -> MusicXML or MEI
+```
+
+Two interchangeable providers:
+
+- `homr` — runs the homr Python package in-process (install the
+  `music` extra: `pip install .[music]`).
+- `audiveris` — HTTP adapter for the `audiveris-serve` sidecar container
+  (Java Audiveris + Tesseract behind a small REST wrapper). Configure via
+  `AUDIVERIS_SERVE_URL`.
+
+## Chemistry
+
+``` text
+chem.recognize : image -> reaction description + mhchem (docling-serve VLM)
+chem.convert   : \ce{...} LaTeX -> structured reaction + pt-BR text (pure-python)
+```
+
+`chem.recognize` uses docling-serve's VLM pipeline (Granite Vision) and
+extracts `\ce{}` expressions from the model output. `chem.convert`
+normalizes mhchem syntax (coefficients, charges, states of matter,
+reaction arrows with conditions) into a structured form matching
+`artifact/mhchem@1`, including a human-readable pt-BR rendering for
+verbalization.
 
 ## Accessibility validators
 
