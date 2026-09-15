@@ -385,7 +385,7 @@ class DatasetAdapter:
             for summary in items:
                 try:
                     item = self._provider.get_item(dataset_id, summary.id, sp, revision)
-                except Exception as exc:  # noqa: BLE001 - skip transient failures
+                except Exception as exc:
                     # HF rate limits / transient 404s must not abort the whole
                     # sync; record and continue.
                     synced.append({
@@ -404,7 +404,7 @@ class DatasetAdapter:
                             "artifact": art.path,
                             "status": "mirrored",
                         })
-                    except Exception as exc:  # noqa: BLE001 - skip transient failures
+                    except Exception as exc:
                         synced.append({
                             "item": summary.id,
                             "split": sp,
@@ -421,7 +421,7 @@ class DatasetAdapter:
                             "artifact": ann.path,
                             "status": "mirrored",
                         })
-                    except Exception as exc:  # noqa: BLE001 - skip transient failures
+                    except Exception as exc:
                         synced.append({
                             "item": summary.id,
                             "split": sp,
