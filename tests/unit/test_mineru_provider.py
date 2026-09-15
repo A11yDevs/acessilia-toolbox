@@ -164,8 +164,8 @@ def _facade():
 def test_document_facade_exposes_pages() -> None:
     document = _facade()
     assert document.page_count == 2
-    assert document.pages[0]["page_no"] == 0
-    assert document.pages[0]["width"] == 595
+    assert document.pages[1].size.width == 595
+    assert document.pages[1].size.height == 842
 
 
 def test_document_facade_exposes_texts_tables_formulas() -> None:

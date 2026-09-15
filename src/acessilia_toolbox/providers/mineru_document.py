@@ -57,6 +57,28 @@ class _BboxProxy:
     def as_tuple(self) -> tuple[float, float, float, float]:
         return (self.l, self.t, self.r, self.b)
 
+    @property
+    def coord_origin(self) -> _LabelProxy:
+        # MinerU bboxes follow the top-left origin convention.
+        return _LabelProxy("TOPLEFT")
+
+
+class _LabelProxy:
+    __slots__ = ("value",)
+
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+class _ProvProxy:
+    """Provenance record compatible with the normalization builder."""
+
+    __slots__ = ("bbox", "page_no")
+
+    def __init__(self, page_no: int, bbox: Sequence[float] | None) -> None:
+        self.page_no = page_no
+        self.bbox = _BboxProxy(bbox)
+
 
 class _ItemProxy:
     """Uniform read access to one MinerU block regardless of nesting depth."""
@@ -84,6 +106,24 @@ class _ItemProxy:
     @property
     def bbox(self) -> _BboxProxy:
         return _BboxProxy(self._block.get("bbox"))
+
+    @property
+    def prov(self) -> list[_ProvProxy]:
+        """Provenance records in the Docling contract (page_no is 1-based)."""
+        return [
+            _ProvProxy(
+                page_no=self._page_idx + 1,
+                bbox=self._block.get("bbox"),
+            )
+        ]
+
+    @property
+    def self_ref(self) -> str | None:
+        return self._block.get("self_ref")
+
+    @property
+    def parent(self) -> None:
+        return None
 
     @property
     def text(self) -> str:
@@ -152,15 +192,11 @@ class MineruDocument:
     # -- pages -----------------------------------------------------------
 
     @property
-    def pages(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "page_no": page.get("page_idx", index),
-                "width": (page.get("page_size") or [None, None])[0],
-                "height": (page.get("page_size") or [None, None])[1],
-            }
+    def pages(self) -> dict[int, _PageProxy]:
+        return {
+            index + 1: _PageProxy(page)
             for index, page in enumerate(self._pages)
-        ]
+        }
 
     @property
     def page_count(self) -> int:
@@ -184,6 +220,32 @@ class MineruDocument:
             for block in sources:
                 if block.get("type") in types:
                     yield _ItemProxy(block, page_idx, page_size)
+
+    def iterate_items(
+        self, with_groups: bool = True, traverse_pictures: bool = True, **_: Any
+    ) -> Iterator[tuple[_ItemProxy, int]]:
+        """Yield ``(item, tree_level)`` in reading order.
+
+        Mirrors the Docling ``iterate_items`` contract consumed by the
+        normalization builder: pairs of an item proxy and its nesting level.
+        MinerU's middle_json is page-oriented, so levels are derived from the
+        heading structure — titles are level 1, everything else level 2.
+        """
+        level = 1
+        for page in sorted(
+            self._pages, key=lambda p: int(p.get("page_idx", 0))
+        ):
+            page_idx = int(page.get("page_idx", 0))
+            page_size = page.get("page_size") or []
+            for block in page.get("preproc_blocks") or []:
+                if block.get("type") == "discarded":
+                    continue
+                proxy = _ItemProxy(block, page_idx, page_size)
+                if block.get("type") == "title":
+                    yield proxy, 1
+                    level = 2
+                else:
+                    yield proxy, max(2, level)
 
     @property
     def texts(self) -> list[_ItemProxy]:
@@ -244,3 +306,21 @@ class MineruDocument:
 
 
 __all__ = ["MineruDocument"]
+
+
+class _PageProxy:
+    """Page descriptor compatible with the normalization builder."""
+
+    __slots__ = ("size",)
+
+    def __init__(self, page: Mapping[str, Any]) -> None:
+        page_size = page.get("page_size") or [None, None]
+        self.size = _SizeProxy(page_size)
+
+
+class _SizeProxy:
+    __slots__ = ("height", "width")
+
+    def __init__(self, page_size: Sequence[float | None]) -> None:
+        self.width = page_size[0] if len(page_size) > 0 else None
+        self.height = page_size[1] if len(page_size) > 1 else None
