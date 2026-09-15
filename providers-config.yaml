@@ -151,3 +151,14 @@ providers:
     config:
       db: 0
       ttl_seconds: 604800
+
+  - id: artifact-store
+    version: "1.0"
+    transport: s3
+    endpoint: ${MINIO_URL}
+    capabilities:
+      - artifact.store
+    config:
+      bucket: acessilia
+      access_key: ${MINIO_ACCESS_KEY}
+      secret_key: ${MINIO_SECRET_KEY}

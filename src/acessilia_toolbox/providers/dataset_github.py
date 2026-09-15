@@ -325,12 +325,27 @@ class GitHubDatasetProvider:
         if split == "input":
             # Source file
             fmt = row.get("format", "pdf").lower()
-            ext = {"pdf": "pdf", "jpeg": "jpeg", "jpg": "jpeg", "png": "png"}.get(fmt, fmt)
+            # Derive extension from media_type when format is a category (e.g. "image")
+            # rather than a specific file extension
+            media_type_raw = row.get("media_type", "")
+            ext_from_media = {
+                "application/pdf": "pdf",
+                "image/jpeg": "jpeg",
+                "image/png": "png",
+                "image/tiff": "tiff",
+                "image/bmp": "bmp",
+                "image/gif": "gif",
+                "image/webp": "webp",
+            }.get(media_type_raw)
+            if ext_from_media:
+                ext = ext_from_media
+            else:
+                ext = {"pdf": "pdf", "jpeg": "jpeg", "jpg": "jpeg", "png": "png"}.get(fmt, fmt)
             media = {
                 "pdf": "application/pdf",
                 "jpeg": "image/jpeg",
                 "png": "image/png",
-            }.get(ext, "application/octet-stream")
+            }.get(ext, media_type_raw or "application/octet-stream")
 
             source_path = f"input/{subdir}/{item_id}.{ext}" if subdir else f"input/{item_id}.{ext}"
             artifacts.append(
