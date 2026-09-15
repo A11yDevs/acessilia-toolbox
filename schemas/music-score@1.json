@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:music-score:1.0.0",
+  "title": "Music Score",
+  "description": "Optical music recognition output: a score in MusicXML or MEI notation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "notation",
+    "format"
+  ],
+  "properties": {
+    "notation": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The score notation document (MusicXML or MEI XML)."
+    },
+    "format": {
+      "type": "string",
+      "enum": ["musicxml", "mei"],
+      "description": "Notation format of the recognized score."
+    },
+    "media_type": {
+      "type": "string",
+      "description": "MIME type of the notation document."
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Recognition confidence score, when reported by the OMR engine."
+    },
+    "source_filename": {
+      "type": "string",
+      "description": "Filename of the sheet-music image or PDF."
+    }
+  }
+}
