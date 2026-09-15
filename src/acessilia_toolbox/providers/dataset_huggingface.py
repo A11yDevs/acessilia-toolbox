@@ -180,7 +180,7 @@ class HuggingFaceDatasetProvider:
 
             md_path = (
                 f"{subdir}/{match['subject']}/{match['doc_uuid']}/"
-                f"mds/{match['doc_uuid']}_page_{match['page_no']}.md"
+                f"mds/{match['doc_uuid']}_{match['page_no']}.md"
             )
             annotations.append(
                 DatasetArtifactRef(path=md_path, media_type="text/markdown")
@@ -337,7 +337,9 @@ class HuggingFaceDatasetProvider:
         self, hf_repo: str, revision: str, path: str
     ) -> list[str]:
         """List directory entries via the HF Hub API."""
-        url = f"{self.HF_API}/{hf_repo}/refs/{revision}/tree/{path}"
+        # Normalize: collapse duplicate slashes so callers can join freely.
+        path = re.sub(r"/{2,}", "/", path).strip("/")
+        url = f"{self.HF_API}/{hf_repo}/tree/{revision}/{path}"
         headers: dict[str, str] = {}
         if self._hf_token:
             headers["Authorization"] = f"Bearer {self._hf_token}"
@@ -351,11 +353,14 @@ class HuggingFaceDatasetProvider:
         except (json.JSONDecodeError, TypeError):
             return []
 
-        return [
-            e["name"] + "/" if e.get("type") == "directory" else e["name"]
-            for e in entries
-            if isinstance(e, dict)
-        ]
+        names: list[str] = []
+        for e in entries:
+            if not isinstance(e, dict) or not e.get("path"):
+                continue
+            # Return bare names (no trailing slash) — callers join paths
+            # themselves and _list_dir normalizes duplicate slashes anyway.
+            names.append(e["path"].rstrip("/").split("/")[-1])
+        return names
 
     def _artifact_types_for_split(self, split: str) -> list[str]:
         if split == "dev":

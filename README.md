@@ -279,6 +279,7 @@ pages: 1; elements: 7; obligations: 0
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
 | [Constitution](docs/constitution.md) | Design principles |
 | [Contributing](docs/contribution.md) | Workflow, PR checklist |
+| [Notebooks](docs/notebooks/) | Interactive provider tour (`docs/notebooks/provider_tour.ipynb`) |
 
 ## License
 

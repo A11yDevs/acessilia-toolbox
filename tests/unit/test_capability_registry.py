@@ -121,7 +121,7 @@ def test_shipped_capability_manifests_are_valid() -> None:
     extract = registry.get("document.structure.extract")
     assert extract.output.schema_ref == "artifact/structured-document@1"
     assert "structured" in extract.semantics.produces
-    assert [binding.id for binding in extract.providers] == ["docling"]
+    assert [binding.id for binding in extract.providers] == ["docling", "mineru"]
 
 
 def test_shipped_manifests_never_name_a_provider_in_the_capability_id() -> None:

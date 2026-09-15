@@ -21,6 +21,7 @@ services:
       TOOLBOX_PORT: 8002
       TOOLBOX_PROVIDERS_CONFIG: /app/providers-config.yaml
       DOCLING_SERVE_URL: ${DOCLING_SERVE_URL:-http://docling-serve:5001}
+      MINERU_SERVE_URL: ${MINERU_SERVE_URL:-http://mineru-serve:5002}
       MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
@@ -52,6 +53,27 @@ services:
       timeout: 5s
       retries: 30
       start_period: 60s
+
+  # MinerU document parsing (CPU pipeline backend). The image is built from
+  # the official repo via scripts/build-mineru-image.sh (MinerU publishes no
+  # pre-built images). On a GPU host, build with the vllm base and add
+  # `deploy.resources.reservations.devices` for GPU access.
+  mineru-serve:
+    image: ${MINERU_SERVE_IMAGE:-mineru:latest}
+    container_name: mineru-serve-staging
+    entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${MINERU_SERVE_PORT:-5002}:8000"
+    environment:
+      MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+    volumes:
+      - mineru-models:/home/mineru/.cache/modelscope
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
 
   minio:
     image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
@@ -106,5 +128,6 @@ services:
 
 volumes:
   docling-models:
+  mineru-models:
   minio-data:
   valkey-data:

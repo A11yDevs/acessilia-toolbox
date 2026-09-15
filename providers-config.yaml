@@ -65,6 +65,48 @@ providers:
       - image/tiff
       - application/pdf
 
+  - id: mineru
+    version: "2.1"
+    transport: http
+    endpoint: ${MINERU_SERVE_URL}
+    health_path: /openapi.json
+    timeout_seconds: 600
+    capabilities:
+      - document.structure.extract
+    media_types:
+      - application/pdf
+      - image/png
+      - image/jpeg
+      - image/tiff
+
+  - id: mineru-layout
+    version: "2.1"
+    transport: http
+    endpoint: ${MINERU_SERVE_URL}
+    health_path: /openapi.json
+    timeout_seconds: 600
+    capabilities:
+      - document.layout.analyze
+    media_types:
+      - application/pdf
+      - image/png
+      - image/jpeg
+      - image/tiff
+
+  - id: mineru-ocr
+    version: "2.1"
+    transport: http
+    endpoint: ${MINERU_SERVE_URL}
+    health_path: /openapi.json
+    timeout_seconds: 600
+    capabilities:
+      - document.ocr
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - application/pdf
+
   - id: pure-code
     version: "1.0"
     transport: in_process
@@ -147,8 +189,7 @@ providers:
       - dataset.sample
       - dataset.sync
     config:
-      mirror: false
-    config:
+      mirror: true
       db: 0
       ttl_seconds: 604800
 

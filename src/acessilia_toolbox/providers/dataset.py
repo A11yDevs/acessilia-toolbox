@@ -210,6 +210,10 @@ class DatasetAdapter:
             )
 
         method = getattr(self._provider, method_name, None)
+        if method_name == "sync":
+            # sync is implemented on the adapter itself (needs store/mirror),
+            # not on the underlying provider object.
+            method = self._sync
         if method is None:
             raise DatasetProviderError(
                 f"provider {self.descriptor.id} does not implement {capability_id}",
@@ -259,7 +263,10 @@ class DatasetAdapter:
             # get_artifact returns (bytes, media_type) - wrap in a dict.
             return {"payload": result[0].hex(), "media_type": result[1]}
         if isinstance(result, list):
-            return [item.model_dump(mode="json") for item in result]
+            return [
+                item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+                for item in result
+            ]
         if hasattr(result, "model_dump"):
             return result.model_dump(mode="json")
         return result  # already a dict (sync report, cached data)
@@ -309,7 +316,10 @@ class DatasetAdapter:
         if cached is not None:
             return [ItemSummary.model_validate(i) for i in cached["data"]]
         result = self._provider.list_items(dataset_id, split, revision, limit, offset)
-        self._cache.put(cache_key, {"data": [i.model_dump(mode="json") for i in result]})
+        # Don't cache empty listings — they usually indicate a transient
+        # upstream failure (e.g. HF rate limit) and would poison the cache.
+        if result:
+            self._cache.put(cache_key, {"data": [i.model_dump(mode="json") for i in result]})
         return result
 
     # ------------------------------------------------------------------
@@ -373,23 +383,52 @@ class DatasetAdapter:
         for sp in splits:
             items = self._provider.list_items(dataset_id, sp, revision, limit=10000, offset=0)
             for summary in items:
-                item = self._provider.get_item(dataset_id, summary.id, sp, revision)
+                try:
+                    item = self._provider.get_item(dataset_id, summary.id, sp, revision)
+                except Exception as exc:
+                    # HF rate limits / transient 404s must not abort the whole
+                    # sync; record and continue.
+                    synced.append({
+                        "item": summary.id,
+                        "split": sp,
+                        "status": "skipped",
+                        "reason": str(exc),
+                    })
+                    continue
                 for art in item.artifacts:
-                    self._get_artifact_maybe_mirrored(dataset_id, art.path, revision)
-                    synced.append({
-                        "item": summary.id,
-                        "split": sp,
-                        "artifact": art.path,
-                        "status": "mirrored",
-                    })
+                    try:
+                        self._get_artifact_maybe_mirrored(dataset_id, art.path, revision)
+                        synced.append({
+                            "item": summary.id,
+                            "split": sp,
+                            "artifact": art.path,
+                            "status": "mirrored",
+                        })
+                    except Exception as exc:
+                        synced.append({
+                            "item": summary.id,
+                            "split": sp,
+                            "artifact": art.path,
+                            "status": "skipped",
+                            "reason": str(exc),
+                        })
                 for ann in item.annotations:
-                    self._get_artifact_maybe_mirrored(dataset_id, ann.path, revision)
-                    synced.append({
-                        "item": summary.id,
-                        "split": sp,
-                        "artifact": ann.path,
-                        "status": "mirrored",
-                    })
+                    try:
+                        self._get_artifact_maybe_mirrored(dataset_id, ann.path, revision)
+                        synced.append({
+                            "item": summary.id,
+                            "split": sp,
+                            "artifact": ann.path,
+                            "status": "mirrored",
+                        })
+                    except Exception as exc:
+                        synced.append({
+                            "item": summary.id,
+                            "split": sp,
+                            "artifact": ann.path,
+                            "status": "skipped",
+                            "reason": str(exc),
+                        })
 
         return synced
 
@@ -411,6 +450,10 @@ class DatasetAdapter:
             ":",
             operation,
         ]
+        # Pagination params must be part of the key, otherwise a page fetched
+        # with limit=5 would be served for any other limit/offset combination.
+        if operation == "list_items":
+            parts += [":", str(kw.get("limit", "")), ":", str(kw.get("offset", ""))]
         return "".join(parts)
 
 

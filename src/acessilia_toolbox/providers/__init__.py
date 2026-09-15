@@ -12,6 +12,9 @@ from acessilia_toolbox.providers.docling import DoclingProvider
 from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
 from acessilia_toolbox.providers.docling_math import DoclingMathProvider
 from acessilia_toolbox.providers.docling_ocr import DoclingOcrProvider
+from acessilia_toolbox.providers.mineru import MineruProvider
+from acessilia_toolbox.providers.mineru_layout import MineruLayoutProvider
+from acessilia_toolbox.providers.mineru_ocr import MineruOcrProvider
 from acessilia_toolbox.providers.pure_accessibility import PureAccessibilityProvider
 from acessilia_toolbox.providers.pure_code import PureCodeProvider
 from acessilia_toolbox.providers.pure_math import PureMathProvider
@@ -63,6 +66,9 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "docling-layout": DoclingLayoutProvider,
     "docling-math": DoclingMathProvider,
     "docling-ocr": DoclingOcrProvider,
+    "mineru": MineruProvider,
+    "mineru-layout": MineruLayoutProvider,
+    "mineru-ocr": MineruOcrProvider,
     "pure-accessibility": PureAccessibilityProvider,
     "pure-code": PureCodeProvider,
     "pure-math": PureMathProvider,
@@ -91,6 +97,9 @@ __all__ = [
     "DoclingProvider",
     "GitHubDatasetProvider",
     "HuggingFaceDatasetProvider",
+    "MineruLayoutProvider",
+    "MineruOcrProvider",
+    "MineruProvider",
     "PureAccessibilityProvider",
     "PureCodeProvider",
     "PureMathProvider",

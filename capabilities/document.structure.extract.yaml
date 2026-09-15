@@ -35,3 +35,5 @@ semantics:
 providers:
   - id: docling
     version: "1.32+"
+  - id: mineru
+    version: "2.1+"
