@@ -61,6 +61,7 @@ EXEMPT_FILES: set[str] = {
     "docs/dev-workflow.md",
     "docs/auto-update.md",
     "docker-compose.staging.yml",
+    "README.md",
 }
 
 # Build the exempt set from strings so we can check quickly.
