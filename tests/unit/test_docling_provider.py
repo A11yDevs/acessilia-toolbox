@@ -188,4 +188,4 @@ def test_factory_rejects_providers_without_an_adapter() -> None:
     from acessilia_toolbox.core.errors import ProviderNotFoundError
 
     with pytest.raises(ProviderNotFoundError):
-        create_adapter(descriptor(id="mineru", capabilities=["document.ocr"]))
+        create_adapter(descriptor(id="no-such-provider", capabilities=["document.ocr"]))
