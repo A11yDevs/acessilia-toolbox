@@ -9,13 +9,16 @@ from acessilia_toolbox.providers.dataset import DatasetAdapter
 from acessilia_toolbox.providers.dataset_github import GitHubDatasetProvider
 from acessilia_toolbox.providers.dataset_huggingface import HuggingFaceDatasetProvider
 from acessilia_toolbox.providers.docling import DoclingProvider
+from acessilia_toolbox.providers.docling_chem import DoclingChemProvider
 from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
 from acessilia_toolbox.providers.docling_math import DoclingMathProvider
 from acessilia_toolbox.providers.docling_ocr import DoclingOcrProvider
 from acessilia_toolbox.providers.mineru import MineruProvider
 from acessilia_toolbox.providers.mineru_layout import MineruLayoutProvider
 from acessilia_toolbox.providers.mineru_ocr import MineruOcrProvider
+from acessilia_toolbox.providers.music_omr import AudiverisProvider, HomrProvider
 from acessilia_toolbox.providers.pure_accessibility import PureAccessibilityProvider
+from acessilia_toolbox.providers.pure_chem import PureChemProvider
 from acessilia_toolbox.providers.pure_code import PureCodeProvider
 from acessilia_toolbox.providers.pure_math import PureMathProvider
 from acessilia_toolbox.providers.pure_text import PureTextProvider
@@ -60,16 +63,20 @@ def _dataset_huggingface_factory(descriptor: ProviderDescriptor) -> DatasetAdapt
 
 
 ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
+    "audiveris": AudiverisProvider,
     "dataset-github": _dataset_github_factory,
     "dataset-huggingface": _dataset_huggingface_factory,
     "docling": DoclingProvider,
+    "docling-chem": DoclingChemProvider,
     "docling-layout": DoclingLayoutProvider,
     "docling-math": DoclingMathProvider,
     "docling-ocr": DoclingOcrProvider,
+    "homr": HomrProvider,
     "mineru": MineruProvider,
     "mineru-layout": MineruLayoutProvider,
     "mineru-ocr": MineruOcrProvider,
     "pure-accessibility": PureAccessibilityProvider,
+    "pure-chem": PureChemProvider,
     "pure-code": PureCodeProvider,
     "pure-math": PureMathProvider,
     "pure-text": PureTextProvider,
@@ -90,17 +97,21 @@ def create_adapter(descriptor: ProviderDescriptor) -> ProviderAdapter:
 
 __all__ = [
     "ADAPTERS",
+    "AudiverisProvider",
     "DatasetAdapter",
+    "DoclingChemProvider",
     "DoclingLayoutProvider",
     "DoclingMathProvider",
     "DoclingOcrProvider",
     "DoclingProvider",
     "GitHubDatasetProvider",
+    "HomrProvider",
     "HuggingFaceDatasetProvider",
     "MineruLayoutProvider",
     "MineruOcrProvider",
     "MineruProvider",
     "PureAccessibilityProvider",
+    "PureChemProvider",
     "PureCodeProvider",
     "PureMathProvider",
     "PureTextProvider",
