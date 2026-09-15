@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from typing import Any
 
 import httpx
@@ -132,25 +133,40 @@ class TestAudiverisProvider:
 
 
 class TestHomrProvider:
-    def test_unhealthy_without_homr(self) -> None:
-        provider = HomrProvider(descriptor(id="homr"))
-        try:
-            import homr  # noqa: F401
+    """homr is an optional dependency; simulate both environments.
 
-            pytest.skip("homr is installed")
-        except ImportError:
-            pass
+    Tests monkeypatch builtins.__import__ instead of skipping, so they
+    are deterministic whether or not the 'music' extra is installed.
+    """
+
+    @staticmethod
+    def _with_homr(monkeypatch: pytest.MonkeyPatch, available: bool) -> None:
+        """Force the homr import attempt to succeed or fail."""
+        import builtins
+
+        original_import = builtins.__import__
+
+        def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
+            if (name == "homr" or name.startswith("homr.")) and not available:
+                raise ImportError(f"No module named {name!r}")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    def test_unhealthy_without_homr(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._with_homr(monkeypatch, available=False)
+        provider = HomrProvider(descriptor(id="homr"))
         health = provider.health()
         assert health.healthy is False
+        assert health.detail is not None
 
-    def test_execute_raises_without_homr(self) -> None:
+    def test_execute_raises_without_homr(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._with_homr(monkeypatch, available=False)
         provider = HomrProvider(descriptor(id="homr"))
-        try:
-            import homr  # noqa: F401
-
-            pytest.skip("homr is installed")
-        except ImportError:
-            pass
         with pytest.raises(ProviderUnavailableError):
             provider.execute(
                 "music.omr",
@@ -158,6 +174,18 @@ class TestHomrProvider:
                 filename="s.png",
                 media_type="image/png",
             )
+
+    def test_healthy_with_homr(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # homr may or may not be installed; make the import succeed either
+        # way with a stand-in module exercising the health probe path.
+        import types
+
+        self._with_homr(monkeypatch, available=True)
+        stand_in = types.ModuleType("homr")
+        monkeypatch.setitem(sys.modules, "homr", stand_in)
+        provider = HomrProvider(descriptor(id="homr"))
+        health = provider.health()
+        assert health.healthy is True
 
     def test_registry_creates_homr(self) -> None:
         adapter = create_adapter(descriptor(id="homr"))
