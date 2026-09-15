@@ -50,8 +50,10 @@ class DoclingProvider:
         started_at = datetime.now(UTC)
         started_clock = perf_counter()
 
+        params = _convert_params(self.descriptor, parameters)
+
         with self._client() as client:
-            document = self._convert(client, payload, filename, media_type)
+            document = self._convert(client, payload, filename, media_type, params)
             versions = self._server_versions(client)
 
         completed_at = datetime.now(UTC)
@@ -113,12 +115,13 @@ class DoclingProvider:
         payload: bytes,
         filename: str,
         media_type: str,
+        params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         try:
             response = client.post(
                 CONVERT_PATH,
                 files={"files": (filename, payload, media_type)},
-                data={"to_formats": ["json"]},
+                data={"to_formats": ["json"], **(params or {})},
             )
             response.raise_for_status()
         except httpx.TimeoutException as exc:
@@ -177,6 +180,42 @@ def _pick_version(versions: dict[str, str], fallback: str) -> str:
         if versions.get(key):
             return versions[key]
     return fallback
+
+
+# Parameters forwarded to docling-serve /v1/convert/file. Values come from
+# the request parameters, falling back to the provider descriptor config
+# (providers-config.yaml). Only allow-listed keys reach the wire so callers
+# cannot inject arbitrary pipeline options.
+_FORWARDABLE_PARAMS = (
+    "table_mode",              # TableFormer mode: "fast" | "accurate"
+    "do_table_structure",      # enable table structure model
+    "do_formula_enrichment",   # formula enrichment pass
+    "images_scale",            # picture/table image resolution
+    "pipeline",                # "standard" | "vlm" (Granite Vision backend)
+    "vlm_engine",              # vlm pipeline engine, e.g. granitedocling
+)
+
+
+def _convert_params(
+    descriptor: ProviderDescriptor,
+    parameters: Mapping[str, Any] | None,
+) -> dict[str, str]:
+    """Merge descriptor config with request parameters into multipart data.
+
+    Request parameters take precedence over provider descriptor config.
+    Unknown keys are ignored; only allow-listed options are forwarded.
+    """
+    config = descriptor.config or {}
+    request_params = dict(parameters or {})
+    merged: dict[str, str] = {}
+    for key in _FORWARDABLE_PARAMS:
+        value = request_params.get(key, config.get(key))
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            value = "true" if value else "false"
+        merged[key] = str(value)
+    return merged
 
 
 def _components(versions: dict[str, str]) -> dict[str, str]:
