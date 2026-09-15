@@ -18,11 +18,16 @@ and normalizes the result into a canonical format.
 │                                                   │
 │  REST / MCP / CLI                                 │
 └──────┬────────────────────────────────────────────┘
-       │ HTTP / S3 / Redis
+       │ HTTP / S3 / Redis / in-process
        ▼
-┌─────────────┐  ┌────────┐  ┌────────┐
-│ docling-serve│  │ MinIO  │  │ Valkey │  ← provedores externos
-└─────────────┘  └────────┘  └────────┘
+┌─────────────┐  ┌────────┐  ┌────────┐  ┌──────────────────────┐
+│ docling-serve│  │ MinIO  │  │ Valkey │  │ mineru-serve (opt.)  │
+└─────────────┘  └────────┘  └────────┘  └──────────────────────┘
+                                         ┌──────────────────────┐
+                                         │ audiveris-serve(opt.)│
+                                         └──────────────────────┘
+        ← external providers (docling, MinerU, Audiveris) and
+          in-process pure providers (pure-math, pure-chem, homr, …)
 ```
 
 ---

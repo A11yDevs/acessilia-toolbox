@@ -1,0 +1,33 @@
+id: chem.recognize
+version: 1
+description: >-
+  Recognize chemical reactions and equations from images using a vision
+  language model, returning a description and any mhchem expressions found.
+
+input:
+  schema: artifact/image@1
+  media_types:
+    - image/png
+    - image/jpeg
+    - image/tiff
+
+output:
+  schema: artifact/mhchem@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 300
+
+semantics:
+  requires:
+    - image_readable
+  produces:
+    - chemistry_recognized
+
+providers:
+  - id: docling-chem
+    version: "1.32+"

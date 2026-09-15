@@ -13,6 +13,10 @@ providers:
       - image/png
       - image/jpeg
       - image/tiff
+    config:
+      # TableFormer mode ("fast" | "accurate"); overridable per request via
+      # the "table_mode" parameter. "pipeline: vlm" switches to Granite Vision.
+      table_mode: accurate
 
   - id: docling-layout
     version: "1.32"
@@ -140,6 +144,53 @@ providers:
     media_types:
       - application/json
       - text/plain
+
+  - id: pure-chem
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - chem.convert
+    media_types:
+      - application/json
+      - text/plain
+
+  - id: docling-chem
+    version: "1.32"
+    transport: http
+    endpoint: ${DOCLING_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities:
+      - chem.recognize
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+
+  - id: homr
+    version: "0.1"
+    transport: in_process
+    capabilities:
+      - music.omr
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - application/pdf
+
+  - id: audiveris
+    version: "0.1"
+    transport: http
+    endpoint: ${AUDIVERIS_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities:
+      - music.omr
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - application/pdf
 
   - id: minio
     version: "2025.04"

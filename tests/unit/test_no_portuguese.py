@@ -53,6 +53,15 @@ EXEMPT_STRINGS: list[tuple[str, str]] = [
     ("src/acessilia_toolbox/providers/pure_math.py", "interseção"),
     ("src/acessilia_toolbox/providers/pure_math.py", "não pertence a"),
     ("src/acessilia_toolbox/providers/pure_math.py", "reticências"),
+    # mhchem verbalization — pt-BR output for chemistry accessibility
+    ("src/acessilia_toolbox/providers/pure_chem.py", "equilíbrio"),
+    ("src/acessilia_toolbox/providers/pure_chem.py", "condições"),
+    ("src/acessilia_toolbox/providers/pure_chem.py", "formar"),
+    ("src/acessilia_toolbox/providers/pure_chem.py", "sólido"),
+    ("src/acessilia_toolbox/providers/pure_chem.py", "líquido"),
+    ("src/acessilia_toolbox/providers/pure_chem.py", "gasoso"),
+    ("src/acessilia_toolbox/providers/pure_chem.py", "aquoso"),
+    # Chemistry capability description (pt-BR is not used here; docs only)
 ]
 
 # Files with known fixture or generated content that may contain Portuguese.

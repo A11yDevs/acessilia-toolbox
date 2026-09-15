@@ -189,8 +189,17 @@ flowchart TB
 
 | Capability | Provider | Status |
 |---|---|---|
-| `document.structure.extract` | docling-serve | ✅ |
-| `artifact.store` / `artifact.retrieve` | filesystem, MinIO (optional) | ✅ |
+| `document.structure.extract` | docling-serve, mineru-serve (optional) | ✅ |
+| `document.layout.analyze` | docling-serve, mineru-serve (optional) | ✅ |
+| `document.ocr` | docling-serve, mineru-serve (optional) | ✅ |
+| `pdf.split`, `pdf.render` | PyMuPDF (in-process) | ✅ |
+| `math.recognize` | docling-serve | ✅ |
+| `math.convert`, `math.verbalize` | pure-python (in-process) | ✅ |
+| `music.omr` | homr (in-process, optional extra), audiveris-serve (sidecar) | ✅ |
+| `chem.recognize` | docling-serve VLM (Granite Vision) | ✅ |
+| `chem.convert` | pure-python mhchem (in-process) | ✅ |
+| `accessibility.validate` | pure-python (in-process) | ✅ |
+| `artifact.store` / `artifact.retrieve` | MinIO (optional) | ✅ |
 | `cache.get` / `cache.put` | Valkey (optional) | ✅ |
 
 ## Key endpoints
