@@ -19,7 +19,7 @@ from acessilia_toolbox.api.schemas import (
 )
 from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityRegistry
-from acessilia_toolbox.core.errors import InvalidInputError
+from acessilia_toolbox.core.errors import DatasetNotFoundError, InvalidInputError
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.pddl import (
     capability_action,
@@ -253,34 +253,77 @@ async def _resolve_input(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_dataset_provider(
+    runner: CapabilityExecutor,
+    providers: ProviderRegistry,
+    dataset_id: str,
+) -> str:
+    """Pick the dataset provider that actually knows ``dataset_id``.
+
+    Each dataset belongs to exactly one provider (github or huggingface).
+    Tries each candidate and falls back to the first one on unknown datasets.
+    """
+
+    candidates = [
+        d.id for d in providers.for_capability("dataset.describe")
+    ]
+    for provider_id in candidates:
+        try:
+            runner.execute(
+                "dataset.describe",
+                b"{}",
+                filename="query.json",
+                media_type="application/json",
+                provider_id=provider_id,
+                parameters={"dataset_id": dataset_id},
+            )
+            return provider_id
+        except Exception as exc:
+            if not isinstance(exc, DatasetNotFoundError):
+                raise
+    raise DatasetNotFoundError(
+        f"unknown dataset '{dataset_id}'", dataset=dataset_id
+    )
+
+
 @dataset_router.get("", response_model=list[dict[str, Any]])
 def list_datasets(
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    providers: Annotated[ProviderRegistry, Depends(providers)],
 ) -> list[dict[str, Any]]:
-    """List all datasets available through the toolbox."""
-    result = runner.execute(
-        "dataset.list",
-        b"{}",
-        filename="query.json",
-        media_type="application/json",
-        provider_id="dataset-github",
-    )
-    return result.document  # type: ignore[no-any-return]
+    """List all datasets available through the toolbox (all providers)."""
+    datasets: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for provider_id in (d.id for d in providers.for_capability("dataset.list")):
+        result = runner.execute(
+            "dataset.list",
+            b"{}",
+            filename="query.json",
+            media_type="application/json",
+            provider_id=provider_id,
+        )
+        for ds in result.document:
+            if ds.get("id") not in seen:
+                seen.add(ds.get("id"))
+                datasets.append(ds)
+    return datasets
 
 
 @dataset_router.get("/{dataset_id}", response_model=dict[str, Any])
 def describe_dataset(
     dataset_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    providers: Annotated[ProviderRegistry, Depends(providers)],
     revision: str | None = Query(None, description="Git/HF revision to pin"),
 ) -> dict[str, Any]:
     """Get detailed metadata about a specific dataset."""
+    provider_id = _resolve_dataset_provider(runner, providers, dataset_id)
     result = runner.execute(
         "dataset.describe",
         b"{}",
         filename="query.json",
         media_type="application/json",
-        provider_id="dataset-github",
+        provider_id=provider_id,
         parameters={"dataset_id": dataset_id, "revision": revision},
     )
     return result.document  # type: ignore[no-any-return]
@@ -290,15 +333,17 @@ def describe_dataset(
 def list_dataset_splits(
     dataset_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    providers: Annotated[ProviderRegistry, Depends(providers)],
     revision: str | None = Query(None, description="Git/HF revision to pin"),
 ) -> list[dict[str, Any]]:
     """List available splits for a dataset."""
+    provider_id = _resolve_dataset_provider(runner, providers, dataset_id)
     result = runner.execute(
         "dataset.list_splits",
         b"{}",
         filename="query.json",
         media_type="application/json",
-        provider_id="dataset-github",
+        provider_id=provider_id,
         parameters={"dataset_id": dataset_id, "revision": revision},
     )
     return result.document  # type: ignore[no-any-return]
@@ -309,17 +354,19 @@ def list_dataset_items(
     dataset_id: str,
     split: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    providers: Annotated[ProviderRegistry, Depends(providers)],
     revision: str | None = Query(None, description="Git/HF revision to pin"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> list[dict[str, Any]]:
     """List items in a dataset split with pagination."""
+    provider_id = _resolve_dataset_provider(runner, providers, dataset_id)
     result = runner.execute(
         "dataset.list_items",
         b"{}",
         filename="query.json",
         media_type="application/json",
-        provider_id="dataset-github",
+        provider_id=provider_id,
         parameters={
             "dataset_id": dataset_id,
             "split": split,
@@ -340,15 +387,17 @@ def get_dataset_item(
     split: str,
     item_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    providers: Annotated[ProviderRegistry, Depends(providers)],
     revision: str | None = Query(None, description="Git/HF revision to pin"),
 ) -> dict[str, Any]:
     """Get a full item with artifact references and annotations."""
+    provider_id = _resolve_dataset_provider(runner, providers, dataset_id)
     result = runner.execute(
         "dataset.get_item",
         b"{}",
         filename="query.json",
         media_type="application/json",
-        provider_id="dataset-github",
+        provider_id=provider_id,
         parameters={
             "dataset_id": dataset_id,
             "split": split,
@@ -368,15 +417,17 @@ def get_dataset_artifact(
     item_id: str,
     path: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    providers: Annotated[ProviderRegistry, Depends(providers)],
     revision: str | None = Query(None, description="Git/HF revision to pin"),
 ) -> Response:
     """Retrieve the raw bytes of a dataset artifact."""
+    provider_id = _resolve_dataset_provider(runner, providers, dataset_id)
     result = runner.execute(
         "dataset.get_artifact",
         b"{}",
         filename="query.json",
         media_type="application/json",
-        provider_id="dataset-github",
+        provider_id=provider_id,
         parameters={
             "dataset_id": dataset_id,
             "split": split,
@@ -399,22 +450,19 @@ def sample_dataset(
     dataset_id: str,
     split: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    providers: Annotated[ProviderRegistry, Depends(providers)],
     revision: str | None = Query(None, description="Git/HF revision to pin"),
     n: int = Query(5, ge=1, le=100),
 ) -> list[dict[str, Any]]:
     """Get a random sample of items from a dataset split."""
+    provider_id = _resolve_dataset_provider(runner, providers, dataset_id)
     result = runner.execute(
         "dataset.sample",
         b"{}",
         filename="query.json",
         media_type="application/json",
-        provider_id="dataset-github",
-        parameters={
-            "dataset_id": dataset_id,
-            "split": split,
-            "revision": revision,
-            "n": n,
-        },
+        provider_id=provider_id,
+        parameters={"dataset_id": dataset_id, "revision": revision, "n": n},
     )
     return result.document  # type: ignore[no-any-return]
 
@@ -426,6 +474,7 @@ def sample_dataset(
 def sync_dataset(
     dataset_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    providers: Annotated[ProviderRegistry, Depends(providers)],
     revision: str | None = Query(None, description="Git/HF revision to pin"),
     split: str | None = Query(None, description="Sync only this split"),
 ) -> list[dict[str, Any]]:
@@ -433,12 +482,13 @@ def sync_dataset(
 
     Requires mirroring to be enabled in the provider configuration.
     """
+    provider_id = _resolve_dataset_provider(runner, providers, dataset_id)
     result = runner.execute(
         "dataset.sync",
         b"{}",
         filename="query.json",
         media_type="application/json",
-        provider_id="dataset-github",
+        provider_id=provider_id,
         parameters={
             "dataset_id": dataset_id,
             "revision": revision,
