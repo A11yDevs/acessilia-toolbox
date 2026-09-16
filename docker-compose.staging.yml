@@ -22,6 +22,7 @@ services:
       TOOLBOX_PROVIDERS_CONFIG: /app/providers-config.yaml
       DOCLING_SERVE_URL: ${DOCLING_SERVE_URL:-http://docling-serve:5001}
       MINERU_SERVE_URL: ${MINERU_SERVE_URL:-http://mineru-serve:5002}
+      NOUGAT_SERVE_URL: ${NOUGAT_SERVE_URL:-http://nougat-serve:5004}
       MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
@@ -93,6 +94,23 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Nougat visual document transcription service (LaTeX math/tables).
+  # Built from docker/nougat-cpu.Dockerfile via scripts/build-nougat-image.sh.
+  nougat-serve:
+    image: ${NOUGAT_SERVE_IMAGE:-nougat:latest}
+    container_name: nougat-serve-staging
+    ports:
+      - "${NOUGAT_SERVE_PORT:-5004}:5004"
+    volumes:
+      - nougat-models:/root/.cache/torch/hub
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
   minio:
     image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
     container_name: acessilia-minio-staging
@@ -148,4 +166,5 @@ volumes:
   docling-models:
   mineru-models:
   minio-data:
+  nougat-models:
   valkey-data:
