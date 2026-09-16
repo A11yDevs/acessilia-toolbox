@@ -38,6 +38,17 @@ providers:
     media_types:
       - application/pdf
 
+  - id: nougat
+    version: "0.1.17"
+    transport: http
+    endpoint: ${NOUGAT_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities:
+      - document.structure.extract
+    media_types:
+      - application/pdf
+
   - id: minio
     version: "2025.04"
     transport: s3

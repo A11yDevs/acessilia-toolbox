@@ -6,11 +6,13 @@ from acessilia_toolbox.core.errors import ProviderNotFoundError
 from acessilia_toolbox.core.provider import ProviderAdapter, ProviderDescriptor
 from acessilia_toolbox.providers.docling import DoclingProvider
 from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
+from acessilia_toolbox.providers.nougat import NougatProvider
 from acessilia_toolbox.providers.pymupdf_pdf import PyMuPDFProvider
 
 ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "docling": DoclingProvider,
     "docling-layout": DoclingLayoutProvider,
+    "nougat": NougatProvider,
     "pymupdf-pdf": PyMuPDFProvider,
 }
 
@@ -30,6 +32,7 @@ __all__ = [
     "ADAPTERS",
     "DoclingLayoutProvider",
     "DoclingProvider",
+    "NougatProvider",
     "PyMuPDFProvider",
     "create_adapter",
 ]
