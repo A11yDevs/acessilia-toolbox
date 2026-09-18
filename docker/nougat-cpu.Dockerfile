@@ -25,11 +25,13 @@ RUN apt-get update && \
 RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir \
         "albumentations<1.4.0" \
-        "transformers<4.40" \
+        "transformers<4.38" \
+        "pypdfium2<5.0" \
         "nougat-ocr>=0.1.17" \
         fastapi \
         "uvicorn[standard]" \
         python-multipart && \
+    python -m nltk.downloader words && \
     pip cache purge
 
 RUN mkdir -p /root/.cache/torch/hub /root/.cache/nougat
