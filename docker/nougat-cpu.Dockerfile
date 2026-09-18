@@ -1,4 +1,4 @@
-﻿# Nougat visual document transcription image (CPU inference).
+# Nougat visual document transcription image (CPU inference).
 #
 # Provides an HTTP API serving Facebook Research's Nougat model
 # for scientific PDF transcription (LaTeX math, tables, sections).
@@ -22,8 +22,10 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir \
+        "albumentations<1.4.0" \
+        "transformers<4.40" \
         "nougat-ocr>=0.1.17" \
         fastapi \
         "uvicorn[standard]" \
@@ -37,9 +39,12 @@ VOLUME /root/.cache/nougat
 # FastAPI server running real Nougat model inference
 COPY <<'EOF' /app/server.py
 import importlib.metadata
-import io
 import logging
+import os
+import tempfile
 from contextlib import asynccontextmanager
+from functools import partial
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -128,12 +133,14 @@ async def predict(file: UploadFile = File(...)):
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
+    temp_path = None
     try:
-        pdf_stream = io.BytesIO(content)
-        dataset = LazyDataset(
-            pdf_stream,
-            partial=False,
-        )
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(content)
+            temp_path = Path(tmp.name)
+
+        prepare_fn = partial(model.encoder.prepare_input, random_padding=False)
+        dataset = LazyDataset(temp_path, prepare=prepare_fn)
         dataloader = DataLoader(
             dataset,
             batch_size=1,
@@ -144,11 +151,11 @@ async def predict(file: UploadFile = File(...)):
         pages_out: list[dict[str, Any]] = []
         page_idx = 1
 
-        for sample in dataloader:
+        for sample, is_last_page in dataloader:
             if sample is None:
                 continue
             model_output = model.inference(image_tensors=sample)
-            for prediction in model_output["predictions"]:
+            for prediction in model_output.get("predictions", []):
                 formatted_text = markdown_compatible(prediction)
                 pages_out.append({
                     "page_number": page_idx,
@@ -167,6 +174,12 @@ async def predict(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=500, detail=f"Inference execution failed: {exc}"
         ) from exc
+    finally:
+        if temp_path is not None and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
 EOF
 
 EXPOSE 5004
