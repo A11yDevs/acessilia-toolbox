@@ -98,7 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     ds_item = dataset_sub.add_parser("get-item", help="Get a full item.")
     ds_item.add_argument("id", help="Dataset identifier.")
     ds_item.add_argument("split", help="Split name.")
-    ds_item.add_argument("item-id", help="Item identifier.")
+    ds_item.add_argument("item_id", help="Item identifier.")
     ds_item.add_argument("--revision", help="Git/HF revision to pin.")
     ds_item.add_argument("--json", action="store_true", help="Emit JSON.")
 
