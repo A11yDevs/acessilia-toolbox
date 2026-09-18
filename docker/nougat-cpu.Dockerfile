@@ -69,9 +69,10 @@ state: dict[str, Any] = {
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    checkpoint_tag = get_checkpoint()
+    model_tag = os.environ.get("NOUGAT_MODEL_TAG", "0.1.0-base")
+    checkpoint_tag = get_checkpoint(model_tag=model_tag)
     state["checkpoint"] = str(checkpoint_tag)
-    LOG.info("Loading Nougat model checkpoint: %s", checkpoint_tag)
+    LOG.info("Loading Nougat model checkpoint: %s (tag: %s)", checkpoint_tag, model_tag)
     try:
         model = NougatModel.from_pretrained(checkpoint_tag)
         model = model.eval()

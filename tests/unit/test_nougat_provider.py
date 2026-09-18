@@ -180,3 +180,38 @@ def test_parses_dollar_block_formulas() -> None:
     assert len(items) == 3
     labels = [item[0].label.value for item in items]
     assert labels == ["heading", "formula", "paragraph"]
+
+
+def test_parses_inline_parenthesis_formulas() -> None:
+    nougat_markdown = (
+        "Considere a seguinte expressao matematica:\n\n"
+        r"\(c\)\(-b\)\(+\)\(\sqrt{b^{2}}\)"
+        "\n\n"
+        r"\(2a\)"
+        "\n\n"
+        "A equacao acima e amplamente utilizada."
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/predict":
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                json={"text": nougat_markdown, "pages": [{"text": nougat_markdown, "page_number": 1}]},
+            )
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "0.1.17"})
+        return httpx.Response(404)
+
+    provider = provider_with(handler)
+    result = provider.execute(
+        "document.structure.extract",
+        b"%PDF-1.4",
+        filename="bhaskara.pdf",
+        media_type="application/pdf",
+    )
+
+    items = list(result.document.iterate_items())
+    assert len(items) == 4
+    labels = [item[0].label.value for item in items]
+    assert labels == ["paragraph", "formula", "formula", "paragraph"]

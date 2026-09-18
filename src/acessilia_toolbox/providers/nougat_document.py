@@ -97,12 +97,21 @@ def _parse_nougat_text(text: str) -> list[dict[str, Any]]:
             })
             continue
 
-        # Check for LaTeX equations (block \[...\], \begin{equation...}, or $$...$$)
-        if (
+        # Check for LaTeX equations:
+        # 1. Block display math: \[...\], $$...$$, or \begin{equation...}
+        # 2. Inline or concatenated math tokens: starts with \( and ends with \), or is comprised of math delimiters
+        is_block_formula = (
             (para.startswith(r"\[") and para.endswith(r"\]"))
             or (para.startswith(r"$$") and para.endswith(r"$$") and len(para) > 4)
             or para.startswith(r"\begin{equation")
-        ):
+        )
+        is_inline_formula = (
+            (para.startswith(r"\(") and para.endswith(r"\)"))
+            or (para.startswith("$") and para.endswith("$") and len(para) > 2)
+            or (r"\(" in para and r"\)" in para and not any(c.isalpha() and c.isascii() and len(word) > 4 for word in para.split()))
+        )
+
+        if is_block_formula or is_inline_formula:
             blocks.append({
                 "label": "formula",
                 "text": para,
@@ -123,8 +132,6 @@ def _parse_nougat_text(text: str) -> list[dict[str, Any]]:
             continue
 
         # Regular text paragraph
-        # Note: Sub-paragraph inline math ($...$) remains preserved within paragraph text
-        # for downstream AST or verbalization passes.
         blocks.append({
             "label": "paragraph",
             "text": para,
