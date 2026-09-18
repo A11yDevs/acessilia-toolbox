@@ -134,7 +134,8 @@ services:
     ports:
       - "${NOUGAT_SERVE_PORT:-5004}:5004"
     volumes:
-      - nougat-models:/root/.cache/torch/hub
+      - nougat-torch-models:/root/.cache/torch/hub
+      - nougat-models:/root/.cache/nougat
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
       interval: 30s
@@ -147,4 +148,5 @@ volumes:
   docling-models:
   minio-data:
   nougat-models:
+  nougat-torch-models:
   valkey-data:

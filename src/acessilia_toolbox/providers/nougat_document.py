@@ -1,4 +1,4 @@
-﻿"""Adapts Nougat transcription payloads to the shape expected by the builder.
+"""Adapts Nougat transcription payloads to the shape expected by the builder.
 
 Nougat outputs mathematical and academic document transcriptions with inline/block LaTeX
 and markdown formatting. This facade parses pages and blocks into the attribute interface
@@ -97,8 +97,12 @@ def _parse_nougat_text(text: str) -> list[dict[str, Any]]:
             })
             continue
 
-        # Check for LaTeX equations
-        if (para.startswith(r"\[") and para.endswith(r"\]")) or para.startswith(r"\begin{equation"):
+        # Check for LaTeX equations (block \[...\], \begin{equation...}, or $$...$$)
+        if (
+            (para.startswith(r"\[") and para.endswith(r"\]"))
+            or (para.startswith(r"$$") and para.endswith(r"$$") and len(para) > 4)
+            or para.startswith(r"\begin{equation")
+        ):
             blocks.append({
                 "label": "formula",
                 "text": para,
@@ -119,6 +123,8 @@ def _parse_nougat_text(text: str) -> list[dict[str, Any]]:
             continue
 
         # Regular text paragraph
+        # Note: Sub-paragraph inline math ($...$) remains preserved within paragraph text
+        # for downstream AST or verbalization passes.
         blocks.append({
             "label": "paragraph",
             "text": para,
@@ -150,7 +156,7 @@ class _NougatItemProxy:
             return self._data.get(name)
         if name == "table":
             return self._data.get("table")
-        return None
+        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
 
     def model_dump(self, **_: Any) -> dict[str, Any]:
         return self._data

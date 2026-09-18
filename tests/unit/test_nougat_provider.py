@@ -139,3 +139,44 @@ def test_execute_handles_server_error() -> None:
             filename="paper.pdf",
             media_type="application/pdf",
         )
+
+
+def test_item_proxy_raises_attribute_error_on_unknown() -> None:
+    from acessilia_toolbox.providers.nougat_document import _NougatItemProxy
+
+    proxy = _NougatItemProxy({"text": "Hello"})
+    assert proxy.text == "Hello"
+    with pytest.raises(AttributeError):
+        _ = proxy.non_existent_attribute
+
+
+def test_parses_dollar_block_formulas() -> None:
+    nougat_markdown = (
+        "# Math Section\n\n"
+        "$$\\int_0^\\infty e^{-x} dx = 1$$\n\n"
+        "Final paragraph."
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/predict":
+            return httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                json={"text": nougat_markdown, "pages": [{"text": nougat_markdown, "page_number": 1}]},
+            )
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"version": "0.1.17"})
+        return httpx.Response(404)
+
+    provider = provider_with(handler)
+    result = provider.execute(
+        "document.structure.extract",
+        b"%PDF-1.4",
+        filename="math.pdf",
+        media_type="application/pdf",
+    )
+
+    items = list(result.document.iterate_items())
+    assert len(items) == 3
+    labels = [item[0].label.value for item in items]
+    assert labels == ["heading", "formula", "paragraph"]

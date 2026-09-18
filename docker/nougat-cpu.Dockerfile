@@ -7,7 +7,10 @@
 #   docker build -t nougat:latest -f docker/nougat-cpu.Dockerfile .
 #
 # Run:
-#   docker run -p 5004:5004 -v nougat-models:/root/.cache/torch/hub nougat:latest
+#   docker run -p 5004:5004 \
+#     -v nougat-torch-models:/root/.cache/torch/hub \
+#     -v nougat-models:/root/.cache/nougat \
+#     nougat:latest
 
 FROM python:3.11-slim
 
@@ -31,58 +34,139 @@ RUN mkdir -p /root/.cache/torch/hub /root/.cache/nougat
 VOLUME /root/.cache/torch/hub
 VOLUME /root/.cache/nougat
 
-# Small wrapper script running FastAPI server for nougat
+# FastAPI server running real Nougat model inference
 COPY <<'EOF' /app/server.py
+import importlib.metadata
 import io
-import os
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
-import pypdf
+import logging
+from contextlib import asynccontextmanager
+from typing import Any
+
+import torch
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile, status
 from nougat import NougatModel
+from nougat.postprocessing import markdown_compatible
 from nougat.utils.checkpoint import get_checkpoint
 from nougat.utils.dataset import LazyDataset
-from nougat.postprocessing import markdown_compatible
-import torch
+from torch.utils.data import DataLoader
 
-app = FastAPI(title="Nougat Serve")
-model = None
+LOG = logging.getLogger("nougat_serve")
+logging.basicConfig(level=logging.INFO)
 
-@app.on_event("startup")
-def load_model():
-    global model
-    checkpoint = get_checkpoint()
-    model = NougatModel.from_pretrained(checkpoint)
-    model = model.eval()
+state: dict[str, Any] = {
+    "model": None,
+    "model_loaded": False,
+    "checkpoint": None,
+}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    checkpoint_tag = get_checkpoint()
+    state["checkpoint"] = str(checkpoint_tag)
+    LOG.info("Loading Nougat model checkpoint: %s", checkpoint_tag)
+    try:
+        model = NougatModel.from_pretrained(checkpoint_tag)
+        model = model.eval()
+        if torch.cuda.is_available():
+            model = model.to("cuda")
+        state["model"] = model
+        state["model_loaded"] = True
+        LOG.info("Nougat model loaded successfully.")
+    except Exception as exc:
+        LOG.error("Failed to load Nougat model checkpoint: %s", exc)
+        state["model_loaded"] = False
+    yield
+    state.clear()
+
+
+app = FastAPI(title="Nougat Serve", lifespan=lifespan)
+
 
 @app.get("/health")
-def health():
-    return {"status": "ok", "healthy": True, "model_loaded": model is not None}
+def health(response: Response):
+    is_ready = bool(state.get("model_loaded"))
+    if not is_ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {
+            "status": "degraded",
+            "healthy": False,
+            "detail": "Model is not loaded or initialization failed",
+        }
+    return {
+        "status": "ok",
+        "healthy": True,
+        "checkpoint": state.get("checkpoint"),
+    }
+
 
 @app.get("/version")
 def version():
-    return {"version": "0.1.17", "service": "nougat-serve"}
+    try:
+        pkg_version = importlib.metadata.version("nougat-ocr")
+    except Exception:
+        pkg_version = "0.1.17"
+    return {
+        "version": pkg_version,
+        "service": "nougat-serve",
+        "torch_version": torch.__version__,
+    }
+
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file uploaded")
+
+    model = state.get("model")
+    if model is None or not state.get("model_loaded"):
+        raise HTTPException(
+            status_code=503, detail="Nougat model is not ready or failed to load"
+        )
+
     content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
     try:
-        pdf = pypdf.PdfReader(io.BytesIO(content))
-        num_pages = len(pdf.pages)
-        pages_out = []
-        for i in range(num_pages):
-            pages_out.append({
-                "page_number": i + 1,
-                "text": f"# Page {i + 1}\n\nTranscribed page content placeholder."
-            })
+        pdf_stream = io.BytesIO(content)
+        dataset = LazyDataset(
+            pdf_stream,
+            partial=False,
+        )
+        dataloader = DataLoader(
+            dataset,
+            batch_size=1,
+            shuffle=False,
+            collate_fn=LazyDataset.ignore_none_collate,
+        )
+
+        pages_out: list[dict[str, Any]] = []
+        page_idx = 1
+
+        for sample in dataloader:
+            if sample is None:
+                continue
+            model_output = model.inference(image_tensors=sample)
+            for prediction in model_output["predictions"]:
+                formatted_text = markdown_compatible(prediction)
+                pages_out.append({
+                    "page_number": page_idx,
+                    "text": formatted_text,
+                })
+                page_idx += 1
+
+        full_text = "\n\n".join(p["text"] for p in pages_out)
         return {
-            "num_pages": num_pages,
+            "num_pages": len(pages_out),
             "pages": pages_out,
-            "text": "\n\n".join(p["text"] for p in pages_out)
+            "text": full_text,
         }
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        LOG.exception("Nougat inference failed: %s", exc)
+        raise HTTPException(
+            status_code=500, detail=f"Inference execution failed: {exc}"
+        ) from exc
 EOF
 
 EXPOSE 5004
