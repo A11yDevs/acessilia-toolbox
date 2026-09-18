@@ -150,21 +150,26 @@ async def predict(file: UploadFile = File(...)):
             collate_fn=LazyDataset.ignore_none_collate,
         )
 
-        pages_out: list[dict[str, Any]] = []
-        page_idx = 1
+        import asyncio
 
-        for sample, is_last_page in dataloader:
-            if sample is None:
-                continue
-            model_output = model.inference(image_tensors=sample)
-            for prediction in model_output.get("predictions", []):
-                formatted_text = markdown_compatible(prediction)
-                pages_out.append({
-                    "page_number": page_idx,
-                    "text": formatted_text,
-                })
-                page_idx += 1
+        def _run_inference():
+            pages_out: list[dict[str, Any]] = []
+            page_idx = 1
+            with torch.no_grad():
+                for sample, is_last_page in dataloader:
+                    if sample is None:
+                        continue
+                    model_output = model.inference(image_tensors=sample)
+                    for prediction in model_output.get("predictions", []):
+                        formatted_text = markdown_compatible(prediction)
+                        pages_out.append({
+                            "page_number": page_idx,
+                            "text": formatted_text,
+                        })
+                        page_idx += 1
+            return pages_out
 
+        pages_out = await asyncio.to_thread(_run_inference)
         full_text = "\n\n".join(p["text"] for p in pages_out)
         return {
             "num_pages": len(pages_out),
