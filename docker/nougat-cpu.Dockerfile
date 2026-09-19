@@ -153,6 +153,11 @@ async def predict(file: UploadFile = File(...)):
 
         import asyncio
 
+        early_stopping_param = True
+        early_stopping_env = os.environ.get("NOUGAT_EARLY_STOPPING", "true").lower()
+        if early_stopping_env in ("false", "0", "no"):
+            early_stopping_param = False
+
         def _run_inference():
             pages_out: list[dict[str, Any]] = []
             page_idx = 1
@@ -160,8 +165,15 @@ async def predict(file: UploadFile = File(...)):
                 for sample, is_last_page in dataloader:
                     if sample is None:
                         continue
-                    model_output = model.inference(image_tensors=sample)
-                    for prediction in model_output.get("predictions", []):
+                    model_output = model.inference(
+                        image_tensors=sample,
+                        early_stopping=early_stopping_param,
+                    )
+                    preds = model_output.get("predictions", [])
+                    # If predictions were aggressively pruned by early stopping, fallback to repetitions
+                    if not any(p.strip() for p in preds) and model_output.get("repetitions"):
+                        preds = model_output.get("repetitions", [])
+                    for prediction in preds:
                         formatted_text = markdown_compatible(prediction)
                         pages_out.append({
                             "page_number": page_idx,

@@ -135,6 +135,7 @@ services:
       - "${NOUGAT_SERVE_PORT:-5004}:5004"
     environment:
       NOUGAT_MODEL_TAG: "${NOUGAT_MODEL_TAG:-0.1.0-base}"
+      NOUGAT_EARLY_STOPPING: "${NOUGAT_EARLY_STOPPING:-false}"
     volumes:
       - nougat-torch-models:/root/.cache/torch/hub
       - nougat-models:/root/.cache/nougat
