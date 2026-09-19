@@ -46,7 +46,10 @@ class NougatDocument:
                     "prov": [
                         {
                             "page_no": page_no,
-                            "bbox": block.get("bbox", {"left": 0, "top": 0, "right": 0, "bottom": 0}),
+                            "bbox": block.get(
+                                "bbox",
+                                {"left": 0, "top": 0, "right": 0, "bottom": 0},
+                            ),
                         }
                     ],
                 }
@@ -99,16 +102,20 @@ def _parse_nougat_text(text: str) -> list[dict[str, Any]]:
 
         # Check for LaTeX equations:
         # 1. Block display math: \[...\], $$...$$, or \begin{equation...}
-        # 2. Inline or concatenated math tokens: starts with \( and ends with \), or is comprised of math delimiters
+        # 2. Inline math tokens: starts with \( and ends with \), or math delimiters
         is_block_formula = (
             (para.startswith(r"\[") and para.endswith(r"\]"))
             or (para.startswith(r"$$") and para.endswith(r"$$") and len(para) > 4)
             or para.startswith(r"\begin{equation")
         )
+        has_prose_words = any(
+            len(word) > 4 and any(c.isalpha() and c.isascii() for c in word)
+            for word in para.split()
+        )
         is_inline_formula = (
             (para.startswith(r"\(") and para.endswith(r"\)"))
             or (para.startswith("$") and para.endswith("$") and len(para) > 2)
-            or (r"\(" in para and r"\)" in para and not any(c.isalpha() and c.isascii() and len(word) > 4 for word in para.split()))
+            or (r"\(" in para and r"\)" in para and not has_prose_words)
         )
 
         if is_block_formula or is_inline_formula:

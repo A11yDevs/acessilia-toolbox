@@ -77,7 +77,10 @@ def test_execute_converts_markdown_to_extraction_result() -> None:
             return httpx.Response(
                 200,
                 headers={"content-type": "application/json"},
-                json={"text": nougat_markdown, "pages": [{"text": nougat_markdown, "page_number": 1}]},
+                json={
+                    "text": nougat_markdown,
+                    "pages": [{"text": nougat_markdown, "page_number": 1}],
+                },
             )
         if request.url.path == "/version":
             return httpx.Response(200, json={"version": "0.1.17"})
@@ -162,7 +165,10 @@ def test_parses_dollar_block_formulas() -> None:
             return httpx.Response(
                 200,
                 headers={"content-type": "application/json"},
-                json={"text": nougat_markdown, "pages": [{"text": nougat_markdown, "page_number": 1}]},
+                json={
+                    "text": nougat_markdown,
+                    "pages": [{"text": nougat_markdown, "page_number": 1}],
+                },
             )
         if request.url.path == "/version":
             return httpx.Response(200, json={"version": "0.1.17"})
@@ -197,7 +203,10 @@ def test_parses_inline_parenthesis_formulas() -> None:
             return httpx.Response(
                 200,
                 headers={"content-type": "application/json"},
-                json={"text": nougat_markdown, "pages": [{"text": nougat_markdown, "page_number": 1}]},
+                json={
+                    "text": nougat_markdown,
+                    "pages": [{"text": nougat_markdown, "page_number": 1}],
+                },
             )
         if request.url.path == "/version":
             return httpx.Response(200, json={"version": "0.1.17"})
