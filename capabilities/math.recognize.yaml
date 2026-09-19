@@ -28,5 +28,7 @@ semantics:
     - math_recognized
 
 providers:
+  - id: rapid-latex-ocr
+    version: "0.1+"
   - id: docling-math
     version: "1.32+"
