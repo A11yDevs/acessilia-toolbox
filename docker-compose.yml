@@ -125,6 +125,23 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Lightweight math formula OCR sidecar (RapidLaTeXOCR).
+  rapid-latex-ocr:
+    build:
+      context: .
+      dockerfile: docker/math-ocr.Dockerfile
+    image: ${RAPID_LATEX_OCR_IMAGE:-rapid-latex-ocr:latest}
+    container_name: rapid-latex-ocr
+    ports:
+      - "${RAPID_LATEX_OCR_PORT:-5004}:5004"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
   docling-models:
   minio-data:
