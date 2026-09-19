@@ -127,7 +127,7 @@ def test_no_portuguese_in_code(project_files: list[Path]) -> None:
         if filepath.name == "pyproject.toml" and filepath.parent == PROJECT_ROOT:
             continue
 
-        rel = str(filepath.relative_to(PROJECT_ROOT))
+        rel = filepath.relative_to(PROJECT_ROOT).as_posix()
         if rel in EXEMPT_FILES:
             continue
         exempt_lines = _EXEMPT_BY_FILE.get(rel, set())
