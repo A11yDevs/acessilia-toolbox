@@ -74,7 +74,7 @@ class HomrProvider:
             )
 
         try:
-            import homr  # type: ignore[import-untyped,import-not-found,unused-ignore]  # noqa: F401
+            import homr  # type: ignore[import-untyped,unused-ignore]  # noqa: F401
         except ImportError as exc:
             raise ProviderUnavailableError(
                 "homr is not installed; install the 'music' extra "
@@ -106,9 +106,7 @@ class HomrProvider:
             image_path.write_bytes(payload)
 
             try:
-                from homr.main import (
-                    run,  # type: ignore[import-untyped,import-not-found,unused-ignore]
-                )
+                from homr.main import run  # type: ignore[import-untyped,unused-ignore]
             except ImportError as exc:
                 raise ProviderUnavailableError(
                     "homr package layout changed; cannot import homr.main.run",
