@@ -17,6 +17,7 @@ from acessilia_toolbox.providers.mineru import MineruProvider
 from acessilia_toolbox.providers.mineru_layout import MineruLayoutProvider
 from acessilia_toolbox.providers.mineru_ocr import MineruOcrProvider
 from acessilia_toolbox.providers.music_omr import AudiverisProvider, HomrProvider
+from acessilia_toolbox.providers.nougat import NougatProvider
 from acessilia_toolbox.providers.pure_accessibility import PureAccessibilityProvider
 from acessilia_toolbox.providers.pure_chem import PureChemProvider
 from acessilia_toolbox.providers.pure_code import PureCodeProvider
@@ -75,6 +76,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "mineru": MineruProvider,
     "mineru-layout": MineruLayoutProvider,
     "mineru-ocr": MineruOcrProvider,
+    "nougat": NougatProvider,
     "pure-accessibility": PureAccessibilityProvider,
     "pure-chem": PureChemProvider,
     "pure-code": PureCodeProvider,
@@ -110,6 +112,7 @@ __all__ = [
     "MineruLayoutProvider",
     "MineruOcrProvider",
     "MineruProvider",
+    "NougatProvider",
     "PureAccessibilityProvider",
     "PureChemProvider",
     "PureCodeProvider",
