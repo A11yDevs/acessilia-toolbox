@@ -65,6 +65,18 @@ providers:
       - image/png
       - image/jpeg
       - image/tiff
+  - id: rapid-latex-ocr
+    version: "0.1"
+    transport: http
+    endpoint: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
+    health_path: /health
+    timeout_seconds: 60
+    capabilities:
+      - math.recognize
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
 
   - id: docling-ocr
     version: "1.32"

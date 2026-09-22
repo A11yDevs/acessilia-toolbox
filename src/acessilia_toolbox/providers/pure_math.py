@@ -344,6 +344,33 @@ _LATEX_VERBALIZE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
+def _extract_braced(s: str, start: int) -> tuple[str, int]:
+    depth = 0
+    for i in range(start, len(s)):
+        if s[i] == "{":
+            depth += 1
+        elif s[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start + 1 : i], i
+    return s[start + 1 :], len(s)
+
+
+def _verbalize_nested_fractions(text: str) -> str:
+    while True:
+        pos = text.find(r"\frac{")
+        if pos == -1:
+            break
+        num, end_num = _extract_braced(text, pos + 5)
+        if end_num + 1 < len(text) and text[end_num + 1] == "{":
+            den, end_den = _extract_braced(text, end_num + 1)
+            replacement = f"{num} sobre {den}"
+            text = text[:pos] + replacement + text[end_den + 1 :]
+        else:
+            break
+    return text
+
+
 def _verbalize_latex(latex: str) -> str:
     """Convert a LaTeX expression to spoken Portuguese text."""
     text = latex.strip()
@@ -352,6 +379,9 @@ def _verbalize_latex(latex: str) -> str:
     text = re.sub(r"^\$\$|\$\$$", "", text)
     text = re.sub(r"^\\\[|\\\]$", "", text)
     text = re.sub(r"^\(|\)$", "", text)
+
+    # Convert fractions with balanced/nested braces first
+    text = _verbalize_nested_fractions(text)
 
     # Apply verbalization patterns
     for pattern, replacement in _LATEX_VERBALIZE_PATTERNS:
