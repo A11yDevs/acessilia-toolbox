@@ -50,15 +50,17 @@ class RapidLatexOcrProvider:
         completed_at = datetime.now(UTC)
 
         latex = raw.get("latex", "")
-        confidence = float(raw.get("confidence", 1.0))
-        bbox = raw.get("bbox", [])
+        raw_conf = raw.get("confidence")
+        confidence = float(raw_conf) if raw_conf is not None else None
+        bbox = raw.get("bbox")
 
         document_payload: dict[str, Any] = {
             "latex": latex,
-            "confidence": confidence,
-            "bbox": bbox,
-            "raw": raw,
         }
+        if confidence is not None:
+            document_payload["confidence"] = confidence
+        if bbox is not None:
+            document_payload["bbox"] = bbox
 
         server_version = (
             versions.get("version")

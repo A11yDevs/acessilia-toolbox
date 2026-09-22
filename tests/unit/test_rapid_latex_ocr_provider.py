@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import httpx
+import jsonschema
 import pytest
 
 from acessilia_toolbox.core.errors import (
@@ -71,6 +75,14 @@ class TestRapidLatexOcrProvider:
         assert extraction.document["latex"] == r"x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"
         assert extraction.document["confidence"] == 0.98
         assert extraction.document["bbox"] == [10, 20, 210, 50]
+        assert "raw" not in extraction.document
+
+    def test_document_conforms_to_latex_schema(self) -> None:
+        schema_path = Path(__file__).parents[2] / "schemas" / "latex@1.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+        extraction = extract(provider_with(predict_handler))
+        jsonschema.validate(instance=extraction.document, schema=schema)
 
     def test_configuration_includes_capability(self) -> None:
         extraction = extract(provider_with(predict_handler))
