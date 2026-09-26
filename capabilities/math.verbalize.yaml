@@ -8,6 +8,7 @@ input:
   schema: artifact/latex@1
   media_types:
     - application/json
+    - text/plain
 
 output:
   schema: artifact/verbalized@1
