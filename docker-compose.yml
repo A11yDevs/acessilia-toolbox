@@ -95,7 +95,7 @@ services:
 
       # ── One-shot bucket init ──────────────────────────────────────
   minio-init:
-    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z}
     container_name: acessilia-minio-init
     entrypoint:
       - sh

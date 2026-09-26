@@ -33,7 +33,7 @@ semantics:
     - regions_classified
 
 providers:
-  - id: docling
+  - id: docling-layout
     version: "1.32+"
   - id: mineru-layout
     version: "2.1+"

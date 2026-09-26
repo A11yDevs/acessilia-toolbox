@@ -106,9 +106,7 @@ class DoclingLayoutProvider:
                 return ProviderHealth(
                     provider=self.descriptor.id,
                     healthy=True,
-                    version=_pick_version(
-                        self._server_versions(client), self.descriptor.version
-                    ),
+                    version=_pick_version(self._server_versions(client), self.descriptor.version),
                     checked_at=checked_at,
                 )
         except Exception as exc:
@@ -131,7 +129,8 @@ class DoclingLayoutProvider:
         try:
             response = client.post(
                 CONVERT_PATH,
-                files={"file": (filename, payload, media_type)},
+                files={"files": (filename, payload, media_type)},
+                data={"to_formats": ["json"]},
             )
             response.raise_for_status()
         except httpx.TimeoutException as exc:
@@ -157,6 +156,14 @@ class DoclingLayoutProvider:
                 "docling-serve returned unexpected payload",
                 provider=self.descriptor.id,
             )
+        if "document" in result:
+            document = (result.get("document") or {}).get("json_content")
+            if not isinstance(document, dict):
+                raise ProviderExecutionError(
+                    "docling-serve response is missing document.json_content",
+                    provider=self.descriptor.id,
+                )
+            return document
         return result
 
     def _build_layout(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -171,9 +178,9 @@ class DoclingLayoutProvider:
         # Collect items from all collections
         for collection in ("texts", "pictures", "tables", "groups"):
             for item in raw.get(collection, []):
-                for prov in (item.get("prov") or []):
-                    page_num = prov.get("page", 1)
-                    bbox = prov.get("bbox", [])
+                for prov in item.get("prov") or []:
+                    page_num = int(prov.get("page_no") or prov.get("page") or 1)
+                    bbox = self._bbox_values(prov.get("bbox"))
                     if len(bbox) != 4:
                         continue
 
@@ -198,9 +205,10 @@ class DoclingLayoutProvider:
         for page_num_str, page_data in pages.items():
             page_num = int(page_num_str)
             if isinstance(page_data, dict):
+                size = page_data.get("size") or {}
                 page_dimensions[page_num] = {
-                    "width": page_data.get("width", 0),
-                    "height": page_data.get("height", 0),
+                    "width": page_data.get("width", size.get("width", 0)),
+                    "height": page_data.get("height", size.get("height", 0)),
                 }
 
         # Build page-level output
@@ -208,12 +216,14 @@ class DoclingLayoutProvider:
         for page_num in sorted(page_regions):
             regions = page_regions[page_num]
             dims = page_dimensions.get(page_num, {})
-            pages_output.append({
-                "page_number": page_num,
-                "width": dims.get("width", 0),
-                "height": dims.get("height", 0),
-                "regions": regions,
-            })
+            pages_output.append(
+                {
+                    "page_number": page_num,
+                    "width": dims.get("width", 0),
+                    "height": dims.get("height", 0),
+                    "regions": regions,
+                }
+            )
 
         region_count = 0
         for p in pages_output:
@@ -231,9 +241,7 @@ class DoclingLayoutProvider:
             return str(label_data.get("value", "unknown"))
         return str(label_data) if label_data else "unknown"
 
-    def _classify(
-        self, item: dict[str, Any], label: str, bbox: list[float]
-    ) -> str:
+    def _classify(self, item: dict[str, Any], label: str, bbox: list[float]) -> str:
         """Classify a docling item into an Acessilia layout category."""
         label_lower = label.lower()
 
@@ -272,6 +280,31 @@ class DoclingLayoutProvider:
             return "ignore"
 
         return "unknown"
+
+    @staticmethod
+    def _bbox_values(bbox: Any) -> list[float]:
+        """Normalize Docling dict/list coordinates to [left, bottom, right, top]."""
+        if isinstance(bbox, dict):
+            left = bbox.get("l", bbox.get("left"))
+            top = bbox.get("t", bbox.get("top"))
+            right = bbox.get("r", bbox.get("right"))
+            bottom = bbox.get("b", bbox.get("bottom"))
+            if None not in (left, top, right, bottom):
+                return [
+                    min(float(left), float(right)),
+                    min(float(bottom), float(top)),
+                    max(float(left), float(right)),
+                    max(float(bottom), float(top)),
+                ]
+        if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+            values = [float(value) for value in bbox[:4]]
+            return [
+                min(values[0], values[2]),
+                min(values[1], values[3]),
+                max(values[0], values[2]),
+                max(values[1], values[3]),
+            ]
+        return []
 
     @staticmethod
     def _bbox_area(bbox: list[float]) -> float:
