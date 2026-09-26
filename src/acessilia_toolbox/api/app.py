@@ -105,15 +105,17 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
     candidates = providers.for_capability("artifact.store")
     if not candidates:
         return None
-    descriptor = candidates[0]
-    if _is_unresolved(dict(descriptor.config)):
-        return None
-    try:
-        store = _create_store(descriptor)
-    except ConfigurationError as exc:
-        LOG.warning("artifact store disabled: %s", exc)
-        return None
-    return store if isinstance(store, ArtifactStore) else None
+    for descriptor in candidates:
+        if _is_unresolved(dict(descriptor.config)):
+            continue
+        try:
+            store = _create_store(descriptor)
+        except ConfigurationError as exc:
+            LOG.warning("artifact store provider %s disabled: %s", descriptor.id, exc)
+            continue
+        if isinstance(store, ArtifactStore):
+            return store
+    return None
 
 
 def _cache_from(providers: ProviderRegistry) -> ExecutionCache | None:

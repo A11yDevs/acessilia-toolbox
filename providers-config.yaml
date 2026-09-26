@@ -227,6 +227,17 @@ providers:
       access_key: ${MINIO_ACCESS_KEY}
       secret_key: ${MINIO_SECRET_KEY}
 
+  # Local fallback used when the MinIO environment is not configured. In
+  # Docker deployments the resolved MinIO provider above remains preferred.
+  - id: filesystem
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - artifact.store
+      - artifact.retrieve
+    config:
+      root: /tmp/acessilia-toolbox-artifacts
+
   - id: valkey
     version: "8"
     transport: redis
