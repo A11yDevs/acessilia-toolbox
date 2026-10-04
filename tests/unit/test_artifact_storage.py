@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from acessilia_toolbox.api.app import _store_from
+from acessilia_toolbox.api.app import _store_from, create_app
 from acessilia_toolbox.core.artifact import ArtifactRef, NullCache, shards
 from acessilia_toolbox.core.errors import (
     ArtifactNotFoundError,
@@ -225,6 +225,54 @@ def test_store_factory_keeps_filesystem_as_runtime_backup(tmp_path: Path) -> Non
     assert isinstance(selected, FailoverArtifactStore)
     assert isinstance(selected.primary, S3ArtifactStore)
     assert isinstance(selected.fallback, FilesystemArtifactStore)
+
+
+@pytest.mark.parametrize(
+    "failure", [PermissionError("read-only mount"), FileExistsError("not a directory")]
+)
+def test_unusable_fallback_does_not_prevent_app_startup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure: OSError,
+) -> None:
+    import boto3
+
+    client = FakeS3Client()
+    monkeypatch.setattr(boto3, "client", lambda *args, **kwargs: client)
+    root = tmp_path / "unusable"
+    original_mkdir = Path.mkdir
+
+    def mkdir(path: Path, *args: object, **kwargs: object) -> None:
+        if path == root:
+            raise failure
+        original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mkdir)
+    providers = ProviderRegistry(
+        [
+            ProviderDescriptor(
+                id="minio",
+                transport="s3",
+                endpoint="http://minio:9000",
+                capabilities=["artifact.store", "artifact.retrieve"],
+                config={"access_key": "test", "secret_key": "test"},
+            ),
+            ProviderDescriptor(
+                id="filesystem",
+                transport="in_process",
+                capabilities=["artifact.store", "artifact.retrieve"],
+                config={"root": str(root)},
+            ),
+        ]
+    )
+
+    app = create_app(providers=providers)
+
+    assert isinstance(app.state.store, S3ArtifactStore)
+    ref = app.state.store.put(PAYLOAD)
+    assert app.state.store.get(ref.artifact_id) == PAYLOAD
+    assert "artifact store provider filesystem disabled" in caplog.text
 
 
 def test_null_cache_never_reports_a_hit() -> None:

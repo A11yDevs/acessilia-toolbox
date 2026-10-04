@@ -104,6 +104,7 @@ class S3ArtifactStore:
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         try:
             import boto3
+            from botocore.config import Config
         except ImportError as exc:
             raise ConfigurationError(
                 "S3 storage requires the 'storage' extra: pip install "
@@ -119,6 +120,14 @@ class S3ArtifactStore:
             aws_access_key_id=config.get("access_key"),
             aws_secret_access_key=config.get("secret_key"),
             region_name=config.get("region", "us-east-1"),
+            # Keep outages below the API client's timeout so failover can run.
+            # Explicit total attempts also prevents AWS retry environment settings
+            # from extending the wait for an unavailable primary.
+            config=Config(
+                connect_timeout=3,
+                read_timeout=5,
+                retries={"total_max_attempts": 1, "mode": "standard"},
+            ),
         )
 
     def put(

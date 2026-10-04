@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Event, Thread
+from time import monotonic
 
-import boto3
 import pytest
-from botocore.config import Config
 
 from acessilia_toolbox.core.errors import ProviderUnavailableError
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
@@ -31,13 +33,6 @@ def test_unreachable_s3_endpoint_uses_filesystem(tmp_path: Path) -> None:
         }
     )
     primary = S3ArtifactStore(descriptor)
-    primary._client = boto3.client(
-        "s3",
-        endpoint_url=descriptor.endpoint,
-        aws_access_key_id="test",
-        aws_secret_access_key="test",
-        config=Config(connect_timeout=1, read_timeout=1, retries={"max_attempts": 0}),
-    )
     store = FailoverArtifactStore(
         primary, FilesystemArtifactStore(tmp_path / "backup")
     )
@@ -49,3 +44,61 @@ def test_unreachable_s3_endpoint_uses_filesystem(tmp_path: Path) -> None:
     assert store.stat(ref.artifact_id).media_type == "text/plain"
     with pytest.raises(ProviderUnavailableError):
         store.get(fingerprint_bytes(b"never stored"))
+
+
+@pytest.fixture
+def stalled_s3_endpoint() -> Iterator[str]:
+    """Accept S3 requests without returning a response until teardown."""
+    release = Event()
+
+    class Handler(BaseHTTPRequestHandler):
+        def stall(self) -> None:
+            release.wait()
+            self.close_connection = True
+
+        do_PUT = stall  # noqa: N815 -- HTTP handler names are defined by the stdlib.
+        do_GET = stall  # noqa: N815
+        do_HEAD = stall  # noqa: N815
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        release.set()
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_stalled_s3_uses_filesystem_before_client_timeout(
+    tmp_path: Path, stalled_s3_endpoint: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Even an inherited retry policy must not delay failover.
+    monkeypatch.setenv("AWS_MAX_ATTEMPTS", "10")
+    primary = S3ArtifactStore(
+        ProviderDescriptor(
+            id="stalled-minio",
+            transport="s3",
+            endpoint=stalled_s3_endpoint,
+            capabilities=["artifact.store", "artifact.retrieve"],
+            config={"access_key": "test", "secret_key": "test"},
+        )
+    )
+    store = FailoverArtifactStore(primary, FilesystemArtifactStore(tmp_path / "backup"))
+
+    started = monotonic()
+    ref = store.put(b"stored despite stalled S3", media_type="text/plain", filename="test.txt")
+    assert monotonic() - started < 15
+    assert ref.storage_backend == "filesystem"
+
+    # An API retrieval calls both get and stat, within its 30-second timeout.
+    started = monotonic()
+    assert store.get(ref.artifact_id) == b"stored despite stalled S3"
+    assert store.stat(ref.artifact_id).filename == "test.txt"
+    assert monotonic() - started < 25
+
+    started = monotonic()
+    assert store.exists(ref.artifact_id)
+    assert monotonic() - started < 15

@@ -115,7 +115,7 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
                 continue
             try:
                 store = _create_store(descriptor)
-            except ConfigurationError as exc:
+            except (ConfigurationError, OSError) as exc:
                 LOG.warning("artifact store provider %s disabled: %s", descriptor.id, exc)
                 continue
             if isinstance(store, ArtifactStore):
