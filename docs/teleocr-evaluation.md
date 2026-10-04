@@ -119,7 +119,8 @@ including inference identity/cache behavior, timeouts and failure recovery.
 - Ruff over source/tests passed. Strict mypy passed 53 source files with a local-only
   override for absent optional `homr` imports; repository settings are unchanged.
 - The full local test command produced 429 passed, 49 skipped, 9 errors and 1
-  failure. The errors require configured MinIO; the snapshot failure requires the
+  failure. The MinIO contract errors result from missing optional `boto3`, so live
+  storage was not checked; the snapshot failure requires the
   dataset fixtures. These environments were not available. This is not a claim
   that live contract/snapshot tests passed. CI status must be checked separately.
 
