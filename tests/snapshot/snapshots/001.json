@@ -1249,7 +1249,7 @@
           "human-review": 100,
           "pandoc-code": 10
         },
-        "rationale": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "rationale": "The code block must preserve indentation, language, and literal reading.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -1269,7 +1269,7 @@
           "human-review": 100,
           "pandoc-code": 10
         },
-        "rationale": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "rationale": "The code block must preserve indentation, language, and literal reading.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -1289,7 +1289,7 @@
           "human-review": 100,
           "pandoc-code": 10
         },
-        "rationale": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "rationale": "The code block must preserve indentation, language, and literal reading.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -1309,7 +1309,7 @@
           "human-review": 100,
           "pandoc-code": 10
         },
-        "rationale": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "rationale": "The code block must preserve indentation, language, and literal reading.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -1329,7 +1329,7 @@
           "human-review": 100,
           "pandoc-code": 10
         },
-        "rationale": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "rationale": "The code block must preserve indentation, language, and literal reading.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -1349,7 +1349,7 @@
           "human-review": 100,
           "pandoc-code": 10
         },
-        "rationale": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "rationale": "The code block must preserve indentation, language, and literal reading.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -1369,7 +1369,7 @@
           "human-review": 100,
           "vision-description": 20
         },
-        "rationale": "A imagem deve receber descrição ou ser marcada como decorativa.",
+        "rationale": "The image must receive a description or be marked as decorative.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -1385,7 +1385,7 @@
         },
         "id": "observation-preserve-code-semantics-000011",
         "kind": "code-requires-processing",
-        "message": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
           "element-000011"
@@ -1398,7 +1398,7 @@
         },
         "id": "observation-preserve-code-semantics-000013",
         "kind": "code-requires-processing",
-        "message": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
           "element-000013"
@@ -1411,7 +1411,7 @@
         },
         "id": "observation-preserve-code-semantics-000016",
         "kind": "code-requires-processing",
-        "message": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
           "element-000016"
@@ -1424,7 +1424,7 @@
         },
         "id": "observation-preserve-code-semantics-000023",
         "kind": "code-requires-processing",
-        "message": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
           "element-000023"
@@ -1437,7 +1437,7 @@
         },
         "id": "observation-preserve-code-semantics-000029",
         "kind": "code-requires-processing",
-        "message": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
           "element-000029"
@@ -1450,7 +1450,7 @@
         },
         "id": "observation-preserve-code-semantics-000034",
         "kind": "code-requires-processing",
-        "message": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+        "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
           "element-000034"
@@ -1463,7 +1463,7 @@
         },
         "id": "observation-describe-image-000037",
         "kind": "picture-requires-processing",
-        "message": "A imagem deve receber descrição ou ser marcada como decorativa.",
+        "message": "The image must receive a description or be marked as decorative.",
         "severity": "warning",
         "target_ids": [
           "element-000037"
