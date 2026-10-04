@@ -115,7 +115,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034}
     container_name: acessilia-minio-staging
     command: server /data --console-address ":9001"
     ports:
@@ -148,15 +148,15 @@ services:
 
       # ── One-shot bucket init ──────────────────────────────────────
   minio-init:
-    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034}
     container_name: acessilia-minio-init-staging
     entrypoint:
       - sh
-      - -c
+      - -ec
       - |
-        mc alias set local http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY}
+        mc alias set local http://minio:9000 "$${MINIO_ACCESS_KEY}" "$${MINIO_SECRET_KEY}"
         mc mb local/acessilia --ignore-existing
-        echo "✅ Bucket acessilia criado/verificado"
+        echo "Bucket acessilia created/verified"
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
