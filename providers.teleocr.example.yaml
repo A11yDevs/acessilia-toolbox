@@ -1,0 +1,15 @@
+# Opt-in profile. Merge this entry into your deployment's provider configuration.
+# No TeleOCR model or GPU runtime is loaded by the Toolbox.
+providers:
+  - id: teleocr
+    version: "1.2b"
+    transport: http
+    endpoint: ${TELEOCR_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities: [document.structure.extract]
+    media_types: [image/jpeg, image/png]
+    config:
+      min_long: 1600
+      max_long: 2400
+      batch_size: 8

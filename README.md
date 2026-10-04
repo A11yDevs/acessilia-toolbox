@@ -33,6 +33,9 @@ open http://localhost:8002/v1/docs
 
 ### Test in one command
 
+For optional TeleOCR image extraction using a separate GPU service, see
+[the provider configuration and HTTP contract](docs/teleocr.md).
+
 ```bash
 # Health check
 curl http://localhost:8002/v1/health
@@ -286,6 +289,7 @@ pages: 1; elements: 7; obligations: 0
 | [Capability Model](docs/capability-model.md) | Contracts, manifests, interchangeability |
 | [PDDL Integration](docs/pddl.md) | Planning semantics |
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
+| [TeleOCR Evaluation](docs/teleocr-evaluation.md) | Local gains, failure cases, coverage and pending validation |
 | [Constitution](docs/constitution.md) | Design principles |
 | [Contributing](docs/contribution.md) | Workflow, PR checklist |
 | [Notebooks](docs/notebooks/) | Interactive provider tour (`docs/notebooks/provider_tour.ipynb`) |
