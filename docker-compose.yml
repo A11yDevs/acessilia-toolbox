@@ -26,6 +26,8 @@ services:
       TOOLBOX_API_KEY: ${TOOLBOX_API_KEY:-}
     env_file:
       - .env
+    volumes:
+      - ${ARTIFACT_FALLBACK_SOURCE:-artifact-fallback}:/tmp/acessilia-toolbox-artifacts
     depends_on:
       docling-serve:
         condition: service_healthy
@@ -165,6 +167,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  artifact-fallback:
   docling-models:
   minio-data:
   nougat-models:

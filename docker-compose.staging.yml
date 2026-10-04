@@ -31,6 +31,8 @@ services:
       AUDIVERIS_SERVE_URL: ${AUDIVERIS_SERVE_URL:-http://audiveris-serve:5003}
     env_file:
       - .env
+    volumes:
+      - ${ARTIFACT_FALLBACK_SOURCE:-artifact-fallback}:/tmp/acessilia-toolbox-artifacts
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8002/v1/health"]
@@ -164,6 +166,7 @@ services:
     restart: "no"
 
 volumes:
+  artifact-fallback:
   docling-models:
   mineru-models:
   minio-data:

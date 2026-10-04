@@ -60,6 +60,18 @@ artifact.presign
 The same contract could later be implemented by S3, Ceph, or local
 filesystem storage.
 
+If MinIO is unavailable during a write, the Toolbox stores the artifact
+on the filesystem. Reads check both stores. If MinIO is unavailable and
+the artifact is absent from the filesystem, report provider unavailability.
+Artifacts stored on the filesystem are not copied back to MinIO automatically.
+
+The filesystem root is `/tmp/acessilia-toolbox-artifacts`. Docker Compose
+mounts a named volume there to retain artifacts across container recreation.
+Without a mount, files in `/tmp` are temporary. Replicas on different hosts
+need the same persistent shared filesystem at this path. Set
+`ARTIFACT_FALLBACK_SOURCE` to the host path of that shared mount in each
+Compose deployment; the default named volume only covers one host.
+
 ## Cache
 
 Cache should be external and replaceable.
