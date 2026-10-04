@@ -289,7 +289,7 @@ class DoclingLayoutProvider:
             top = bbox.get("t", bbox.get("top"))
             right = bbox.get("r", bbox.get("right"))
             bottom = bbox.get("b", bbox.get("bottom"))
-            if None not in (left, top, right, bottom):
+            if left is not None and top is not None and right is not None and bottom is not None:
                 return [
                     min(float(left), float(right)),
                     min(float(bottom), float(top)),
