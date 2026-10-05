@@ -1,6 +1,6 @@
 {
   "date_local": "2026-10-03",
-  "status": "Completed 120-page development and 60-page held-out-book local runs; expanded 240-page validation pending.",
+  "status": "Completed 120-page development and 60-page held-out-book runs. The separate 240-page expansion is complete; see teleocr-expanded-summary.json.",
   "definition": "Overall is a derived mean per-page available text/reading-order/TEDS score. Formula edit distance is excluded without CDM. No leaderboard submission.",
   "dataset": {
     "repository": "2077AIDataFoundation/DrDocBench",
@@ -464,7 +464,7 @@
     "dev120_fusao_comparacoes.json": "fd5a6e5d6f95fc19b77167a037266a3a91911e7be2a2e75c2190cefa3ff694dc"
   },
   "expanded_protocol": {
-    "status": "pending",
+    "status": "Completed; authoritative results in teleocr-expanded-summary.json.",
     "drdocbench_pages": 120,
     "drdocbench_book_holdout": false,
     "omnidocbench_pages": 120,
@@ -477,5 +477,6 @@
     },
     "sampling_seed": 3102027,
     "selectors_refitted": false
-  }
+  },
+  "expanded_validation_status": "Completed; see teleocr-expanded-summary.json for all 240 public pages and operational amendments."
 }
