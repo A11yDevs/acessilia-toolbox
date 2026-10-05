@@ -7,6 +7,7 @@ Skipped automatically when the variable is absent — never blocks the local sui
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 import httpx
@@ -25,13 +26,25 @@ def _skip_if_no_url() -> str:
 
 
 def _pick_pdf() -> Path:
-    """Pick the smallest PDF from the dataset for quick testing."""
-    pdfs = sorted(
-        p for p in DATASET_DIR.glob("*.pdf") if p.stat().st_size < 500_000
-    )
-    if not pdfs:
-        pytest.skip("No suitable PDF found in tests/fixtures/dataset/input/")
-    return pdfs[0]
+    """Pick a small fixture or generate a deterministic two-page PDF."""
+    pdfs = sorted(p for p in DATASET_DIR.glob("*.pdf") if p.stat().st_size < 500_000)
+    if pdfs:
+        return pdfs[0]
+
+    try:
+        import fitz
+    except ImportError:
+        pytest.skip("PyMuPDF is required to generate the E2E PDF fixture")
+
+    generated = Path(tempfile.gettempdir()) / "acessilia-toolbox-e2e.pdf"
+    if not generated.exists():
+        document = fitz.open()
+        for number in (1, 2):
+            page = document.new_page()
+            page.insert_text((72, 72), f"Acessilia Toolbox E2E page {number}")
+        document.save(generated)
+        document.close()
+    return generated
 
 
 # ──────────────────────────────────────────────
@@ -104,7 +117,7 @@ class TestExtraction:
             resp = httpx.post(
                 f"{base}/v1/capabilities/document.structure.extract:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"language": "pt-BR"},
+                data={"language": "pt-BR", "provider": "docling"},
                 timeout=300,
             )
         assert resp.status_code == 200
@@ -118,7 +131,7 @@ class TestExtraction:
             resp = httpx.post(
                 f"{base}/v1/capabilities/document.structure.extract:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"language": "pt-BR"},
+                data={"language": "pt-BR", "provider": "docling"},
                 timeout=300,
             )
         data = resp.json()
@@ -132,7 +145,7 @@ class TestExtraction:
             resp = httpx.post(
                 f"{base}/v1/capabilities/document.structure.extract:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"language": "pt-BR"},
+                data={"language": "pt-BR", "provider": "docling"},
                 timeout=300,
             )
         data = resp.json()
@@ -169,9 +182,7 @@ class TestArtifacts:
         pdf_path = _pick_pdf()
         artifact_id = self._store_or_skip(base, pdf_path)
 
-        retrieve_resp = httpx.get(
-            f"{base}/v1/artifacts/{artifact_id}", timeout=30
-        )
+        retrieve_resp = httpx.get(f"{base}/v1/artifacts/{artifact_id}", timeout=30)
         assert retrieve_resp.status_code == 200
         assert len(retrieve_resp.content) > 0
 

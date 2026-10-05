@@ -135,7 +135,7 @@
           "human-review": 100,
           "pandoc-table": 15
         },
-        "rationale": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis.",
+        "rationale": "The table must have headers and a verifiable reading order.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -151,7 +151,7 @@
         },
         "id": "observation-linearize-table-000003",
         "kind": "table-requires-processing",
-        "message": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis.",
+        "message": "The table must have headers and a verifiable reading order.",
         "severity": "warning",
         "target_ids": [
           "element-000003"

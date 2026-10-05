@@ -227,6 +227,17 @@ providers:
       access_key: ${MINIO_ACCESS_KEY}
       secret_key: ${MINIO_SECRET_KEY}
 
+  # Backup for missing MinIO configuration and runtime outages. Docker mounts
+  # a persistent volume here; replicas on different hosts need shared storage.
+  - id: filesystem
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - artifact.store
+      - artifact.retrieve
+    config:
+      root: /tmp/acessilia-toolbox-artifacts
+
   - id: valkey
     version: "8"
     transport: redis

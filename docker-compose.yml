@@ -26,6 +26,8 @@ services:
       TOOLBOX_API_KEY: ${TOOLBOX_API_KEY:-}
     env_file:
       - .env
+    volumes:
+      - ${ARTIFACT_FALLBACK_SOURCE:-artifact-fallback}:/tmp/acessilia-toolbox-artifacts
     depends_on:
       docling-serve:
         condition: service_healthy
@@ -61,7 +63,7 @@ services:
 
   # Artifact storage. Credentials come from the environment, never from here.
   minio:
-    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034}
     container_name: acessilia-minio
     command: server /data --console-address ":9001"
     ports:
@@ -95,15 +97,15 @@ services:
 
       # ── One-shot bucket init ──────────────────────────────────────
   minio-init:
-    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034}
     container_name: acessilia-minio-init
     entrypoint:
       - sh
-      - -c
+      - -ec
       - |
-        mc alias set local http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY}
+        mc alias set local http://minio:9000 "$${MINIO_ACCESS_KEY}" "$${MINIO_SECRET_KEY}"
         mc mb local/acessilia --ignore-existing
-        echo "✅ Bucket acessilia criado/verificado"
+        echo "Bucket acessilia created/verified"
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
@@ -155,7 +157,7 @@ services:
     image: ${RAPID_LATEX_OCR_IMAGE:-rapid-latex-ocr:latest}
     container_name: rapid-latex-ocr
     ports:
-      - "${RAPID_LATEX_OCR_PORT:-5004}:5004"
+      - "${RAPID_LATEX_OCR_PORT:-5005}:5004"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
       interval: 15s
@@ -165,6 +167,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  artifact-fallback:
   docling-models:
   minio-data:
   nougat-models:

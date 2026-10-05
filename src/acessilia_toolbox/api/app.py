@@ -15,9 +15,10 @@ from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import ConfigurationError, ToolboxError
 from acessilia_toolbox.core.executor import CapabilityExecutor
-from acessilia_toolbox.core.provider import ProviderRegistry
+from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers import configure_dataset_mirroring, create_adapter
 from acessilia_toolbox.providers.cache import create_cache
+from acessilia_toolbox.providers.storage import FailoverArtifactStore
 from acessilia_toolbox.providers.storage import create_artifact_store as _create_store
 
 LOG = logging.getLogger(__name__)
@@ -105,15 +106,27 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
     candidates = providers.for_capability("artifact.store")
     if not candidates:
         return None
-    descriptor = candidates[0]
-    if _is_unresolved(dict(descriptor.config)):
+
+    def first_available(descriptors: list[ProviderDescriptor]) -> ArtifactStore | None:
+        for descriptor in descriptors:
+            if _is_unresolved(
+                {**descriptor.config, "endpoint": descriptor.endpoint or ""}
+            ):
+                continue
+            try:
+                store = _create_store(descriptor)
+            except (ConfigurationError, OSError) as exc:
+                LOG.warning("artifact store provider %s disabled: %s", descriptor.id, exc)
+                continue
+            if isinstance(store, ArtifactStore):
+                return store
         return None
-    try:
-        store = _create_store(descriptor)
-    except ConfigurationError as exc:
-        LOG.warning("artifact store disabled: %s", exc)
-        return None
-    return store if isinstance(store, ArtifactStore) else None
+
+    primary = first_available([d for d in candidates if d.transport == "s3"])
+    fallback = first_available([d for d in candidates if d.transport != "s3"])
+    if primary is not None and fallback is not None:
+        return FailoverArtifactStore(primary, fallback)
+    return primary or fallback
 
 
 def _cache_from(providers: ProviderRegistry) -> ExecutionCache | None:

@@ -99,10 +99,12 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 | `DOCLING_SERVE_ENABLE_UI` | `false` | Enable the docling web UI |
 | `TOOLBOX_PROVIDERS_CONFIG` | `providers-config.yaml` | Path to the provider manifest |
 | `MINIO_URL` | `http://localhost:9000` | MinIO endpoint (S3 storage) |
+| `MINIO_IMAGE` | Pinned Chainguard MinIO digest in Compose | Override with an image containing `minio`, `mc`, and `sh` |
 | `MINIO_PORT` | `9000` | S3 API port |
 | `MINIO_CONSOLE_PORT` | `9001` | MinIO web console port |
 | `MINIO_ACCESS_KEY` | `change-me` | **Replace** with a real key |
 | `MINIO_SECRET_KEY` | `change-me-too` | **Replace** with a real secret |
+| `ARTIFACT_FALLBACK_SOURCE` | `artifact-fallback` | Named volume or host path for filesystem failover; use a shared mount for replicas on different hosts |
 | `VALKEY_URL` | `redis://localhost:6379` | Valkey cache endpoint |
 | `VALKEY_PORT` | `6379` | Valkey port |
 | `TOOLBOX_HOST` | `0.0.0.0` | uvicorn listen address |
@@ -145,6 +147,25 @@ This reads the variables from your `.env` file automatically. Images
 are pulled on first run and named volumes are created for persistent
 data.
 
+Both Compose files use the public Chainguard MinIO image, pinned by digest
+for reproducible deployments. The image includes the server, `mc` for the
+healthcheck, and a shell for bucket initialization. `minio-init` exits with
+an error if bucket initialization fails. Set `MINIO_IMAGE` only when using
+an image with these same tools.
+The server runs as the image's non-root user (UID/GID `65532:65532`).
+Before starting it with an existing root-owned volume, stop MinIO and
+migrate the volume ownership once:
+
+``` bash
+docker compose stop minio
+docker compose run --rm --no-deps --user 0:0 --entrypoint sh minio \
+  -ec 'chown -R 65532:65532 /data'
+docker compose up -d minio minio-init
+```
+
+For staging, add `-f docker-compose.staging.yml` to each Compose command.
+The temporary migration container runs as root; the server does not.
+
 Check that all three services are healthy:
 
 ``` bash
@@ -155,7 +176,7 @@ Expected output (all services should show `healthy` or `Up`):
 
 ``` text
 NAME                 IMAGE                                          STATUS
-acessilia-minio      minio/minio:RELEASE.2025-04-22T22-12-26Z       Up (healthy)
+acessilia-minio      cgr.dev/chainguard/minio@sha256:...              Up (healthy)
 acessilia-valkey     valkey/valkey:8-alpine                          Up (healthy)
 docling-serve        ghcr.io/docling-project/docling-serve-cpu:...   Up (healthy)
 ```
@@ -192,7 +213,7 @@ docker run -d --name acessilia-minio -p 9000:9000 -p 9001:9001 \
   -e MINIO_ROOT_USER=your-access-key \
   -e MINIO_ROOT_PASSWORD=your-secret-key \
   -v minio-data:/data \
-  minio/minio:RELEASE.2025-04-22T22-12-26Z server /data --console-address ":9001"
+  cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034 server /data --console-address ":9001"
 
 # Valkey
 docker run -d --name acessilia-valkey -p 6379:6379 \

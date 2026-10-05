@@ -1745,7 +1745,7 @@
           "human-review": 100,
           "vision-description": 20
         },
-        "rationale": "A imagem deve receber descrição ou ser marcada como decorativa.",
+        "rationale": "The image must receive a description or be marked as decorative.",
         "selected": false,
         "status": "candidate",
         "target_ids": [
@@ -1761,7 +1761,7 @@
         },
         "id": "observation-describe-image-000055",
         "kind": "picture-requires-processing",
-        "message": "A imagem deve receber descrição ou ser marcada como decorativa.",
+        "message": "The image must receive a description or be marked as decorative.",
         "severity": "warning",
         "target_ids": [
           "element-000055"
