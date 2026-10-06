@@ -77,14 +77,19 @@ def test_missing_model_identity_cannot_reuse_cache_or_claim_health() -> None:
     assert not adapter.health().healthy
 
 
-def test_missing_model_identity_rejects_inference_result() -> None:
-    adapter = provider_with(
-        lambda r: httpx.Response(200, json=PAGE if r.url.path == "/predict" else {})
-    )
+def test_missing_model_identity_rejects_before_inference() -> None:
+    requests: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        return httpx.Response(200, json={})
+
+    adapter = provider_with(handler)
     with pytest.raises(ProviderUnavailableError, match="model_revision"):
         adapter.execute(
             "document.structure.extract", b"image", filename="page.png", media_type="image/png"
         )
+    assert requests == ["/version"]
 
 
 def test_transport_parameters_and_normalized_geometry() -> None:
@@ -137,7 +142,12 @@ def test_polygon_and_empty_image_page() -> None:
     ],
 )
 def test_malformed_backend_payload_rejected(page) -> None:
-    adapter = provider_with(lambda _: httpx.Response(200, json=json.loads(json.dumps(page))))
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return version_response()
+        return httpx.Response(200, json=json.loads(json.dumps(page)))
+
+    adapter = provider_with(handler)
     with pytest.raises(ProviderExecutionError, match="response shape"):
         adapter.execute(
             "document.structure.extract", b"image", filename="a.png", media_type="image/png"
@@ -152,7 +162,9 @@ def test_malformed_backend_payload_rejected(page) -> None:
     ],
 )
 def test_transport_error_types(exception, error) -> None:
-    def handler(_: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return version_response()
         raise exception
 
     with pytest.raises(error):
@@ -162,7 +174,12 @@ def test_transport_error_types(exception, error) -> None:
 
 
 def test_status_error_and_health_failure() -> None:
-    adapter = provider_with(lambda _: httpx.Response(503, text="starting"))
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return version_response()
+        return httpx.Response(503, text="starting")
+
+    adapter = provider_with(handler)
     assert adapter.health().healthy is False
     with pytest.raises(ProviderExecutionError):
         adapter.execute(
@@ -180,7 +197,31 @@ def test_invalid_parameters_rejected_before_request() -> None:
             media_type="image/png",
             parameters={"min_long": 3000, "max_long": 2000},
         )
+    with pytest.raises(ProviderExecutionError, match="parameters"):
+        adapter.execute(
+            "document.structure.extract",
+            b"image",
+            filename="a.png",
+            media_type="image/png",
+            parameters={"batch_size": 33},
+        )
     with pytest.raises(ProviderExecutionError, match="raster"):
         adapter.execute(
             "document.structure.extract", b"pdf", filename="a.pdf", media_type="application/pdf"
         )
+
+
+def test_batch_size_limit_is_accepted() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return version_response()
+        assert b'"batch_size": 32' in request.content
+        return httpx.Response(200, json=PAGE)
+
+    provider_with(handler).execute(
+        "document.structure.extract",
+        b"image",
+        filename="a.png",
+        media_type="image/png",
+        parameters={"batch_size": 32},
+    )

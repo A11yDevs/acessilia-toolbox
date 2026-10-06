@@ -31,7 +31,8 @@ The backend must implement:
   unavailable, cached output is not reused; inference without a reported model
   revision is rejected.
 - `POST /predict`: multipart `file` plus a JSON-encoded `parameters` form field
-  containing `min_long`, `max_long`, `batch_size`. Return one page:
+  containing `min_long`, `max_long` and `batch_size` (1–32). The backend should
+  validate these values before starting inference. Return one page:
 
 ```json
 {

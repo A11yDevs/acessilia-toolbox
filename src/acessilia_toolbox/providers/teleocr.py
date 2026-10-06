@@ -25,7 +25,7 @@ from acessilia_toolbox.providers.teleocr_document import TeleOCRDocument
 class TeleOCRParameters(BaseModel):
     min_long: int = Field(default=1600, ge=1, le=4096)
     max_long: int = Field(default=2400, ge=1, le=4096)
-    batch_size: int = Field(default=8, ge=1, le=8)
+    batch_size: int = Field(default=8, ge=1, le=32)
 
     @model_validator(mode="after")
     def ordered_sizes(self) -> TeleOCRParameters:
@@ -130,6 +130,7 @@ class TeleOCRProvider:
         start = perf_counter()
         try:
             with self._client() as client:
+                version = self._version(client)
                 response = client.post(
                     "/predict",
                     files={"file": (filename, payload, media_type)},
@@ -137,7 +138,6 @@ class TeleOCRProvider:
                 )
                 response.raise_for_status()
                 document = TeleOCRDocument(response.json())
-                version = self._version(client)
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(
                 "teleocr inference timed out", provider=self.descriptor.id

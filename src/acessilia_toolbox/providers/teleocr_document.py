@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
 
@@ -102,7 +103,12 @@ class TeleOCRDocument:
             )
             self._items.append((item, 1 if item.label == "heading" else 0))
 
-    def iterate_items(self, **_: Any) -> Any:
+    def iterate_items(
+        self,
+        with_groups: bool = True,
+        traverse_pictures: bool = True,
+        **_: Any,
+    ) -> Iterator[tuple[Any, int]]:
         return iter(self._items)
 
     def num_pages(self) -> int:
