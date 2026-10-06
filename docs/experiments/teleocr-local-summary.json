@@ -1,0 +1,481 @@
+{
+  "date_local": "2026-10-03",
+  "status": "Completed 120-page development and 60-page held-out-book local runs; expanded 240-page validation pending.",
+  "definition": "Overall is a derived mean per-page available text/reading-order/TEDS score. Formula edit distance is excluded without CDM. No leaderboard submission.",
+  "dataset": {
+    "repository": "2077AIDataFoundation/DrDocBench",
+    "revision": "7a2bc3882dff68e883fb55d10d4df22865ce2b07"
+  },
+  "inference": {
+    "model_repository": "StarDoc-AI/TeleOCR",
+    "model_revision": "e92585356c0d0b7b7a65938f3da035c6593cc9a6",
+    "source_commit": "1e71f4fe792d12bbb86d2671c5ed6f3a1499b27d",
+    "backend": "transformers",
+    "dtype": "bfloat16",
+    "min_long": 1600,
+    "max_long": 2400,
+    "batch_size": 8,
+    "oom_retries": [
+      3,
+      1
+    ],
+    "pages_per_call": 1
+  },
+  "held_out_books": {
+    "pages_requested": 60,
+    "books": 16,
+    "books_overlapping_development": 0,
+    "sampling_seed": 3102026,
+    "summaries": {
+      "base": {
+        "overall": 73.12757285620998,
+        "text": 73.28869138618607,
+        "reading_order": 72.96645432623389,
+        "teds": null,
+        "formula_1_minus_edit": null,
+        "cdm": null,
+        "n_overall": 59,
+        "n_text": 59,
+        "n_reading_order": 59,
+        "n_teds": 0,
+        "n_formula_1_minus_edit": 0,
+        "n_cdm": 0
+      },
+      "teleocr": {
+        "overall": 78.02895461240689,
+        "text": 76.27428826419747,
+        "reading_order": 79.78362096061629,
+        "teds": null,
+        "formula_1_minus_edit": null,
+        "cdm": null,
+        "n_overall": 59,
+        "n_text": 59,
+        "n_reading_order": 59,
+        "n_teds": 0,
+        "n_formula_1_minus_edit": 0,
+        "n_cdm": 0
+      },
+      "pre": {
+        "overall": 81.0993173768655,
+        "text": 79.46236380656639,
+        "reading_order": 82.7362709471646,
+        "teds": null,
+        "formula_1_minus_edit": null,
+        "cdm": null,
+        "n_overall": 59,
+        "n_text": 59,
+        "n_reading_order": 59,
+        "n_teds": 0,
+        "n_formula_1_minus_edit": 0,
+        "n_cdm": 0
+      },
+      "pos": {
+        "overall": 77.96127820869543,
+        "text": 76.50236896577135,
+        "reading_order": 79.42018745161948,
+        "teds": null,
+        "formula_1_minus_edit": null,
+        "cdm": null,
+        "n_overall": 59,
+        "n_text": 59,
+        "n_reading_order": 59,
+        "n_teds": 0,
+        "n_formula_1_minus_edit": 0,
+        "n_cdm": 0
+      },
+      "docling_teleocr": {
+        "overall": 83.15209414174085,
+        "text": 83.64972997919654,
+        "reading_order": 82.65445830428514,
+        "teds": null,
+        "formula_1_minus_edit": null,
+        "cdm": null,
+        "n_overall": 59,
+        "n_text": 59,
+        "n_reading_order": 59,
+        "n_teds": 0,
+        "n_formula_1_minus_edit": 0,
+        "n_cdm": 0
+      },
+      "docling_teleocr_formulas": {
+        "overall": 83.15209414174085,
+        "text": 83.64972997919654,
+        "reading_order": 82.65445830428514,
+        "teds": null,
+        "formula_1_minus_edit": null,
+        "cdm": null,
+        "n_overall": 59,
+        "n_text": 59,
+        "n_reading_order": 59,
+        "n_teds": 0,
+        "n_formula_1_minus_edit": 0,
+        "n_cdm": 0
+      }
+    },
+    "raw_teleocr": {
+      "overall": 70.02166603569525,
+      "text": 76.272648129444,
+      "reading_order": 63.77068394194647,
+      "teds": null,
+      "formula_1_minus_edit": null,
+      "cdm": null,
+      "n_overall": 59,
+      "n_text": 59,
+      "n_reading_order": 59,
+      "n_teds": 0,
+      "n_formula_1_minus_edit": 0,
+      "n_cdm": 0
+    },
+    "paired": {
+      "teleocr": {
+        "vs_base": {
+          "overall": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 73.12757285620997,
+            "mean_b": 78.02895461240688,
+            "delta": 4.901381756196903,
+            "ci95_by_document": [
+              -9.954265370133385,
+              22.592035864582833
+            ],
+            "wins": 31,
+            "losses": 23,
+            "ties": 5
+          },
+          "text": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 73.28869138618607,
+            "mean_b": 76.27428826419747,
+            "delta": 2.9855968780113935,
+            "ci95_by_document": [
+              -14.621380446583009,
+              22.99221950984701
+            ],
+            "wins": 35,
+            "losses": 19,
+            "ties": 5
+          },
+          "reading_order": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 72.96645432623386,
+            "mean_b": 79.78362096061629,
+            "delta": 6.817166634382409,
+            "ci95_by_document": [
+              -7.396620029612205,
+              23.337579284587402
+            ],
+            "wins": 17,
+            "losses": 11,
+            "ties": 31
+          }
+        }
+      },
+      "docling_teleocr": {
+        "vs_base": {
+          "overall": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 73.12757285620997,
+            "mean_b": 83.15209414174083,
+            "delta": 10.024521285530867,
+            "ci95_by_document": [
+              -0.2728415058602818,
+              22.37297836404134
+            ],
+            "wins": 28,
+            "losses": 23,
+            "ties": 8
+          },
+          "text": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 73.28869138618607,
+            "mean_b": 83.64972997919652,
+            "delta": 10.361038593010472,
+            "ci95_by_document": [
+              -4.093349907545615,
+              25.800066323591455
+            ],
+            "wins": 29,
+            "losses": 21,
+            "ties": 9
+          },
+          "reading_order": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 72.96645432623386,
+            "mean_b": 82.65445830428514,
+            "delta": 9.688003978051258,
+            "ci95_by_document": [
+              1.31685518782293,
+              19.591424140277585
+            ],
+            "wins": 18,
+            "losses": 5,
+            "ties": 36
+          }
+        },
+        "vs_teleocr": {
+          "overall": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 78.02895461240688,
+            "mean_b": 83.15209414174083,
+            "delta": 5.123139529333962,
+            "ci95_by_document": [
+              -1.828454006389673,
+              13.208016973730059
+            ],
+            "wins": 25,
+            "losses": 27,
+            "ties": 7
+          }
+        }
+      },
+      "pre": {
+        "vs_base": {
+          "overall": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 73.12757285620997,
+            "mean_b": 81.09931737686547,
+            "delta": 7.971744520655513,
+            "ci95_by_document": [
+              -5.022900271958222,
+              24.14597471119721
+            ],
+            "wins": 26,
+            "losses": 18,
+            "ties": 15
+          },
+          "text": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 73.28869138618607,
+            "mean_b": 79.4623638065664,
+            "delta": 6.17367242038032,
+            "ci95_by_document": [
+              -9.966036811135055,
+              24.500510020160483
+            ],
+            "wins": 30,
+            "losses": 14,
+            "ties": 15
+          },
+          "reading_order": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 72.96645432623386,
+            "mean_b": 82.7362709471646,
+            "delta": 9.769816620930701,
+            "ci95_by_document": [
+              -2.145803270803271,
+              24.68611551549637
+            ],
+            "wins": 15,
+            "losses": 7,
+            "ties": 37
+          }
+        },
+        "vs_teleocr": {
+          "overall": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 78.02895461240688,
+            "mean_b": 81.09931737686547,
+            "delta": 3.0703627644586082,
+            "ci95_by_document": [
+              -0.9084996698099022,
+              10.02171375952662
+            ],
+            "wins": 5,
+            "losses": 5,
+            "ties": 49
+          }
+        }
+      },
+      "pos": {
+        "vs_base": {
+          "overall": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 73.12757285620997,
+            "mean_b": 77.9612782086954,
+            "delta": 4.833705352485433,
+            "ci95_by_document": [
+              -8.191337913285073,
+              19.665744055180813
+            ],
+            "wins": 27,
+            "losses": 14,
+            "ties": 18
+          },
+          "text": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 73.28869138618607,
+            "mean_b": 76.50236896577137,
+            "delta": 3.2136775795852768,
+            "ci95_by_document": [
+              -12.338658711381628,
+              19.985189963536357
+            ],
+            "wins": 29,
+            "losses": 12,
+            "ties": 18
+          },
+          "reading_order": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 72.96645432623386,
+            "mean_b": 79.42018745161947,
+            "delta": 6.4537331253855905,
+            "ci95_by_document": [
+              -5.264218703760446,
+              19.8241341991342
+            ],
+            "wins": 13,
+            "losses": 8,
+            "ties": 38
+          }
+        },
+        "vs_teleocr": {
+          "overall": {
+            "n": 59,
+            "documents": 16,
+            "mean_a": 78.02895461240688,
+            "mean_b": 77.9612782086954,
+            "delta": -0.06767640371146871,
+            "ci95_by_document": [
+              -7.687658243867335,
+              5.7546457770607145
+            ],
+            "wins": 9,
+            "losses": 4,
+            "ties": 46
+          }
+        }
+      }
+    },
+    "bootstrap": "5000 whole-book resamples; tie tolerance 0.05 point; exploratory multiple alternatives.",
+    "limits": "No annotated tables/formulas. Books absent from development; unknown overlap with model training data."
+  },
+  "development": {
+    "pages_requested": 120,
+    "summaries": {
+      "base": {
+        "overall": 72.27269469732472,
+        "text": 75.77252820745348,
+        "reading_order": 69.88678515768865,
+        "teds": 69.11172574653223,
+        "formula_1_minus_edit": 3.037555702960747,
+        "cdm": null,
+        "n_overall": 119,
+        "n_text": 119,
+        "n_reading_order": 113,
+        "n_teds": 32,
+        "n_formula_1_minus_edit": 21,
+        "n_cdm": 0
+      },
+      "teleocr": {
+        "overall": 79.30098622548296,
+        "text": 82.34050578951442,
+        "reading_order": 77.23856060344508,
+        "teds": 76.85640900849084,
+        "formula_1_minus_edit": 21.160226416625186,
+        "cdm": null,
+        "n_overall": 119,
+        "n_text": 119,
+        "n_reading_order": 113,
+        "n_teds": 32,
+        "n_formula_1_minus_edit": 20,
+        "n_cdm": 0
+      },
+      "docling_teleocr": {
+        "overall": 79.99922253532688,
+        "text": 82.41605219522842,
+        "reading_order": 77.9741811216795,
+        "teds": 76.85640900849084,
+        "formula_1_minus_edit": 7.31610377492806,
+        "cdm": null,
+        "n_overall": 119,
+        "n_text": 119,
+        "n_reading_order": 113,
+        "n_teds": 32,
+        "n_formula_1_minus_edit": 21,
+        "n_cdm": 0
+      },
+      "docling_teleocr_formulas": {
+        "overall": 80.00900324121882,
+        "text": 82.44865612005484,
+        "reading_order": 77.94257555910049,
+        "teds": 76.85640900849084,
+        "formula_1_minus_edit": 21.13025313881174,
+        "cdm": null,
+        "n_overall": 119,
+        "n_text": 119,
+        "n_reading_order": 113,
+        "n_teds": 32,
+        "n_formula_1_minus_edit": 20,
+        "n_cdm": 0
+      }
+    },
+    "paired_formula": {
+      "docling_teleocr": {
+        "n": 20,
+        "documents": 9,
+        "mean_a": 21.160226416625186,
+        "mean_b": 7.681908963674464,
+        "delta": -13.478317452950725,
+        "ci95_by_document": [
+          -28.580544197052905,
+          -0.3980578222291051
+        ],
+        "wins": 0,
+        "losses": 9,
+        "ties": 11
+      },
+      "docling_teleocr_formulas": {
+        "n": 20,
+        "documents": 9,
+        "mean_a": 21.160226416625186,
+        "mean_b": 21.13025313881174,
+        "delta": -0.029973277813450005,
+        "ci95_by_document": [
+          -0.33247533247533173,
+          0.21598272138229024
+        ],
+        "wins": 1,
+        "losses": 1,
+        "ties": 18
+      }
+    },
+    "limits": "Previously explored development data; prediction-dependent table coverage makes Overall rankings across providers confounded."
+  },
+  "frozen_selector_sha256": {
+    "modelo_congelado.json": "56f40372833dbaeabfeab3e7350fca105b2ecd06af910847d8d86e8ed60e84ca",
+    "modelo_pre_congelado.json": "53f9dc942e1140838e4c3f11fc1d57ea9a734bd25116f83577707f892f8f3213"
+  },
+  "source_artifact_sha256": {
+    "novo_resultados.json": "d8e5a7c8b43176df84c6a13f05be2b44afef405d645ccba0284f947d41f12d5b",
+    "dev120_fusao_comparacoes.json": "fd5a6e5d6f95fc19b77167a037266a3a91911e7be2a2e75c2190cefa3ff694dc"
+  },
+  "expanded_protocol": {
+    "status": "pending",
+    "drdocbench_pages": 120,
+    "drdocbench_book_holdout": false,
+    "omnidocbench_pages": 120,
+    "omnidocbench_repository": "opendatalab/OmniDocBench",
+    "omnidocbench_revision": "aa1ee96d106dbe53d0ae59474d75c6e6d9b53fec",
+    "english_strata": {
+      "table": 40,
+      "formula_without_table": 40,
+      "other": 40
+    },
+    "sampling_seed": 3102027,
+    "selectors_refitted": false
+  }
+}

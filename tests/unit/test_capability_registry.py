@@ -125,6 +125,7 @@ def test_shipped_capability_manifests_are_valid() -> None:
         "docling",
         "mineru",
         "nougat",
+        "teleocr",
     ]
 
 

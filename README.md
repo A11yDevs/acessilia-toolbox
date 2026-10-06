@@ -286,6 +286,8 @@ pages: 1; elements: 7; obligations: 0
 | [Capability Model](docs/capability-model.md) | Contracts, manifests, interchangeability |
 | [PDDL Integration](docs/pddl.md) | Planning semantics |
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
+| [TeleOCR Adapter](docs/teleocr.md) | Optional image extraction, configuration and HTTP contract |
+| [TeleOCR Evaluation](docs/teleocr-evaluation.md) | Local gains, failure cases, coverage and pending validation |
 | [Constitution](docs/constitution.md) | Design principles |
 | [Contributing](docs/contribution.md) | Workflow, PR checklist |
 | [Notebooks](docs/notebooks/) | Interactive provider tour (`docs/notebooks/provider_tour.ipynb`) |

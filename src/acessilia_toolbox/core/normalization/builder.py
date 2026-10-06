@@ -196,11 +196,14 @@ def _build_elements(document: Any, *, enable_callouts: bool = True) -> list[Mani
         page_number = provenance[0].page_number if provenance else None
         hierarchy_level = _hierarchy_level(item, element_type, tree_level)
         metadata = _safe_metadata(item, element_type=element_type)
+        source_label = getattr(item, "raw_label", None)
         elements.append(
             ManifestElement(
                 id=f"element-{reading_order:06d}",
                 type=element_type,
-                raw_label=raw_label,
+                raw_label=(
+                    source_label if isinstance(source_label, str) and source_label else raw_label
+                ),
                 reading_order=reading_order,
                 hierarchy_level=hierarchy_level,
                 text=_item_text(item, element_type),
@@ -674,6 +677,14 @@ def _confidence(item: Any) -> float | None:
 
 def _safe_metadata(item: Any, *, element_type: str | None = None) -> dict[str, Any]:
     metadata: dict[str, Any] = {"docling_class": item.__class__.__name__}
+    supplied = getattr(item, "normalization_metadata", None)
+    if isinstance(supplied, dict):
+        rotation = supplied.get("rotation_degrees")
+        if type(rotation) is int and rotation in {0, 90, 180, 270}:
+            metadata["rotation_degrees"] = rotation
+        confidence_available = supplied.get("confidence_available")
+        if isinstance(confidence_available, bool):
+            metadata["confidence_available"] = confidence_available
     content_layer = getattr(item, "content_layer", None)
     if content_layer is not None:
         metadata["content_layer"] = str(getattr(content_layer, "value", content_layer))
