@@ -2,7 +2,7 @@
 
 The local experiments support offering TeleOCR as an optional extractor. They do
 not establish a universally better provider or a reliable automatic selector.
-This PR implements the Toolbox HTTP adapter. The expanded 240-page comparison
+The optional Toolbox HTTP adapter was integrated through PR #30 on 2026-10-06. This follow-up documents the completed experiments. The expanded 240-page comparison
 is complete; live GPU service validation and external review remain pending.
 Benchmark inference was run
 locally, independently of the proposed HTTP endpoint.
@@ -109,7 +109,7 @@ GPU inference stays in a separate service; the Agentic Core chooses providers an
 fusion policies. The core gains no ML runtime dependency or automatic semantic
 routing. An example profile is provided; the default deployment is unchanged.
 
-Before merge readiness, review the service contract and validate a live endpoint,
+Before claiming live-service readiness, validate an actual endpoint,
 including inference identity/cache behavior, timeouts and failure recovery.
 
 ## Validation and remaining experiments
@@ -290,12 +290,11 @@ not a text-quality guarantee; no output was cleaned or threshold refitted here.
 
 ### Integration decision
 
-Ship/review the optional HTTP adapter separately from provider routing. The
+The integrated optional HTTP adapter remains separate from provider routing. The
 Agentic Core can explicitly choose Tele, the existing baseline, or experimental
-fusion policies. This PR does not ship the research selectors, benchmark
+fusion policies. This documentation follow-up does not ship the research selectors, benchmark
 renderers, formula monkeypatch or repetition filter. Defaults remain unchanged.
 Fresh-data follow-ups: region fallback with provenance/geometry checks, bounded
 generation with actual remote cancellation and partial checkpoints, repetition
 detection, and formula-preserving fusion with CDM. The live GPU HTTP service and
-external review remain outstanding; the PR remains a draft. Local unit/REST
-verification uses MockTransport. No merge, deployment, message or EvalAI submission.
+external review of the expanded evidence remain outstanding. The earlier 424 local unit/REST checks used adapter revision adff307 and MockTransport. Maintainer revision 98f00cd passed remote Python 3.12 CI and was merged into develop through PR #30 by a maintainer. The experiment outputs were not recalculated with that later code revision. This follow-up changes documentation only. No merge, deployment, message or EvalAI submission was performed by this experiment agent.
