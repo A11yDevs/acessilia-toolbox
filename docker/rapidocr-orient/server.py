@@ -2,7 +2,11 @@
 
 Implements two-stage page orientation detection (0°, 90°, 180°, 270°) and correction.
 Stage 1: Detect bounding boxes at 0°. If majority of boxes have H/W > 1.5, candidate 90°/270°.
-Stage 2: Evaluate OCR confidence and text score on downscaled image (<= 1024px) at 90° vs 270° (and 180°).
+Stage 2: Evaluate OCR confidence and horizontal text alignment at 90° vs 270° (and 180°).
+
+Convention:
+All reported angles (0, 90, 180, 270) represent clockwise rotation required to make the image upright.
+PIL Image.rotate(angle) rotates counter-clockwise; so rotating clockwise by `angle` is `image.rotate(360 - angle)`.
 """
 
 from __future__ import annotations
@@ -41,7 +45,6 @@ async def lifespan(app: FastAPI):
     LOG.info("Initializing RapidOCR orientation engine...")
     try:
         if RapidOCR is not None:
-            # Initialize RapidOCR with direction classifier enabled
             engine = RapidOCR()
             state["engine"] = engine
             state["model_loaded"] = True
@@ -85,6 +88,13 @@ def _downscale_if_needed(image: Image.Image, max_dim: int = 1024) -> Image.Image
     return image.resize((new_w, new_h), Image.Resampling.BILINEAR)
 
 
+def _rotate_clockwise(image: Image.Image, angle: int) -> Image.Image:
+    """Rotates image clockwise by angle degrees (0, 90, 180, 270)."""
+    if angle % 360 == 0:
+        return image
+    return image.rotate(360 - (angle % 360), expand=True)
+
+
 def _detect_orientation(engine: Any, image: Image.Image) -> tuple[int, float, str]:
     """Two-stage orientation detection algorithm.
 
@@ -98,12 +108,11 @@ def _detect_orientation(engine: Any, image: Image.Image) -> tuple[int, float, st
     # Stage 1: Run detection at 0° on downscaled image
     downscaled = _downscale_if_needed(image, max_dim=1024)
     downscaled_rgb = downscaled.convert("RGB")
-    
+
     import numpy as np
     img_np = np.array(downscaled_rgb)
 
     # RapidOCR returns: result, elapse_list
-    # result: list of [dt_boxes, rec_res, score]
     results, _ = engine(img_np)
     if not results:
         return 0, 0.5, "stage1_no_text"
@@ -126,37 +135,47 @@ def _detect_orientation(engine: Any, image: Image.Image) -> tuple[int, float, st
     mean_conf_0 = total_conf / max(1, total_boxes)
     tall_ratio = tall_boxes / max(1, total_boxes)
 
-    # If less than 40% tall boxes, assume upright (0°)
-    if tall_ratio < 0.40:
-        return 0, mean_conf_0, "stage1_upright"
+    # Compute horizontal box ratio at 0°
+    wide_boxes_0 = sum(
+        1 for item in results
+        if (max(p[0] for p in item[0]) - min(p[0] for p in item[0])) >=
+           (max(p[1] for p in item[0]) - min(p[1] for p in item[0]))
+    )
+    wide_ratio_0 = wide_boxes_0 / max(1, total_boxes)
 
-    # Stage 2: Tall boxes dominant (H/W > 1.5). Evaluate 90° vs 270° (and 180°)
-    candidates = [90, 270, 180]
+    # If less than 35% tall boxes and majority are horizontal, upright (0°)
+    if tall_ratio < 0.35 and wide_ratio_0 >= 0.50:
+        return 0, round(float(mean_conf_0), 4), "stage1_upright"
+
+    # Stage 2: Tall boxes dominant (or horizontal ratio low).
+    # Test candidate clockwise angles (90, 270, 180).
+    # Evaluate score based on horizontal box alignment and OCR confidence.
+    score_0 = mean_conf_0 * wide_ratio_0
     best_angle = 0
-    best_score = mean_conf_0
-    best_count = total_boxes
+    best_score = score_0
+
+    candidates = [90, 270, 180]
 
     for angle in candidates:
-        rotated = downscaled_rgb.rotate(angle, expand=True)
+        rotated = _rotate_clockwise(downscaled_rgb, angle)
         rot_np = np.array(rotated)
         rot_res, _ = engine(rot_np)
         if not rot_res:
             continue
         rot_count = len(rot_res)
         rot_conf = sum(float(item[2]) for item in rot_res if item[2] is not None) / max(1, rot_count)
-        # Check that boxes at this angle are actually horizontal (W > H)
         wide_boxes = sum(
             1 for item in rot_res
             if (max(p[0] for p in item[0]) - min(p[0] for p in item[0])) >=
                (max(p[1] for p in item[0]) - min(p[1] for p in item[0]))
         )
         wide_ratio = wide_boxes / max(1, rot_count)
-        composite_score = rot_conf * wide_ratio * (rot_count / max(1, total_boxes))
 
-        if composite_score > best_score:
-            best_score = composite_score
+        # In upright text, wide_ratio is close to 1.0 (horizontal text lines)
+        score_angle = rot_conf * wide_ratio
+        if score_angle > best_score:
+            best_score = score_angle
             best_angle = angle
-            best_count = rot_count
 
     return best_angle, round(float(best_score), 4), "stage2_evaluated"
 
@@ -190,13 +209,15 @@ async def orient_page(
     }
 
     if angle != 0:
-        # Rotate image to make it upright
-        rotated_img = image.rotate(angle, expand=True)
+        # Rotate image clockwise to make it upright
+        rotated_img = _rotate_clockwise(image, angle)
         response["oriented_width"] = rotated_img.size[0]
         response["oriented_height"] = rotated_img.size[1]
         if return_image:
             buf = io.BytesIO()
             save_format = orig_format if orig_format.upper() in {"PNG", "JPEG", "TIFF", "WEBP"} else "PNG"
+            if save_format.upper() == "JPEG" and rotated_img.mode in ("RGBA", "P"):
+                rotated_img = rotated_img.convert("RGB")
             rotated_img.save(buf, format=save_format)
             response["image_base64"] = base64.b64encode(buf.getvalue()).decode("ascii")
             response["media_type"] = f"image/{save_format.lower()}"
