@@ -78,6 +78,20 @@ providers:
       - image/jpeg
       - image/tiff
 
+  - id: rapidocr-orient
+    version: "1.0"
+    transport: http
+    endpoint: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
+    health_path: /health
+    timeout_seconds: 30
+    capabilities:
+      - image.page.orient
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+      - image/webp
+
   - id: docling-ocr
     version: "1.32"
     transport: http
