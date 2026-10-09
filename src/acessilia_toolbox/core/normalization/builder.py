@@ -43,6 +43,7 @@ LABEL_TO_TYPE = {
     "image": "picture",
     "formula": "formula",
     "equation": "formula",
+    "interline_equation": "formula",
     "code": "code",
     "caption": "caption",
     "footnote": "footnote",
@@ -708,7 +709,100 @@ def _safe_metadata(item: Any, *, element_type: str | None = None) -> dict[str, A
     return metadata
 
 
+def _cell_attr(cell: Any, name: str, default: Any = None) -> Any:
+    if isinstance(cell, dict):
+        return cell.get(name, default)
+    return getattr(cell, name, default)
+
+
+def _table_ast_from_docling_cells(item: Any) -> dict[str, Any] | None:
+    data = getattr(item, "data", None)
+    if data is None and isinstance(item, dict):
+        data = item.get("data")
+    if data is None:
+        return None
+
+    grid = getattr(data, "grid", None)
+    table_cells = getattr(data, "table_cells", None)
+    if grid is None and isinstance(data, dict):
+        grid = data.get("grid")
+    if table_cells is None and isinstance(data, dict):
+        table_cells = data.get("table_cells")
+
+    cells = grid or table_cells
+    if not cells or not isinstance(cells, (list, tuple)):
+        return None
+
+    # Flatten nested rows if cells is 2D
+    flat_cells: list[Any] = []
+    for c in cells:
+        if isinstance(c, (list, tuple)):
+            flat_cells.extend(c)
+        else:
+            flat_cells.append(c)
+
+    # Determine dimensions
+    max_r = 0
+    max_c = 0
+    for c in flat_cells:
+        r = _cell_attr(c, "start_row_offset_idx", 0) or 0
+        col = _cell_attr(c, "start_col_offset_idx", 0) or 0
+        r_span = _cell_attr(c, "row_span", 1) or 1
+        c_span = _cell_attr(c, "col_span", 1) or 1
+        max_r = max(max_r, r + r_span)
+        max_c = max(max_c, col + c_span)
+
+    if max_r == 0 or max_c == 0:
+        return None
+
+    grid_matrix: list[list[dict[str, Any] | None]] = [
+        [None for _ in range(max_c)] for _ in range(max_r)
+    ]
+    for c in flat_cells:
+        r = _cell_attr(c, "start_row_offset_idx", 0) or 0
+        col = _cell_attr(c, "start_col_offset_idx", 0) or 0
+        text = str(_cell_attr(c, "text", "") or "")
+        is_header = bool(_cell_attr(c, "column_header", False))
+        cell_dict: dict[str, Any] = {"text": text}
+        if is_header:
+            cell_dict["scope"] = "col"
+        r_span = _cell_attr(c, "row_span", 1) or 1
+        c_span = _cell_attr(c, "col_span", 1) or 1
+        if r_span > 1:
+            cell_dict["row_span"] = r_span
+        if c_span > 1:
+            cell_dict["col_span"] = c_span
+        if 0 <= r < max_r and 0 <= col < max_c:
+            grid_matrix[r][col] = cell_dict
+
+    header_rows: list[dict[str, Any]] = []
+    body_rows: list[dict[str, Any]] = []
+
+    for r in range(max_r):
+        row_cells: list[dict[str, Any]] = []
+        for col in range(max_c):
+            cell = grid_matrix[r][col]
+            if cell is not None:
+                row_cells.append(cell)
+            else:
+                row_cells.append({"text": ""})
+
+        row_is_header = any(c.get("scope") == "col" for c in row_cells)
+        if row_is_header and not body_rows:
+            header_rows.append({"cells": row_cells})
+        else:
+            body_rows.append({"cells": row_cells})
+
+    return {"header": header_rows, "body": body_rows}
+
+
 def _extract_table_ast(item: Any) -> dict[str, Any] | None:
+    docling_ast = _table_ast_from_docling_cells(item)
+    if docling_ast is not None:
+        normalized = normalize_table_ast(docling_ast)
+        if normalized is not None:
+            return normalized
+
     raw_candidates: list[Any] = []
     for attr_name in (
         "table_ast",

@@ -18,7 +18,7 @@ from typing import Any
 TEXT_TYPES = ("text", "title", "list", "index")
 TABLE_TYPES = ("table",)
 IMAGE_TYPES = ("image",)
-FORMULA_TYPES = ("interline_equation",)
+FORMULA_TYPES = ("formula", "equation", "interline_equation")
 
 _DISCARDABLE_KEYS = frozenset(
     {"preproc_blocks", "discarded_blocks", "page_idx", "page_size"}
@@ -127,6 +127,10 @@ class _ItemProxy:
 
     @property
     def text(self) -> str:
+        if self.label in ("table",) and self.html:
+            return self.html
+        if self.label in ("formula", "equation", "interline_equation") and self.latex:
+            return f"$${self.latex}$$"
         text = self._block_text()
         return str(text) if text is not None else ""
 
@@ -137,9 +141,15 @@ class _ItemProxy:
         parts: list[str] = []
         for line in lines:
             for span in line.get("spans", []):
-                content = span.get("content") or span.get("text")
-                if content:
-                    parts.append(str(content))
+                span_type = span.get("type")
+                content = span.get("content") or span.get("text") or span.get("latex")
+                if content is not None:
+                    if span_type == "inline_equation":
+                        parts.append(f"${content}$")
+                    elif span_type in ("equation", "interline_equation"):
+                        parts.append(f"$${content}$$")
+                    else:
+                        parts.append(str(content))
         return "".join(parts) if parts else None
 
     @property

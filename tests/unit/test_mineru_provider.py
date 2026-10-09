@@ -180,10 +180,12 @@ def test_document_facade_exposes_texts_tables_formulas() -> None:
     tables = document.tables
     assert len(tables) == 1
     assert tables[0].html == "<table><tr><td>2025</td></tr></table>"
+    assert tables[0].text == "<table><tr><td>2025</td></tr></table>"
 
     formulas = document.formulas
     assert len(formulas) == 1
     assert formulas[0].latex == r"E = mc^2"
+    assert formulas[0].text == r"$$E = mc^2$$"
 
     pictures = document.pictures
     assert len(pictures) == 1
