@@ -129,6 +129,12 @@ def test_extracts_table_ast_metadata(tmp_path: Path) -> None:
     table_elements = [e for e in manifest.elements if e.type == "table"]
     assert table_elements
     assert table_elements[0].metadata
+    meta = table_elements[0].metadata
+    assert "table_ast" in meta
+    assert meta["table_has_spans"] is False
+    assert meta["table_is_complex"] is False
+    assert meta["table_max_rowspan"] == 1
+    assert meta["table_max_colspan"] == 1
 
 
 def test_table_elements_carry_a_linearization_obligation(tmp_path: Path) -> None:
@@ -214,3 +220,66 @@ def test_iterate_items_receives_a_document_shaped_object() -> None:
 
     assert isinstance(first, SimpleNamespace)
     assert level == 0
+
+
+def test_refine_reading_order_multi_column(tmp_path: Path) -> None:
+    # 2 columns layout:
+    # Col 1: (x: 50..250) Top (y: 100..150), Bottom (y: 200..250)
+    # Col 2: (x: 350..550) Top (y: 100..150), Bottom (y: 200..250)
+    # If read horizontally (y-first), order is Col1-Top, Col2-Top, Col1-Bot, Col2-Bot
+    # With refine_reading_order=True, order should be Col1-Top, Col1-Bot, Col2-Top, Col2-Bot
+    document = FakeDocument(
+        [
+            body_root(),
+            item(
+                "paragraph",
+                "#/p/1",
+                text="Col1-Top",
+                prov=[provenance(box=bbox(50, 100, 250, 150))],
+            ),
+            item(
+                "paragraph",
+                "#/p/2",
+                text="Col2-Top",
+                prov=[provenance(box=bbox(350, 100, 550, 150))],
+            ),
+            item(
+                "paragraph",
+                "#/p/3",
+                text="Col1-Bot",
+                prov=[provenance(box=bbox(50, 200, 250, 250))],
+            ),
+            item(
+                "paragraph",
+                "#/p/4",
+                text="Col2-Bot",
+                prov=[provenance(box=bbox(350, 200, 550, 250))],
+            ),
+        ],
+        width=600,
+        height=800,
+    )
+    from datetime import UTC, datetime
+
+    from acessilia_toolbox.core.normalization.builder import build_processing_manifest
+    from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+
+    extraction = ExtractionResult(
+        document=document,
+        backend="test",
+        started_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+        duration_ms=10,
+        version="1.0",
+        configuration={"extractor": "test"},
+    )
+    sample_pdf = tmp_path / "sample.pdf"
+    sample_pdf.write_bytes(b"%PDF-1.4 mock")
+    manifest = build_processing_manifest(
+        sample_pdf,
+        extraction,
+        refine_reading_order=True,
+    )
+    texts = [e.text for e in manifest.elements if e.type == "paragraph"]
+    assert texts == ["Col1-Top", "Col1-Bot", "Col2-Top", "Col2-Bot"]
+

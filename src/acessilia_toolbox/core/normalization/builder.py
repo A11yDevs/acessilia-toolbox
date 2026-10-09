@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+from acessilia_toolbox.core.normalization.latex import normalize_latex
 from acessilia_toolbox.core.normalization.models import (
     BoundingBox,
     ExtractorRun,
@@ -27,6 +28,7 @@ from acessilia_toolbox.core.normalization.models import (
     SourceDocument,
 )
 from acessilia_toolbox.core.normalization.table_ast import (
+    analyze_table_complexity,
     normalize_table_ast,
     rows_from_table_ast,
 )
@@ -130,13 +132,18 @@ def build_processing_manifest(
     extraction: ExtractionResult,
     *,
     language: str = "pt-BR",
+    refine_reading_order: bool = False,
 ) -> ProcessingManifest:
     """Build a validated structured document from a provider extraction."""
     source_path = source_path.resolve()
     digest = _sha256(source_path)
     extractor_name = str(extraction.configuration.get("extractor", "")).strip().lower()
     enable_callouts = extractor_name != "pymupdf"
-    elements = _build_elements(extraction.document, enable_callouts=enable_callouts)
+    elements = _build_elements(
+        extraction.document,
+        enable_callouts=enable_callouts,
+        refine_reading_order=refine_reading_order,
+    )
     pages = _build_pages(extraction.document, elements)
     title = _infer_title(source_path, elements)
     observations, obligations = _derive_processing_needs(elements)
@@ -182,7 +189,12 @@ def build_processing_manifest(
     )
 
 
-def _build_elements(document: Any, *, enable_callouts: bool = True) -> list[ManifestElement]:
+def _build_elements(
+    document: Any,
+    *,
+    enable_callouts: bool = True,
+    refine_reading_order: bool = False,
+) -> list[ManifestElement]:
     """Build the ManifestElement list from the provider document."""
     elements: list[ManifestElement] = []
     try:
@@ -226,6 +238,8 @@ def _build_elements(document: Any, *, enable_callouts: bool = True) -> list[Mani
             element.parent_id = by_source_ref.get(element.parent_ref)
     if enable_callouts:
         _normalize_callout_groups(elements)
+    if refine_reading_order:
+        elements = _refine_elements_reading_order(elements)
     return elements
 
 
@@ -438,19 +452,119 @@ def _is_known_callout_title(text: str) -> bool:
     return _normalize_text_key(text) in KNOWN_CALLOUT_TITLES
 
 
-def _is_known_callout_body_candidate(
-    element: ManifestElement,
-    main_left: float,
-    main_right: float,
-    indent_threshold: float,
-) -> bool:
-    bbox = _element_bbox(element)
-    if bbox is None:
-        return False
-    left, _top, right, _bottom = bbox
-    if left < main_left + indent_threshold:
-        return False
-    return right <= main_right + 10
+def _refine_page_reading_order(page_elements: list[ManifestElement]) -> list[ManifestElement]:
+    """Refine reading order of a single page using column projection and marginal isolation.
+
+    1. Headers (page_header) are isolated to the beginning.
+    2. Footers (page_footer) are isolated to the end.
+    3. Body elements are partitioned into vertical columns based on horizontal gutters.
+       Within each column, elements are ordered vertically (top-to-bottom).
+    """
+    if len(page_elements) <= 2:
+        return page_elements
+
+    headers: list[ManifestElement] = []
+    footers: list[ManifestElement] = []
+    body: list[ManifestElement] = []
+
+    for el in page_elements:
+        if el.type == "page_header":
+            headers.append(el)
+        elif el.type == "page_footer":
+            footers.append(el)
+        else:
+            body.append(el)
+
+    # Sort headers and footers top-to-bottom
+    def _top_key(el: ManifestElement) -> float:
+        b = _element_bbox(el)
+        return b[1] if b else 0.0
+
+    headers.sort(key=_top_key)
+    footers.sort(key=_top_key)
+
+    if not body:
+        return headers + footers
+
+    # Check if multi-column partition is viable
+    bboxes = [_element_bbox(el) for el in body]
+    valid_elements = [el for el, b in zip(body, bboxes, strict=False) if b is not None]
+    if len(valid_elements) < 3:
+        # Not enough elements to reliably detect columns; sort top-to-bottom
+        body.sort(key=_top_key)
+        return headers + body + footers
+
+    valid_boxes: list[tuple[float, float, float, float]] = [
+        box for el in valid_elements if (box := _element_bbox(el)) is not None
+    ]
+    if len(valid_boxes) < 3:
+        body.sort(key=_top_key)
+        return headers + body + footers
+
+    page_min_x = min(b[0] for b in valid_boxes)
+    page_max_x = max(b[2] for b in valid_boxes)
+    page_width = page_max_x - page_min_x
+
+    if page_width <= 50:
+        body.sort(key=_top_key)
+        return headers + body + footers
+
+    # Find elements that clearly fall into multi-column layouts
+    # Check if elements cluster into distinct horizontal columns
+    span_widths = [(b[2] - b[0]) for b in valid_boxes]
+    median_width = sorted(span_widths)[len(span_widths) // 2]
+
+    # Multi-column condition: median element width < 55% of page content width
+    if median_width < 0.55 * page_width:
+        # Group into columns by horizontal position
+        # Divide into left / center / right or determine column bounds
+        def _col_and_top_key(el: ManifestElement) -> tuple[int, float]:
+            b = _element_bbox(el)
+            if b is None:
+                return (0, 0.0)
+            mid_x = (b[0] + b[2]) / 2
+            # 2 or 3 column partition
+            if median_width < 0.35 * page_width:
+                # Likely 3 columns
+                col_w = page_width / 3
+                col_idx = min(2, max(0, int((mid_x - page_min_x) / col_w)))
+            else:
+                # Likely 2 columns
+                col_w = page_width / 2
+                col_idx = min(1, max(0, int((mid_x - page_min_x) / col_w)))
+            return (col_idx, b[1])
+
+        body.sort(key=_col_and_top_key)
+    else:
+        body.sort(key=_top_key)
+
+    return headers + body + footers
+
+
+def _refine_elements_reading_order(elements: list[ManifestElement]) -> list[ManifestElement]:
+    """Refine reading order across all pages."""
+    by_page: dict[int, list[ManifestElement]] = {}
+    no_page: list[ManifestElement] = []
+
+    for el in elements:
+        if el.page_number is not None:
+            by_page.setdefault(el.page_number, []).append(el)
+        else:
+            no_page.append(el)
+
+    refined: list[ManifestElement] = []
+    for page_num in sorted(by_page.keys()):
+        page_refined = _refine_page_reading_order(by_page[page_num])
+        refined.extend(page_refined)
+
+    refined.extend(no_page)
+
+    # Re-assign sequential reading_order
+    for order_idx, el in enumerate(refined, start=1):
+        el.reading_order = order_idx
+
+    return refined
+
 
 
 def _build_pages(document: Any, elements: list[ManifestElement]) -> list[PageDescriptor]:
@@ -598,6 +712,9 @@ def _item_text(item: Any, element_type: str) -> str | None:
         if isinstance(value, str) and value.strip():
             if element_type == "code":
                 return value.replace("\r\n", "\n").replace("\r", "\n")
+            if element_type == "formula":
+                norm = normalize_latex(value)
+                return norm if norm else value.strip()
             cleaned = value.replace("\r\n", "\n").replace("\r", "\n")
             cleaned = re.sub(
                 r"[\u0000-\u0008\u000b\u000c\u000e-\u001f]", "", cleaned
@@ -705,6 +822,11 @@ def _safe_metadata(item: Any, *, element_type: str | None = None) -> dict[str, A
                 metadata["table_row_count"] = len(rows)
                 metadata["table_column_count"] = max((len(row) for row in rows), default=0)
             metadata["table_has_header"] = bool(table_ast.get("header"))
+            complexity = analyze_table_complexity(table_ast)
+            metadata["table_has_spans"] = complexity["has_spans"]
+            metadata["table_max_rowspan"] = complexity["max_rowspan"]
+            metadata["table_max_colspan"] = complexity["max_colspan"]
+            metadata["table_is_complex"] = complexity["is_complex"]
             metadata["table_linearization_hint"] = "docling-structured"
     return metadata
 

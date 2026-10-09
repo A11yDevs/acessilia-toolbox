@@ -13,6 +13,11 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
+from acessilia_toolbox.core.normalization.latex import (
+    normalize_latex,
+    wrap_latex,
+)
+
 # Block types from mineru.utils.enum_class (inlined to avoid importing the
 # mineru package here — the toolbox must stay free of ML runtimes).
 TEXT_TYPES = ("text", "title", "list", "index")
@@ -130,7 +135,7 @@ class _ItemProxy:
         if self.label in ("table",) and self.html:
             return self.html
         if self.label in ("formula", "equation", "interline_equation") and self.latex:
-            return f"$${self.latex}$$"
+            return wrap_latex(self.latex, display=True)
         text = self._block_text()
         return str(text) if text is not None else ""
 
@@ -145,9 +150,9 @@ class _ItemProxy:
                 content = span.get("content") or span.get("text") or span.get("latex")
                 if content is not None:
                     if span_type == "inline_equation":
-                        parts.append(f"${content}$")
+                        parts.append(wrap_latex(str(content), display=False))
                     elif span_type in ("equation", "interline_equation"):
-                        parts.append(f"$${content}$$")
+                        parts.append(wrap_latex(str(content), display=True))
                     else:
                         parts.append(str(content))
         return "".join(parts) if parts else None
@@ -171,18 +176,26 @@ class _ItemProxy:
     @property
     def latex(self) -> str | None:
         """Formula LaTeX, when the block carries one."""
+        raw_val: str | None = None
         if self._block.get("latex"):
-            return str(self._block["latex"])
-        for line in self._block.get("lines", []) or []:
-            for span in line.get("spans", []) or []:
-                content = span.get("content") or span.get("latex")
-                equation_types = (
-                    "equation",
-                    "interline_equation",
-                    "inline_equation",
-                )
-                if span.get("type") in equation_types and content:
-                    return str(content)
+            raw_val = str(self._block["latex"])
+        else:
+            for line in self._block.get("lines", []) or []:
+                for span in line.get("spans", []) or []:
+                    content = span.get("content") or span.get("latex")
+                    equation_types = (
+                        "equation",
+                        "interline_equation",
+                        "inline_equation",
+                    )
+                    if span.get("type") in equation_types and content:
+                        raw_val = str(content)
+                        break
+                if raw_val is not None:
+                    break
+        if raw_val is not None:
+            norm = normalize_latex(raw_val)
+            return norm if norm else raw_val
         return None
 
     @property

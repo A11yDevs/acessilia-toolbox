@@ -141,6 +141,61 @@ def split_header_and_body(
     return header, body, footer
 
 
+def analyze_table_complexity(table_ast: Any) -> dict[str, Any]:
+    """Analyze a table_ast and return structural complexity metrics.
+
+    Calculates:
+      - has_spans: whether any cell has rowspan > 1 or colspan > 1
+      - max_rowspan: maximum row span across all cells
+      - max_colspan: maximum col span across all cells
+      - spanned_cell_count: count of cells with span > 1
+      - is_complex: True if has_spans is True or multiple multi-span cells exist
+    """
+    normalized = normalize_table_ast(table_ast)
+    if normalized is None:
+        return {
+            "has_spans": False,
+            "max_rowspan": 1,
+            "max_colspan": 1,
+            "spanned_cell_count": 0,
+            "is_complex": False,
+        }
+
+    max_rowspan = 1
+    max_colspan = 1
+    spanned_count = 0
+
+    for section_name in ("header", "body", "footer"):
+        section = normalized.get(section_name)
+        if not isinstance(section, list):
+            continue
+        for row in section:
+            if not isinstance(row, dict):
+                continue
+            for cell in row.get("cells", []) or []:
+                if not isinstance(cell, dict):
+                    continue
+                r_span = int(cell.get("rowspan") or 1)
+                c_span = int(cell.get("colspan") or 1)
+                if r_span > 1:
+                    max_rowspan = max(max_rowspan, r_span)
+                if c_span > 1:
+                    max_colspan = max(max_colspan, c_span)
+                if r_span > 1 or c_span > 1:
+                    spanned_count += 1
+
+    has_spans = (max_rowspan > 1 or max_colspan > 1)
+    is_complex = has_spans or (spanned_count > 0)
+
+    return {
+        "has_spans": has_spans,
+        "max_rowspan": max_rowspan,
+        "max_colspan": max_colspan,
+        "spanned_cell_count": spanned_count,
+        "is_complex": is_complex,
+    }
+
+
 def linearize_table_for_text(block: dict[str, Any]) -> list[str]:
     """Convert a table block into linearized text rows."""
     table_ast = table_ast_from_block(block)
