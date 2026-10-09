@@ -140,11 +140,13 @@ class _ItemProxy:
         return str(text) if text is not None else ""
 
     def _block_text(self) -> Any:
-        if "text" in self._block:
-            return self._block["text"]
         lines = self._block.get("lines") or []
-        parts: list[str] = []
+        if not lines:
+            val = self._block.get("text")
+            return str(val) if val is not None else None
+        out = ""
         for line in lines:
+            parts: list[str] = []
             for span in line.get("spans", []):
                 span_type = span.get("type")
                 content = span.get("content") or span.get("text") or span.get("latex")
@@ -155,7 +157,16 @@ class _ItemProxy:
                         parts.append(wrap_latex(str(content), display=True))
                     else:
                         parts.append(str(content))
-        return "".join(parts) if parts else None
+            piece = "".join(parts).strip()
+            if not piece:
+                continue
+            if not out:
+                out = piece
+            elif out.endswith("-") and piece[:1].islower():
+                out = out[:-1] + piece
+            else:
+                out += " " + piece
+        return out or None
 
     @property
     def html(self) -> str | None:

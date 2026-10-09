@@ -350,3 +350,39 @@ def test_ocr_provider_flattens_text_items() -> None:
     assert "Relatório Anual" in extraction.configuration["full_text"]
     assert extraction.configuration["language"] == "ch"
     assert extraction.configuration["backend"] == "mineru-ocr"
+
+
+def test_document_facade_multiline_text_spacing_and_hyphenation() -> None:
+    from acessilia_toolbox.providers.mineru_document import MineruDocument
+
+    raw = {
+        "_backend": "pipeline",
+        "pdf_info": [
+            {
+                "page_idx": 0,
+                "page_size": [595, 842],
+                "preproc_blocks": [
+                    {
+                        "type": "text",
+                        "bbox": [50.0, 50.0, 500.0, 100.0],
+                        "lines": [
+                            {"spans": [{"type": "text", "content": "multilateral"}]},
+                            {"spans": [{"type": "text", "content": "trade talks"}]},
+                        ],
+                    },
+                    {
+                        "type": "text",
+                        "bbox": [50.0, 110.0, 500.0, 160.0],
+                        "lines": [
+                            {"spans": [{"type": "text", "content": "do-"}]},
+                            {"spans": [{"type": "text", "content": "mesticdemand"}]},
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+    doc = MineruDocument(raw)
+    assert doc.texts[0].text == "multilateral trade talks"
+    assert doc.texts[1].text == "domesticdemand"
+
