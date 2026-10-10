@@ -24,6 +24,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes, fingerprint_parameters
 from acessilia_toolbox.core.normalization import build_processing_manifest
+from acessilia_toolbox.core.preprocessing import detect_and_orient_image, is_supported_image
 from acessilia_toolbox.core.provenance import ExecutionProvenance
 from acessilia_toolbox.core.provider import (
     ProviderAdapter,
@@ -100,9 +101,22 @@ class CapabilityExecutor:
             if cached is not None:
                 return _restore(cached, cache_key)
 
+        execution_payload = payload
+        auto_rotate = bool(parameters and parameters.get("auto_rotate", False))
+        if auto_rotate and is_supported_image(media_type):
+            orient_adapter = None
+            try:
+                orient_desc = self._providers.resolve("image.page.orient")
+                orient_adapter = self._adapter_factory(orient_desc)
+            except Exception:
+                pass
+            execution_payload, _orient_res = detect_and_orient_image(
+                payload, media_type=media_type, orient_provider=orient_adapter
+            )
+
         extraction = adapter.execute(
             manifest.id,
-            payload,
+            execution_payload,
             filename=filename,
             media_type=media_type,
             parameters=parameters,
