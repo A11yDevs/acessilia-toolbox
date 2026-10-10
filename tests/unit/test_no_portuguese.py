@@ -128,7 +128,7 @@ def test_no_portuguese_in_code(project_files: list[Path]) -> None:
             continue
 
         rel = filepath.relative_to(PROJECT_ROOT).as_posix()
-        if rel in EXEMPT_FILES:
+        if rel in EXEMPT_FILES or rel.endswith(".pt-br.md"):
             continue
         exempt_lines = _EXEMPT_BY_FILE.get(rel, set())
 
