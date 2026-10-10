@@ -1,4 +1,4 @@
-﻿# RapidOCR Page Orientation Provider
+# RapidOCR Page Orientation Provider
 
 The `image.page.orient` capability detects the natural reading orientation of an image
 page (0°, 90°, 180°, 270°) and optionally returns the oriented image rotated clockwise.
@@ -11,7 +11,7 @@ via a dedicated sidecar container running RapidOCR with ONNX Runtime (`rapidocr-
 
 - **Sidecar Dockerfile**: `docker/rapidocr-orient.Dockerfile`
 - **Sidecar Service**: `docker/rapidocr-orient/server.py`
-- **Compose Definition**: `docker-compose.yml` (`rapidocr-orient:5004`)
+- **Compose Definition**: `docker-compose.yml` (`rapidocr-orient:5006`)
 - **Capability Schema**: `capabilities/image.page.orient.yaml`
 - **Provider Adapter**: `src/acessilia_toolbox/providers/rapidocr_orient.py`
 
