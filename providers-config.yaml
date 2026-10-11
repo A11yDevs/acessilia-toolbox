@@ -150,6 +150,19 @@ providers:
     media_types:
       - application/json
 
+  - id: pure-media-inspect
+    version: "1.0"
+    transport: in_process
+    capabilities:
+      - media.inspect
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/webp
+      - image/tiff
+      - image/bmp
+      - application/pdf
+
   - id: pure-accessibility
     version: "1.0"
     transport: in_process

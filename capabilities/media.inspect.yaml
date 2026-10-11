@@ -1,0 +1,37 @@
+id: media.inspect
+version: 1
+description: >-
+  Inspect binary document and image artifacts deterministically to classify media profile,
+  dimensions, format, and visual inspection requirements.
+
+input:
+  schema: artifact/binary@1
+  media_types:
+    - image/png
+    - image/jpeg
+    - image/webp
+    - image/tiff
+    - image/bmp
+    - application/pdf
+
+output:
+  schema: artifact/media-inspection@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires:
+    - document_available
+  produces:
+    - media_inspected
+    - media_profile_classified
+
+providers:
+  - id: pure-media-inspect
+    version: "1.0"

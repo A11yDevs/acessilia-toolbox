@@ -19,6 +19,7 @@ ENV GIT_COMMIT=${GIT_COMMIT} IMAGE_TAG=${IMAGE_TAG}
 # runtimes, and PyMuPDF is not a mandatory dependency.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./

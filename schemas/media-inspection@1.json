@@ -1,0 +1,90 @@
+﻿{
+  ": http://json-schema.org/draft-07/schema#,
+ : urn:a11y-devs:schema:media-inspection:1.0.0,
+ title: Media Inspection,
+ description: Deterministic inspection of media and document artifacts to determine format characteristics and route appropriate extraction pipelines.,
+ type: object,
+ additionalProperties: false,
+ required: [
+ media_type,
+ file_size_bytes,
+ is_image,
+ is_pdf,
+ page_count,
+ artifact_nature,
+ requires_visual_inspection
+ ],
+ properties: {
+ media_type: {
+ type: string,
+ description: Detected or verified MIME type of the file.
+ },
+ file_size_bytes: {
+ type: integer,
+ minimum: 0,
+ description: Total size of the artifact in bytes.
+ },
+ is_image: {
+ type: boolean,
+ description: Whether the payload is a raster or vector image.
+ },
+ is_pdf: {
+ type: boolean,
+ description: Whether the payload is a PDF document.
+ },
+ page_count: {
+ type: integer,
+ minimum: 1,
+ description: Number of pages or frames (1 for single images).
+ },
+ dimensions: {
+ type: object,
+ additionalProperties: false,
+ required: [width, height, aspect_ratio],
+ properties: {
+ width: {
+ type: integer,
+ minimum: 1,
+ description: Pixel width of the primary image or first page.
+ },
+ height: {
+ type: integer,
+ minimum: 1,
+ description: Pixel height of the primary image or first page.
+ },
+ aspect_ratio: {
+ type: number,
+ exclusiveMinimum: 0,
+ description: Ratio of width to height.
+ }
+ }
+ },
+ color_mode: {
+ type: string,
+ description: Color model (e.g. RGB, RGBA, L, CMYK) if applicable.
+ },
+ format: {
+ type: string,
+ description: Container format name (e.g. JPEG, PNG, PDF, TIFF).
+ },
+ artifact_nature: {
+ type: string,
+ enum: [
+ standalone_image,
+ scanned_page,
+ paginated_document,
+ unknown
+ ],
+ description: Classification heuristic of the artifact nature.
+ },
+ requires_visual_inspection: {
+ type: boolean,
+ description: Flag indicating if the artifact is or contains prominent visual/graphic content requiring vision inspection.
+ },
+ metadata: {
+ type: object,
+ additionalProperties: true,
+ description: Optional media-specific metadata fields.
+ }
+ }
+}
