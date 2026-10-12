@@ -1,6 +1,6 @@
 # Optional TeleOCR provider
 
-For measured gains, failure cases and pending validation, see the
+For measured gains, failure cases and remaining validation, see the
 [local evaluation report](teleocr-evaluation.md).
 
 TeleOCR is an explicitly selected alternative for `document.structure.extract`

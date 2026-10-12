@@ -2,10 +2,11 @@
 
 The local experiments support offering TeleOCR as an optional extractor. They do
 not establish a universally better provider or a reliable automatic selector.
-The optional Toolbox HTTP adapter was integrated through PR #30 on 2026-10-06. This follow-up documents the completed experiments. The expanded 240-page comparison
-is complete; live GPU service validation and external review remain pending.
-Benchmark inference was run
-locally, independently of the proposed HTTP endpoint.
+The optional Toolbox HTTP adapter was integrated through PR #30 on 2026-10-06.
+This follow-up documents the completed experiments. The expanded 240-page
+comparison is complete; live GPU service validation and external review remain
+pending. Benchmark inference was run locally, independently of the proposed HTTP
+endpoint.
 
 ## Completed evidence
 
@@ -80,7 +81,8 @@ this does not establish mathematical equivalence or full formula accuracy.
 - In the completed expansion, one short caption became 6,772 characters dominated
   by repeated tokens. The page completed after OOM retries at batches 8 and 3,
   succeeding at batch 1 in 2,150 seconds. The original output is retained; no
-  threshold or frozen selector was adjusted from this observation. Its scored Text value is 0.40; the completed expansion below records its limits.
+  threshold or frozen selector was adjusted from this observation. Its scored
+  Text value is 0.40; the completed expansion below records its limits.
 
 That last response passes schema and geometry validation. The adapter validates
 the transport contract, **not the truth of the text**. Runtime budgets, cancellation
@@ -150,8 +152,9 @@ cost accounting, dataset/model/evaluator revisions and artifact hashes.
 Sampling and selectors remained frozen; the runtime protocol was amended after
 observed failures. No held-out GT was used to choose providers or repair content.
 
-Dr: 120 additional pages across 66 known books, 115 scorable; 115 text, 111 RO,
-5 baseline/Tele table pages and 4 formula pages. These books overlap earlier runs.
+Dr: 120 additional pages across 66 known books, 65 of which contribute at least
+one scorable page; 115 scorable; 115 text, 111 RO, 5 baseline/Tele table pages
+and 4 formula pages. These books overlap earlier runs.
 GT has 16 tables on 6 pages. Baseline/Tele/hybrid component masks coincide, but
 all omit one GT table page from native TEDS; Docling has no Dr TEDS records in
 the deployed transport. Missing table predictions can be omitted rather than
@@ -287,14 +290,26 @@ text while worsening order. A repeated-caption case scores only 0.40 in Text
 despite a valid response schema; its derived Overall is 50.20 versus baseline
 52.85. The unmodified response took 2,150 seconds. A valid adapter contract is
 not a text-quality guarantee; no output was cleaned or threshold refitted here.
+The single-page runtime and repetition figures in this section are operator
+observations recorded in `runtime_failures` and `qualitative_observations` in the
+aggregate artifact; they are not derived from its scored arrays and are therefore
+outside the parsed-equality identity checks applied to the tables.
 
 ### Integration decision
 
 The integrated optional HTTP adapter remains separate from provider routing. The
 Agentic Core can explicitly choose Tele, the existing baseline, or experimental
-fusion policies. This documentation follow-up does not ship the research selectors, benchmark
-renderers, formula monkeypatch or repetition filter. Defaults remain unchanged.
+fusion policies. This documentation follow-up does not ship the research
+selectors, benchmark renderers, formula monkeypatch or repetition filter.
+Defaults remain unchanged.
 Fresh-data follow-ups: region fallback with provenance/geometry checks, bounded
 generation with actual remote cancellation and partial checkpoints, repetition
 detection, and formula-preserving fusion with CDM. The live GPU HTTP service and
-external review of the expanded evidence remain outstanding. The earlier 424 local unit/REST checks used adapter revision adff307 and MockTransport. Maintainer revision 98f00cd passed remote Python 3.12 CI and was merged into develop through PR #30 by a maintainer. The experiment outputs were not recalculated with that later code revision. This follow-up changes documentation only. No merge, deployment, message or EvalAI submission was performed by this experiment agent.
+external review of the expanded evidence remain outstanding.
+
+The earlier 424 local unit/REST checks used adapter revision adff307 and
+MockTransport. Maintainer revision 98f00cd passed remote Python 3.12 CI and was
+merged into develop through PR #30 by a maintainer. The experiment outputs were
+not recalculated with that later code revision. This follow-up changes
+documentation only. No merge, deployment, message or EvalAI submission was
+performed by this experiment agent.
