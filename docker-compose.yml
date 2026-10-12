@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        TOOLBOX_EXTRAS: api,storage,cache
+        TOOLBOX_EXTRAS: api,storage,cache,media
     image: acessilia-toolbox:local
     container_name: acessilia-toolbox
     ports:

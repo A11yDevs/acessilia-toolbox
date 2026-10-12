@@ -1,65 +1,116 @@
-﻿# Media Inspect Capability (media.inspect)
+# Media Inspect Capability (`media.inspect`)
 
-The media.inspect capability provides deterministic, in-process triage and inspection for document and image artifacts before heavy structural extraction or OCR pipelines are invoked.
+The `media.inspect` capability provides deterministic, in-process triage of
+document and image artifacts before heavy structural extraction or OCR
+pipelines are invoked.
 
 ## Overview
 
-When processing raw artifacts (e.g. standalone diagrams, maps, or scanned pages), heavy document extraction engines like Docling or MinerU may misclassify pure images as sparse documents (for example, finding only a few text characters while failing to detect any picture bounding box).
+When processing raw artifacts (standalone diagrams, maps, scanned pages), heavy
+document extraction engines such as Docling or MinerU may misclassify pure
+images as sparse documents, for example by finding a few text characters while
+failing to detect any picture bounding box.
 
-The media.inspect capability solves this by evaluating format headers, dimensions, aspect ratio, page count, and MIME types in pure Python without requiring any ML runtimes or GPU infrastructure.
+`media.inspect` answers that question without ML runtimes or GPU infrastructure.
+It reads the actual container bytes, measures real dimensions, and reports the
+page count, MIME type, and whether visual inspection is required.
 
-## Provider: pure-media-inspect
+## Provider: `pure-media-inspect`
 
-- **Transport:** in_process
-- **Engine:** Python standard library (mimetypes, io) + Pillow (PIL.Image) + PyMuPDF (optional, for PDF page metrics)
-- **Execution:** Deterministic, cacheable, sub-millisecond overhead.
+- **Transport:** in-process
+- **Engine:** Python standard library (`mimetypes`, `io`) plus Pillow, with
+  PyMuPDF used when installed for exact PDF page metrics
+- **Execution:** deterministic, cacheable, sub-millisecond overhead for images
 
-### Supported Input Media Types
+Pillow is an optional dependency. Install it with the `media` extra:
 
-- image/png
-- image/jpeg
-- image/webp
-- image/tiff
-- image/bmp
-- pplication/pdf
+```bash
+pip install "acessilia-toolbox[media]"
+```
 
-## Output Schema (rtifact/media-inspection@1)
+Without Pillow the provider reports itself unhealthy instead of guessing.
+Without PyMuPDF, PDF page counts fall back to scanning the content stream and
+`dimensions` is reported as `null` rather than as an assumed page size.
 
-The output complies with schemas/media-inspection@1.json:
+## Supported Input Media Types
 
-`json
+| Declared media type | Detection |
+|---|---|
+| `image/png` | Pillow |
+| `image/jpeg` | Pillow |
+| `image/webp` | Pillow |
+| `image/tiff` | Pillow |
+| `image/bmp` | Pillow |
+| `application/pdf` | PyMuPDF, or content-stream scan |
+
+The MIME type is derived from the container, not from the file name or the
+request's declared media type. A JPEG named `foto.png` is reported as
+`image/jpeg` with `declared_media_type: image/png`.
+
+## Output Schema
+
+The output complies with `schemas/media-inspection@1.json`:
+
+```json
 {
-  media_type: image/jpeg,
-  file_size_bytes: 1048576,
-  is_image: true,
-  is_pdf: false,
-  page_count: 1,
-  dimensions: {
-    width: 1920,
-    height: 1080,
-    aspect_ratio: 1.7778
+  "media_type": "image/jpeg",
+  "declared_media_type": "image/jpeg",
+  "file_size_bytes": 33267,
+  "is_image": true,
+  "is_pdf": false,
+  "page_count": 1,
+  "page_count_source": "pillow",
+  "dimensions": {
+    "width": 1920,
+    "height": 1080,
+    "aspect_ratio": 1.7778
   },
-  color_mode: RGB,
-  format: JPEG,
-  artifact_nature: standalone_image,
-  requires_visual_inspection: true,
-  metadata: {
-    filename: planisferio_politico.jpg
+  "dimensions_source": "pillow",
+  "color_mode": "RGB",
+  "format": "JPEG",
+  "artifact_nature": "standalone_image",
+  "requires_visual_inspection": true,
+  "metadata": {
+    "filename": "diagram.jpg"
   }
 }
-`
+```
 
-### Classification Heuristics (rtifact_nature)
+`dimensions`, `dimensions_source`, `color_mode`, and `format` are `null` when
+the artifact cannot be decoded. `page_count_source` is `pillow`, `pymupdf`,
+`content_stream_scan`, or `null` when the page count could not be verified.
 
-- standalone_image: Images that do not match standard paginated document aspect ratios (e.g. infographics, diagrams, maps, landscapes). Automatically flags equires_visual_inspection = true.
-- scanned_page: Single images matching portrait document dimensions (~A4/US Letter aspect ratio around 0.65–0.78).
-- paginated_document: Multi-page or single-page PDF documents.
-- unknown: Unrecognized or unsupported binary stream.
+## Classification Heuristics (`artifact_nature`)
+
+- `standalone_image`: an image outside the portrait document aspect band, such
+  as an infographic, diagram, map, or landscape photo. Sets
+  `requires_visual_inspection: true`.
+- `scanned_page`: an image matching the portrait document aspect band (0.65 to
+  0.78, roughly A4/US Letter) whose shorter side is at least
+  `min_dimension_px` pixels. Sets `requires_visual_inspection: false`.
+- `paginated_document`: a PDF, or a multi-frame image container.
+- `unknown`: unrecognized or unsupported byte stream.
+
+`min_dimension_px` and `scanned_page_aspect_ratio` can be supplied as request
+parameters to override the defaults (`200` pixels, `[0.65, 0.78]`). Passed
+parameters participate in cache fingerprinting.
 
 ## Usage Example
 
-`ash
-curl -X POST http://localhost:8002/v1/capabilities/media.inspect:execute \
-  -H Authorization: Bearer  \
+```bash
+curl -X POST "$TOOLBOX_URL/v1/capabilities/media.inspect:execute" \
+  -H "Authorization: Bearer $TOOLBOX_API_KEY" \
   -F 'file=@diagram.png;type=image/png'
-`
+```
+
+Override the scanned-page thresholds:
+
+```bash
+curl -X POST "$TOOLBOX_URL/v1/capabilities/media.inspect:execute" \
+  -H "Authorization: Bearer $TOOLBOX_API_KEY" \
+  -F 'file=@page.png;type=image/png' \
+  -F 'parameters={"min_dimension_px": 400}'
+```
+
+See also the [constitution](constitution.md) for the principles that keep this
+capability provider-neutral.

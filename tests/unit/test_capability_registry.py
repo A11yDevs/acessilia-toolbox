@@ -137,3 +137,47 @@ def test_shipped_manifests_never_name_a_provider_in_the_capability_id() -> None:
     for capability_id in registry.ids():
         segments = set(capability_id.split("."))
         assert not (segments & provider_names), capability_id
+
+
+def test_every_declared_output_schema_ships_with_the_capability() -> None:
+    """A local `artifact/...@N` reference must resolve to a shipped schema file.
+
+    Transport- and artifact-level schemas owned by the Agentic Core
+    (`artifact/binary@1`, `artifact/query@1`, ...) are deliberately absent, so
+    they are enumerated here rather than inferred.
+    """
+    external = {
+        "artifact/binary@1",
+        "artifact/document@1",
+        "artifact/layout-analysis@1",
+        "artifact/query@1",
+        "artifact/reference@1",
+        "artifact/dataset-item-list@1",
+        "artifact/dataset-list@1",
+        "artifact/dataset-splits@1",
+        "artifact/dataset-sync-report@1",
+    }
+    schemas_dir = PROJECT_ROOT / "schemas"
+
+    unresolved = []
+    for manifest in CapabilityRegistry.from_directory(CAPABILITIES_DIR).manifests():
+        ref = manifest.output.schema_ref
+        if ref in external:
+            continue
+        name, _, version = ref.partition("@")
+        filename = f"{name.split('/')[-1]}@{version}.json"
+        if not (schemas_dir / filename).is_file():
+            unresolved.append((manifest.id, ref))
+
+    assert not unresolved, f"output schemas without a file: {unresolved}"
+
+
+def test_media_inspect_manifest_is_wired_to_the_pure_provider() -> None:
+    registry = CapabilityRegistry.from_directory(CAPABILITIES_DIR)
+    manifest = registry.get("media.inspect")
+
+    assert manifest.output.schema_ref == "artifact/media-inspection@1"
+    assert [binding.id for binding in manifest.providers] == ["pure-media-inspect"]
+    assert "media_inspected" in manifest.semantics.produces
+    # `media.inspect` classifies a raw artifact, so it predates document parsing.
+    assert "document_available" not in manifest.semantics.requires

@@ -1,148 +1,292 @@
 """Pure-Python media inspection provider.
 
-Inspects document and image payloads deterministically using Pillow and standard headers
-to extract dimensions, page counts, MIME types, and determine whether the artifact is a
-standalone visual image or a paginated/scanned document.
+Inspects document and image payloads deterministically using PDF structure and
+image container headers to extract dimensions, page counts and detected MIME
+types, and to determine whether the artifact is a standalone visual image or a
+paginated/scanned document.
+
+Nothing is guessed: a value that cannot be measured is reported as ``null``
+alongside the mechanism that produced it, so a consumer can always tell a
+measured value from a missing one.
 """
 
 from __future__ import annotations
 
 import io
-import mimetypes
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
 
-from PIL import Image
-
+from acessilia_toolbox.core.errors import (
+    InvalidInputError,
+    ProviderExecutionError,
+    ProviderUnavailableError,
+)
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
 VERSION = "1.0.0"
 
+# Pillow is an optional dependency: the core install must keep working without
+# it, so the import is guarded and the adapter reports itself unavailable.
+Image: Any
+UnidentifiedImageError: Any
+try:
+    from PIL import Image, UnidentifiedImageError
+except ImportError:
+    Image = None
+    UnidentifiedImageError = None
+
+# PyMuPDF is optional too, but only its absence degrades PDF metrics; the
+# capability stays usable through content-stream page counting.
 fitz: Any
 try:
     import pymupdf as fitz
 except ImportError:
     fitz = None
 
+# Minimum edge length, in pixels, for an image to be considered a document page.
+# Thumbnails and icons must not be classified as scanned pages.
+MIN_SCANNED_PAGE_PX = 200
 
-def _detect_pdf_page_count_and_size(payload: bytes) -> tuple[int, tuple[int, int] | None]:
-    """Inspect PDF page count and first page dimensions without rendering."""
+# A4 and US Letter portrait pages fall between these width/height ratios.
+SCANNED_PAGE_ASPECT = (0.65, 0.78)
+
+# Container format -> MIME type. Pillow's own ``Image.MIME`` map omits formats
+# that are not built into the running binary, so the mapping is kept explicit.
+MEDIA_TYPE_BY_FORMAT = {
+    "BMP": "image/bmp",
+    "GIF": "image/gif",
+    "JPEG": "image/jpeg",
+    "PNG": "image/png",
+    "TIFF": "image/tiff",
+    "WEBP": "image/webp",
+}
+
+
+def _resolve_dimension(params: Mapping[str, Any], key: str) -> int | None:
+    """Read a positive pixel threshold from the request parameters."""
+    value = params.get(key)
+    if value is None:
+        return None
+    # Reject bools and floats: silently truncating 1.5 to 1 would accept a
+    # value the caller never asked for.
+    if isinstance(value, (bool, float)) or not isinstance(value, (int, str)):
+        raise InvalidInputError(
+            f"parameter {key!r} must be an integer, got {value!r}"
+        )
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise InvalidInputError(
+            f"parameter {key!r} must be an integer, got {value!r}"
+        ) from exc
+    if parsed < 1:
+        raise InvalidInputError(f"parameter {key!r} must be >= 1, got {parsed}")
+    return parsed
+
+
+def _resolve_aspect_ratio(params: Mapping[str, Any], key: str) -> tuple[float, float] | None:
+    """Read the scanned-page aspect-ratio window from the request parameters."""
+    value = params.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        raise InvalidInputError(
+            f"parameter {key!r} must be a [low, high] pair, got {value!r}"
+        )
+    try:
+        low, high = (float(item) for item in value)
+    except (TypeError, ValueError) as exc:
+        raise InvalidInputError(
+            f"parameter {key!r} must contain numbers, got {value!r}"
+        ) from exc
+    if not 0 < low < high:
+        raise InvalidInputError(
+            f"parameter {key!r} must satisfy 0 < low < high, got {value!r}"
+        )
+    return low, high
+
+
+def _dimensions(width: int, height: int) -> dict[str, Any]:
+    """Pixel dimensions plus the derived aspect ratio."""
+    return {
+        "width": width,
+        "height": height,
+        "aspect_ratio": round(width / height, 4),
+    }
+
+
+def _pdf_page_count_from_content(payload: bytes) -> int:
+    """Count page objects by scanning the document content stream.
+
+    Last resort: PDFs that store their page tree inside object streams — the
+    default since PDF 1.5 — report a single page.
+    """
+    counted = payload.count(b"/Type /Page") - payload.count(b"/Type /Pages")
+    return max(1, counted)
+
+
+def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, Any] | None:
+    """Inspect a PDF, using PyMuPDF when available.
+
+    Returns ``None`` when the payload carries no verifiable PDF structure, so
+    the caller reports it as unrecognized instead of claiming a page size that
+    was never measured.
+    """
+    page_count = _pdf_page_count_from_content(payload)
+    page_count_source: str | None = "content_stream_scan"
+    dimensions: dict[str, Any] | None = None
+    dimensions_source: str | None = None
+    verified = payload.startswith(b"%PDF-")
+
     if fitz is not None:
+        document = None
         try:
-            doc = fitz.open(stream=payload, filetype="pdf")
-            page_count = len(doc)
-            dims = None
-            if page_count > 0:
-                page = doc[0]
-                rect = page.rect
-                dims = (round(rect.width), round(rect.height))
-            return max(1, page_count), dims
-        except Exception:
+            document = fitz.open(stream=payload, filetype="pdf")
+            opened_pages = len(document)
+            if opened_pages > 0:
+                verified = True
+                page_count = opened_pages
+                page_count_source = "pymupdf"
+                frame = document[0].rect
+                width, height = round(frame.width), round(frame.height)
+                if width > 0 and height > 0:
+                    dimensions = _dimensions(width, height)
+                    dimensions_source = "pymupdf"
+        except fitz.FileDataError:
             pass
+        finally:
+            if document is not None:
+                document.close()
 
-    # Fallback inspection via PDF header counting
-    count = payload.count(b"/Type /Page") - payload.count(b"/Type /Pages")
-    if count <= 0:
-        count = 1
-    return count, None
+    if not verified:
+        return None
+
+    return {
+        "media_type": "application/pdf",
+        "declared_media_type": media_type or None,
+        "file_size_bytes": len(payload),
+        "is_image": False,
+        "is_pdf": True,
+        "page_count": page_count,
+        "page_count_source": page_count_source,
+        "dimensions": dimensions,
+        "dimensions_source": dimensions_source,
+        "color_mode": None,
+        "format": "PDF",
+        "artifact_nature": "paginated_document",
+        "requires_visual_inspection": False,
+        "metadata": {"filename": filename},
+    }
+
+
+def _unsupported_media(payload: bytes, filename: str, media_type: str) -> dict[str, Any]:
+    """Report an artifact whose container could not be identified."""
+    return {
+        # Nothing was detected, so the neutral type is reported and the
+        # caller's declaration is preserved separately.
+        "media_type": "application/octet-stream",
+        "declared_media_type": media_type or None,
+        "file_size_bytes": len(payload),
+        "is_image": False,
+        "is_pdf": False,
+        "page_count": 1,
+        "page_count_source": None,
+        "dimensions": None,
+        "dimensions_source": None,
+        "color_mode": None,
+        "format": None,
+        "artifact_nature": "unknown",
+        "requires_visual_inspection": False,
+        "metadata": {"filename": filename},
+    }
 
 
 def _inspect_media(
     payload: bytes,
     filename: str,
     media_type: str,
+    parameters: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Perform deterministic inspection on the media payload."""
+    params = dict(parameters or {})
     size_bytes = len(payload)
-    is_pdf = (
+    is_pdf_signal = (
         media_type == "application/pdf"
         or filename.lower().endswith(".pdf")
         or payload.startswith(b"%PDF-")
     )
+    if is_pdf_signal:
+        document = _inspect_pdf(payload, filename, media_type)
+        if document is not None:
+            return document
+        return _unsupported_media(payload, filename, media_type)
 
-    if is_pdf:
-        page_count, first_page_dims = _detect_pdf_page_count_and_size(payload)
-        dims_dict = None
-        if first_page_dims:
-            w, h = first_page_dims
-            aspect = round(w / h, 4) if h > 0 else 1.0
-            dims_dict = {
-                "width": w,
-                "height": h,
-                "aspect_ratio": aspect,
-            }
+    if Image is None:
+        raise ProviderUnavailableError(
+            "Pillow is not installed, so image payloads cannot be inspected. "
+            "Install it with: pip install 'acessilia-toolbox[media]'",
+            provider="pure-media-inspect",
+        )
 
-        return {
-            "media_type": "application/pdf",
-            "file_size_bytes": size_bytes,
-            "is_image": False,
-            "is_pdf": True,
-            "page_count": page_count,
-            "dimensions": dims_dict or {"width": 595, "height": 842, "aspect_ratio": 0.7067},
-            "format": "PDF",
-            "artifact_nature": "paginated_document",
-            "requires_visual_inspection": False,
-            "metadata": {
-                "filename": filename,
-            },
-        }
+    min_dimension = _resolve_dimension(params, "min_dimension_px")
+    if min_dimension is None:
+        min_dimension = MIN_SCANNED_PAGE_PX
+    aspect_window = _resolve_aspect_ratio(params, "scanned_page_aspect_ratio")
+    if aspect_window is None:
+        aspect_window = SCANNED_PAGE_ASPECT
 
-    # Attempt image inspection via Pillow
     try:
-        with Image.open(io.BytesIO(payload)) as img:
-            width, height = img.size
-            format_name = img.format or "UNKNOWN"
-            color_mode = img.mode
-            aspect_ratio = round(width / height, 4) if height > 0 else 1.0
+        with Image.open(io.BytesIO(payload)) as image:
+            width, height = image.size
+            if width < 1 or height < 1:
+                raise ProviderExecutionError(
+                    f"image reports invalid dimensions: {width}x{height}",
+                    provider="pure-media-inspect",
+                )
+            # Multi-frame containers (TIFF, GIF, WebP, APNG) are paginated
+            # documents; Pillow exposes the count through n_frames.
+            frame_count = max(1, int(getattr(image, "n_frames", 1)))
+            format_name = image.format or "UNKNOWN"
+            color_mode = image.mode
+            detected_type = MEDIA_TYPE_BY_FORMAT.get(
+                format_name, f"image/{format_name.lower()}"
+            )
+    except UnidentifiedImageError:
+        return _unsupported_media(payload, filename, media_type)
 
-            # Heuristics:
-            # Standard document pages (like A4 or US Letter) have aspect ratio around 0.65-0.78
-            is_standard_page_aspect = 0.65 <= aspect_ratio <= 0.78
-            nature = "scanned_page" if is_standard_page_aspect else "standalone_image"
+    aspect_ratio = round(width / height, 4)
+    is_page_sized = min(width, height) >= min_dimension
+    if frame_count > 1:
+        nature = "paginated_document"
+    elif is_page_sized and aspect_window[0] <= aspect_ratio <= aspect_window[1]:
+        nature = "scanned_page"
+    else:
+        nature = "standalone_image"
 
-            # Standalone images require visual inspection
-            requires_visual = True
-
-            guessed_type = mimetypes.guess_type(filename)[0] or f"image/{format_name.lower()}"
-
-            return {
-                "media_type": media_type if media_type.startswith("image/") else guessed_type,
-                "file_size_bytes": size_bytes,
-                "is_image": True,
-                "is_pdf": False,
-                "page_count": 1,
-                "dimensions": {
-                    "width": width,
-                    "height": height,
-                    "aspect_ratio": aspect_ratio,
-                },
-                "color_mode": color_mode,
-                "format": format_name,
-                "artifact_nature": nature,
-                "requires_visual_inspection": requires_visual,
-                "metadata": {
-                    "filename": filename,
-                },
-            }
-    except Exception:
-        # Fallback for unrecognized media
-        guessed_type = mimetypes.guess_type(filename)[0] or media_type or "application/octet-stream"
-        return {
-            "media_type": guessed_type,
-            "file_size_bytes": size_bytes,
-            "is_image": False,
-            "is_pdf": False,
-            "page_count": 1,
-            "dimensions": {"width": 1, "height": 1, "aspect_ratio": 1.0},
-            "artifact_nature": "unknown",
-            "requires_visual_inspection": False,
-            "metadata": {
-                "filename": filename,
-            },
-        }
+    return {
+        # Detected from the container, never taken from the filename or the
+        # caller's declaration.
+        "media_type": detected_type,
+        "declared_media_type": media_type or None,
+        "file_size_bytes": size_bytes,
+        "is_image": True,
+        "is_pdf": False,
+        "page_count": frame_count,
+        "page_count_source": "pillow",
+        "dimensions": _dimensions(width, height),
+        "dimensions_source": "pillow",
+        "color_mode": color_mode,
+        "format": format_name,
+        "artifact_nature": nature,
+        # Only a page-sized, single-frame, document-proportioned image is
+        # assumed to be text-recoverable; everything else may carry meaning in
+        # its graphics, so vision inspection is requested.
+        "requires_visual_inspection": nature != "scanned_page",
+        "metadata": {"filename": filename},
+    }
 
 
 class PureMediaInspectProvider:
@@ -150,6 +294,12 @@ class PureMediaInspectProvider:
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
+        if Image is None:
+            raise ProviderUnavailableError(
+                "Pillow is not installed. "
+                "Install it with: pip install 'acessilia-toolbox[media]'",
+                provider=descriptor.id,
+            )
 
     def execute(
         self,
@@ -164,7 +314,7 @@ class PureMediaInspectProvider:
         started_clock = perf_counter()
 
         params = dict(parameters or {})
-        result = _inspect_media(payload, filename, media_type)
+        result = _inspect_media(payload, filename, media_type, params)
 
         completed_at = datetime.now(UTC)
         return ExtractionResult(
@@ -192,4 +342,11 @@ class PureMediaInspectProvider:
         )
 
 
-__all__ = ["PureMediaInspectProvider", "_inspect_media"]
+__all__ = [
+    "PureMediaInspectProvider",
+    "_dimensions",
+    "_inspect_media",
+    "_inspect_pdf",
+    "_resolve_aspect_ratio",
+    "_resolve_dimension",
+]

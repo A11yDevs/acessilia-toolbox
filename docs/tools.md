@@ -14,6 +14,7 @@ roadmap candidates.
 | Tables        | table extraction inside `document.structure.extract`    | Docling (TableFormer), MinerU              | [implemented] |
 | Conversion    | `document.convert`                                      | Pandoc                                     | roadmap       |
 | Mathematics   | `math.recognize`, `math.convert`, `math.verbalize`      | docling-serve, pure-python (latex2mathml)  | [implemented] |
+| Media triage  | `media.inspect`                                         | pure-python (Pillow, in-process, optional extra) | [implemented] |
 | Music         | `music.omr`                                             | homr (in-process), Audiveris (sidecar)     | [implemented] |
 | Chemistry     | `chem.recognize`, `chem.convert`                        | docling-serve VLM (Granite Vision), pure-python mhchem | [implemented] |
 | Accessibility | `accessibility.validate`                                | pure-python checks (veraPDF: roadmap)      | [implemented] |

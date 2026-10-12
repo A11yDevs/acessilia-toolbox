@@ -27,11 +27,11 @@ execution:
 
 semantics:
   requires:
-    - document_available
+    - artifact_stored
   produces:
     - media_inspected
     - media_profile_classified
 
 providers:
   - id: pure-media-inspect
-    version: "1.0"
+    version: "1.0+"
