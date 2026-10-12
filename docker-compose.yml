@@ -166,6 +166,23 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # Lightweight page orientation detection sidecar (RapidOCR).
+  rapidocr-orient:
+    build:
+      context: .
+      dockerfile: docker/rapidocr-orient.Dockerfile
+    image: ${RAPIDOCR_ORIENT_IMAGE:-rapidocr-orient:latest}
+    container_name: rapidocr-orient
+    ports:
+      - "${RAPIDOCR_ORIENT_PORT:-5006}:5006"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5006/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
   artifact-fallback:
   docling-models:
