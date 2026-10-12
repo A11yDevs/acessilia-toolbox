@@ -18,6 +18,7 @@ toolbox.
 | [tools.md](tools.md)                                 | Candidate capabilities and providers                                |
 | [installation.md](installation.md)                   | Development and deployment guidance                                 |
 | [testing.md](testing.md)                             | Testing strategy                                                    |
+| [media-inspect.md](media-inspect.md)                 | Deterministic media triage before heavy extraction                  |
 | [contribution.md](contribution.md)                   | Contribution workflow                                               |
 | [uml/architecture.md](uml/architecture.md)           | Architecture diagrams                                               |
 | [uml/use_cases.md](uml/use_cases.md)                 | Use cases                                                           |

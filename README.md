@@ -195,6 +195,7 @@ flowchart TB
 | `pdf.split`, `pdf.render` | PyMuPDF (in-process) | ✅ |
 | `math.recognize` | docling-serve | ✅ |
 | `math.convert`, `math.verbalize` | pure-python (in-process) | ✅ |
+| `media.inspect` | pure-python (in-process, optional `media` extra) | ✅ |
 | `music.omr` | homr (in-process, optional extra), audiveris-serve (sidecar) | ✅ |
 | `chem.recognize` | docling-serve VLM (Granite Vision) | ✅ |
 | `chem.convert` | pure-python mhchem (in-process) | ✅ |

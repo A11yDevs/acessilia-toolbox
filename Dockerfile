@@ -14,11 +14,15 @@ ARG GIT_COMMIT
 ARG IMAGE_TAG
 ENV GIT_COMMIT=${GIT_COMMIT} IMAGE_TAG=${IMAGE_TAG}
 
-# System dependencies for the filesystem artifact store (poppler-utils for
-# the PDF builder). GL libraries are not required: the toolbox ships no ML
-# runtimes, and PyMuPDF is not a mandatory dependency.
+# System dependencies:
+#   poppler-utils — PDF builder for the filesystem artifact store.
+#   curl          — used by the image HEALTHCHECK below and by the compose
+#                   healthchecks, which probe /v1/health with curl.
+# GL libraries are not required: the toolbox ships no ML runtimes, and PyMuPDF
+# is not a mandatory dependency.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./
@@ -44,6 +48,10 @@ RUN if [ -n "$TOOLBOX_EXTRAS" ]; then \
 COPY . .
 EXPOSE 8002
 ENV TOOLBOX_PORT=8002
+# Mirrors the compose healthcheck so the image is self-describing when run
+# without compose.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl --fail --silent http://localhost:${TOOLBOX_PORT:-8002}/v1/health || exit 1
 CMD ["sh", "-c", "uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port ${TOOLBOX_PORT:-8002}"]
 
 # === Test image ===

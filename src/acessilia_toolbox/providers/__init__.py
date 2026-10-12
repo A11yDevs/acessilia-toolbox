@@ -13,6 +13,7 @@ from acessilia_toolbox.providers.docling_chem import DoclingChemProvider
 from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
 from acessilia_toolbox.providers.docling_math import DoclingMathProvider
 from acessilia_toolbox.providers.docling_ocr import DoclingOcrProvider
+from acessilia_toolbox.providers.media_inspect import PureMediaInspectProvider
 from acessilia_toolbox.providers.mineru import MineruProvider
 from acessilia_toolbox.providers.mineru_layout import MineruLayoutProvider
 from acessilia_toolbox.providers.mineru_ocr import MineruOcrProvider
@@ -83,6 +84,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "pure-chem": PureChemProvider,
     "pure-code": PureCodeProvider,
     "pure-math": PureMathProvider,
+    "pure-media-inspect": PureMediaInspectProvider,
     "pure-text": PureTextProvider,
     "pymupdf-pdf": PyMuPDFProvider,
     "rapid-latex-ocr": RapidLatexOcrProvider,
@@ -121,6 +123,7 @@ __all__ = [
     "PureChemProvider",
     "PureCodeProvider",
     "PureMathProvider",
+    "PureMediaInspectProvider",
     "PureTextProvider",
     "PyMuPDFProvider",
     "RapidLatexOcrProvider",
