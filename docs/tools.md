@@ -15,6 +15,7 @@ roadmap candidates.
 | Conversion    | `document.convert`                                      | Pandoc                                     | roadmap       |
 | Mathematics   | `math.recognize`, `math.convert`, `math.verbalize`      | docling-serve, pure-python (latex2mathml)  | [implemented] |
 | Music         | `music.omr`                                             | homr (in-process), Audiveris (sidecar)     | [implemented] |
+| Page layout   | `image.page.orient`                                     | RapidOCR (sidecar)                         | [implemented] |
 | Chemistry     | `chem.recognize`, `chem.convert`                        | docling-serve VLM (Granite Vision), pure-python mhchem | [implemented] |
 | Accessibility | `accessibility.validate`                                | pure-python checks (veraPDF: roadmap)      | [implemented] |
 | Artifacts     | `artifact.store`, `artifact.retrieve`                   | MinIO, S3                                  | [implemented] |
@@ -95,6 +96,25 @@ Two interchangeable providers:
 - `audiveris` — HTTP adapter for the `audiveris-serve` sidecar container
   (Java Audiveris + Tesseract behind a small REST wrapper). Configure via
   `AUDIVERIS_SERVE_URL`.
+
+## Page orientation
+
+``` text
+image.page.orient : raster page image -> detected angle, optionally upright image
+```
+
+A single provider, `rapidocr-orient`, runs RapidOCR with ONNX Runtime in a
+sidecar container (`docker/rapidocr-orient.Dockerfile`). Configure the endpoint
+with `RAPIDOCR_ORIENT_URL`.
+
+Detection combines the OCR angle classifier — which resolves the 180° case that
+horizontal geometry cannot reveal — with a comparison of how well the page reads
+at 0°, 90° and 270°.
+
+Set `parameters={"auto_rotate": true}` when extracting structure from an image to
+run this as opt-in preprocessing. The decision is recorded in
+`provenance.orientation`; if the sidecar is unavailable the extraction continues
+unrotated. See [rapidocr-orient.md](rapidocr-orient.md).
 
 ## Chemistry
 

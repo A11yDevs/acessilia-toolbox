@@ -1,12 +1,28 @@
-﻿"""Image preprocessing and rotation utilities."""
+"""Image preprocessing for page orientation.
+
+The orientation decision is made by an out-of-process provider; this module only
+declares the request/response shape and applies the returned image. Keeping the
+raster decoding in the sidecar is what lets the core package stay free of imaging
+runtimes.
+"""
 
 from __future__ import annotations
 
-import io
+import base64
+import binascii
+import logging
 from dataclasses import dataclass
 from typing import Any
 
-from PIL import Image
+LOG = logging.getLogger(__name__)
+
+SUPPORTED_IMAGE_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/tiff",
+    "image/webp",
+}
 
 
 @dataclass(frozen=True)
@@ -19,38 +35,29 @@ class OrientationResult:
     oriented_dimensions: tuple[int, int]
 
 
-def rotate_image_payload(
-    payload: bytes,
-    angle: int,
-    media_type: str = "image/png",
-) -> bytes:
-    """Rotates raster image bytes by angle degrees clockwise and returns encoded bytes."""
-    if angle % 360 == 0:
-        return payload
-
-    with Image.open(io.BytesIO(payload)) as img:
-        orig_format = img.format or "PNG"
-        # PIL rotate is counter-clockwise for positive degrees; 360 - angle rotates clockwise.
-        rotated = img.rotate(360 - (angle % 360), expand=True)
-
-        buf = io.BytesIO()
-        valid_formats = {"PNG", "JPEG", "TIFF", "WEBP"}
-        save_format = orig_format if orig_format.upper() in valid_formats else "PNG"
-        if save_format.upper() == "JPEG" and rotated.mode in ("RGBA", "P"):
-            rotated = rotated.convert("RGB")
-        rotated.save(buf, format=save_format)
-        return buf.getvalue()
-
-
 def is_supported_image(media_type: str) -> bool:
     """Returns True if the media type is a raster image supported for orientation."""
-    return media_type.lower() in {
-        "image/png",
-        "image/jpeg",
-        "image/jpg",
-        "image/tiff",
-        "image/webp",
-    }
+    return media_type.lower() in SUPPORTED_IMAGE_TYPES
+
+
+def _as_dimension(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _decode_oriented_image(document: dict[str, Any]) -> bytes | None:
+    """Decode the oriented payload the sidecar optionally returns."""
+    encoded = document.get("image_base64")
+    if not isinstance(encoded, str) or not encoded:
+        return None
+    try:
+        decoded = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError):
+        LOG.warning("orientation provider returned undecodable image payload")
+        return None
+    return decoded or None
 
 
 def detect_and_orient_image(
@@ -58,33 +65,33 @@ def detect_and_orient_image(
     media_type: str = "image/png",
     orient_provider: Any = None,
 ) -> tuple[bytes, OrientationResult]:
-    """Detect orientation and rotate image if needed.
+    """Detect the natural reading orientation and return an upright payload.
 
-    If an orient_provider is provided, calls its execute method.
+    The provider reports the clockwise angle and, when asked, the rotated image.
+    If it cannot be reached the original payload is returned unchanged so an
+    optional preprocessing step never fails an extraction.
+
     Returns:
         (oriented_payload, orientation_result)
     """
     if not is_supported_image(media_type):
         return payload, OrientationResult(
             angle=0,
-            confidence=1.0,
+            confidence=0.0,
             stage="unsupported_media_type",
             auto_rotated=False,
             original_dimensions=(0, 0),
             oriented_dimensions=(0, 0),
         )
 
-    with Image.open(io.BytesIO(payload)) as img:
-        orig_w, orig_h = img.size
-
     if orient_provider is None:
         return payload, OrientationResult(
             angle=0,
-            confidence=1.0,
+            confidence=0.0,
             stage="no_provider",
             auto_rotated=False,
-            original_dimensions=(orig_w, orig_h),
-            oriented_dimensions=(orig_w, orig_h),
+            original_dimensions=(0, 0),
+            oriented_dimensions=(0, 0),
         )
 
     try:
@@ -93,41 +100,77 @@ def detect_and_orient_image(
             payload,
             filename="page_image",
             media_type=media_type,
-            parameters={"return_image": False},
+            parameters={"return_image": True},
         )
-        data = extraction.document if isinstance(extraction.document, dict) else {}
-        angle = int(data.get("angle", 0))
-        confidence = float(data.get("confidence", 0.0))
-        stage = str(data.get("stage", "provider"))
     except Exception:
-        # Graceful fallback: do not fail if provider is temporarily unavailable
+        LOG.warning(
+            "orientation preprocessing failed; using the unrotated image",
+            exc_info=True,
+        )
         return payload, OrientationResult(
             angle=0,
             confidence=0.0,
             stage="provider_failed",
             auto_rotated=False,
-            original_dimensions=(orig_w, orig_h),
-            oriented_dimensions=(orig_w, orig_h),
+            original_dimensions=(0, 0),
+            oriented_dimensions=(0, 0),
         )
 
-    if angle != 0:
-        new_payload = rotate_image_payload(payload, angle, media_type=media_type)
-        with Image.open(io.BytesIO(new_payload)) as new_img:
-            new_w, new_h = new_img.size
-        return new_payload, OrientationResult(
-            angle=angle,
+    document = extraction.document if isinstance(extraction.document, dict) else {}
+    angle = _as_dimension(document.get("angle", 0)) % 360
+    confidence = float(document.get("confidence") or 0.0)
+    stage = str(document.get("stage", "provider"))
+    original = (
+        _as_dimension(document.get("original_width")),
+        _as_dimension(document.get("original_height")),
+    )
+
+    if angle == 0:
+        LOG.info(
+            "page orientation detected as upright (stage=%s confidence=%.4f)",
+            stage,
+            confidence,
+        )
+        return payload, OrientationResult(
+            angle=0,
             confidence=confidence,
             stage=stage,
-            auto_rotated=True,
-            original_dimensions=(orig_w, orig_h),
-            oriented_dimensions=(new_w, new_h),
+            auto_rotated=False,
+            original_dimensions=original,
+            oriented_dimensions=original,
         )
 
-    return payload, OrientationResult(
-        angle=0,
+    oriented_payload = _decode_oriented_image(document)
+    if oriented_payload is None:
+        LOG.warning(
+            "orientation provider reported angle=%s without an oriented image; "
+            "extraction continues unrotated",
+            angle,
+        )
+        return payload, OrientationResult(
+            angle=0,
+            confidence=confidence,
+            stage=f"{stage}_image_unavailable",
+            auto_rotated=False,
+            original_dimensions=original,
+            oriented_dimensions=original,
+        )
+
+    oriented = (
+        _as_dimension(document.get("oriented_width")),
+        _as_dimension(document.get("oriented_height")),
+    )
+    LOG.info(
+        "page orientation corrected by %s degrees (stage=%s confidence=%.4f)",
+        angle,
+        stage,
+        confidence,
+    )
+    return oriented_payload, OrientationResult(
+        angle=angle,
         confidence=confidence,
         stage=stage,
-        auto_rotated=False,
-        original_dimensions=(orig_w, orig_h),
-        oriented_dimensions=(orig_w, orig_h),
+        auto_rotated=True,
+        original_dimensions=original,
+        oriented_dimensions=oriented,
     )

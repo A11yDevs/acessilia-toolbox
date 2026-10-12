@@ -5,7 +5,7 @@ description: >-
   images to upright orientation.
 
 input:
-  schema: artifact/document@1
+  schema: artifact/image@1
   media_types:
     - image/png
     - image/jpeg
@@ -13,19 +13,19 @@ input:
     - image/webp
 
 output:
-  schema: artifact/document@1
+  schema: artifact/page-orientation@1
   media_types:
     - application/json
 
 execution:
-  deterministic: true
+  deterministic: false
   idempotent: true
   cacheable: true
   timeout_hint_seconds: 30
 
 semantics:
   requires:
-    - image_available
+    - image_readable
   produces:
     - page_upright
     - orientation_detected

@@ -98,6 +98,36 @@ def test_expand_env_preserves_placeholders_for_unset_variables(
     assert expand_env({"a": ["${TOOLBOX_ABSENT}"]}) == {"a": ["${TOOLBOX_ABSENT}"]}
 
 
+def test_expand_env_uses_the_inline_default_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`${VAR:-default}` keeps a provider usable without a deployment override."""
+    monkeypatch.delenv("RAPIDOCR_ORIENT_URL", raising=False)
+    assert (
+        expand_env("${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}")
+        == "http://rapidocr-orient:5006"
+    )
+
+
+def test_expand_env_prefers_the_environment_over_the_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RAPIDOCR_ORIENT_URL", "http://localhost:5006")
+    assert (
+        expand_env("${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}")
+        == "http://localhost:5006"
+    )
+
+
+def test_shipped_provider_config_has_no_unresolved_default_placeholders() -> None:
+    """A literal `${VAR:-default}` would reach httpx and raise UnsupportedProtocol."""
+    registry = ProviderRegistry.from_file(PROJECT_ROOT / "providers-config.yaml")
+    for descriptor in registry.descriptors():
+        endpoint = descriptor.endpoint
+        if endpoint is not None:
+            assert ":-" not in endpoint, descriptor.id
+
+
 def test_from_mapping_requires_a_providers_list() -> None:
     with pytest.raises(ConfigurationError):
         ProviderRegistry.from_mapping({"provider": []})

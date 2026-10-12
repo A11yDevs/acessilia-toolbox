@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:page-orientation:1.0.0",
+  "title": "Page Orientation",
+  "description": "Natural reading orientation of a raster page image, with the clockwise rotation required to make it upright.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "angle",
+    "confidence",
+    "stage",
+    "auto_rotated",
+    "original_width",
+    "original_height",
+    "oriented_width",
+    "oriented_height"
+  ],
+  "properties": {
+    "angle": {
+      "type": "integer",
+      "enum": [0, 90, 180, 270],
+      "description": "Clockwise rotation, in degrees, required to make the page upright."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Detection confidence score."
+    },
+    "stage": {
+      "type": "string",
+      "description": "Detection stage or terminal reason that produced the angle."
+    },
+    "auto_rotated": {
+      "type": "boolean",
+      "description": "True when a non-zero rotation makes the page upright."
+    },
+    "original_width": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Width of the source image in pixels, when known."
+    },
+    "original_height": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Height of the source image in pixels, when known."
+    },
+    "oriented_width": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Width after applying the detected rotation, in pixels."
+    },
+    "oriented_height": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Height after applying the detected rotation, in pixels."
+    },
+    "image_base64": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/=]+$",
+      "description": "Oriented image payload, base64-encoded, when requested."
+    },
+    "media_type": {
+      "type": "string",
+      "description": "Media type of the returned image payload, when requested."
+    }
+  }
+}

@@ -7,6 +7,7 @@ runs it, normalizes the output and records provenance.
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -20,17 +21,24 @@ from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegi
 from acessilia_toolbox.core.errors import (
     ConfigurationError,
     InvalidInputError,
+    ToolboxError,
     UnsupportedMediaTypeError,
 )
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes, fingerprint_parameters
 from acessilia_toolbox.core.normalization import build_processing_manifest
-from acessilia_toolbox.core.preprocessing import detect_and_orient_image, is_supported_image
+from acessilia_toolbox.core.preprocessing import (
+    OrientationResult,
+    detect_and_orient_image,
+    is_supported_image,
+)
 from acessilia_toolbox.core.provenance import ExecutionProvenance
 from acessilia_toolbox.core.provider import (
     ProviderAdapter,
     ProviderDescriptor,
     ProviderRegistry,
 )
+
+LOG = logging.getLogger(__name__)
 
 AdapterFactory = Callable[[ProviderDescriptor], ProviderAdapter]
 
@@ -102,17 +110,45 @@ class CapabilityExecutor:
                 return _restore(cached, cache_key)
 
         execution_payload = payload
+        orientation: OrientationResult | None = None
         auto_rotate = bool(parameters and parameters.get("auto_rotate", False))
         if auto_rotate and is_supported_image(media_type):
             orient_adapter = None
             try:
                 orient_desc = self._providers.resolve("image.page.orient")
                 orient_adapter = self._adapter_factory(orient_desc)
+            except ToolboxError as exc:
+                # Orientation is an optional preprocessing step: a deployment
+                # without the provider still extracts, just without rotating.
+                LOG.info(
+                    "auto_rotate requested but image.page.orient is unavailable: %s",
+                    exc.message,
+                )
             except Exception:
-                pass
-            execution_payload, _orient_res = detect_and_orient_image(
+                LOG.warning(
+                    "auto_rotate requested but the orientation provider could not be built",
+                    exc_info=True,
+                )
+            execution_payload, orientation = detect_and_orient_image(
                 payload, media_type=media_type, orient_provider=orient_adapter
             )
+            if orientation.auto_rotated:
+                # The rotated bytes are the real input, so they replace the
+                # fingerprint; otherwise the cache could serve a stale result.
+                input_fingerprint = fingerprint_bytes(execution_payload)
+                cache_key = compute_cache_key(
+                    capability_id=manifest.id,
+                    capability_version=manifest.version,
+                    provider_id=descriptor.id,
+                    provider_version=provider_version,
+                    input_fingerprints=[input_fingerprint],
+                    parameters=parameters,
+                    model_versions=versions,
+                )
+                if manifest.execution.cacheable and not no_cache:
+                    cached = self._cache.get(cache_key)
+                    if cached is not None:
+                        return _restore(cached, cache_key)
 
         extraction = adapter.execute(
             manifest.id,
@@ -133,7 +169,9 @@ class CapabilityExecutor:
             # the in-memory payload is staged under its original name.
             with tempfile.TemporaryDirectory() as staging:
                 source = Path(staging) / filename
-                source.write_bytes(payload)
+                # Stage the bytes the provider actually saw, so `source.sha256`
+                # matches the rotated input when auto-rotate applied.
+                source.write_bytes(execution_payload)
                 document = build_processing_manifest(source, extraction, language=language)
             document_payload = document.model_dump(mode="json", by_alias=True)
             artifact_suffix = f"{Path(filename).stem}.structured-document.json"
@@ -168,6 +206,7 @@ class CapabilityExecutor:
                 output_fingerprints=[artifacts[0].artifact_id],
                 parameters_hash=fingerprint_parameters(parameters),
                 model_versions=versions,
+                orientation=_orientation_payload(orientation),
                 started_at=extraction.started_at,
                 completed_at=extraction.completed_at,
                 duration_ms=extraction.duration_ms,
@@ -194,6 +233,20 @@ class CapabilityExecutor:
         if self._store is None:
             raise ConfigurationError("no artifact storage provider is configured")
         return self._store
+
+
+def _orientation_payload(result: OrientationResult | None) -> dict[str, Any] | None:
+    """Record the preprocessing decision so a rotated result stays auditable."""
+    if result is None:
+        return None
+    return {
+        "angle": result.angle,
+        "confidence": result.confidence,
+        "stage": result.stage,
+        "auto_rotated": result.auto_rotated,
+        "original_dimensions": list(result.original_dimensions),
+        "oriented_dimensions": list(result.oriented_dimensions),
+    }
 
 
 def _versions_of(adapter: ProviderAdapter) -> dict[str, str]:

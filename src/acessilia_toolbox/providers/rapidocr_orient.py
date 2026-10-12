@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
@@ -17,7 +18,15 @@ from acessilia_toolbox.core.errors import (
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
+LOG = logging.getLogger(__name__)
+
 ORIENT_PATH = "/orient"
+VERSION_PATH = "/version"
+
+# `/version` reports the server build and the installed OCR engine. Only these
+# describe the artifacts that produced a result, so only these enter provenance
+# and the cache key.
+VERSION_KEYS = ("version", "engine_version")
 
 
 class RapidOcrOrientProvider:
@@ -47,6 +56,7 @@ class RapidOcrOrientProvider:
 
         with self._client() as client:
             raw = self._orient(client, payload, filename, media_type, parameters)
+            reported_versions = self._server_versions(client)
 
         completed_at = datetime.now(UTC)
         duration_ms = int((perf_counter() - started_clock) * 1000)
@@ -71,8 +81,13 @@ class RapidOcrOrientProvider:
             document_payload["image_base64"] = raw["image_base64"]
             document_payload["media_type"] = raw.get("media_type", media_type)
 
-        versions_map = self.versions()
-        version = versions_map.get("engine_version", self.descriptor.version)
+        # The engine version identifies the model that produced the angle; the
+        # server build is a weaker fallback when the engine cannot report one.
+        version = (
+            reported_versions.get("engine_version")
+            or reported_versions.get("version")
+            or self.descriptor.version
+        )
         configuration = {
             "provider": self.descriptor.id,
             "angle": angle,
@@ -114,7 +129,7 @@ class RapidOcrOrientProvider:
                 f"RapidOCR orientation request timed out after {self.descriptor.timeout_seconds}s",
                 provider=self.descriptor.id,
             ) from exc
-        except httpx.ConnectError as exc:
+        except httpx.RequestError as exc:
             raise ProviderUnavailableError(
                 f"RapidOCR orientation service is not reachable at {self.base_url}: {exc}",
                 provider=self.descriptor.id,
@@ -124,33 +139,33 @@ class RapidOcrOrientProvider:
             raise ProviderExecutionError(
                 f"RapidOCR orientation failed with status {response.status_code}: {response.text}",
                 provider=self.descriptor.id,
+                status_code=response.status_code,
             )
 
         try:
             result = response.json()
-            if isinstance(result, dict):
-                return result
+        except ValueError as exc:
             raise ProviderExecutionError(
-                "RapidOCR orientation returned non-dict JSON response",
-                provider=self.descriptor.id,
-            )
-        except Exception as exc:
-            raise ProviderExecutionError(
-                f"RapidOCR orientation returned non-JSON response: {response.text[:200]}",
+                f"RapidOCR orientation returned a non-JSON response: {response.text[:200]}",
                 provider=self.descriptor.id,
             ) from exc
 
+        if not isinstance(result, dict):
+            raise ProviderExecutionError(
+                f"RapidOCR orientation returned {type(result).__name__}; expected a JSON object",
+                provider=self.descriptor.id,
+            )
+        return result
+
     def versions(self) -> dict[str, str]:
-        reported: dict[str, str] = {}
         try:
             with self._client(timeout=5.0) as client:
-                response = client.get("/version")
-                if response.status_code == 200:
-                    data = response.json()
-                    if isinstance(data, dict):
-                        reported = {k: str(v) for k, v in data.items()}
+                reported = self._server_versions(client)
         except Exception:
-            pass
+            # The executor tolerates version failures; the declared version is
+            # then the only identity available for the cache key.
+            LOG.debug("rapidocr-orient version probe failed", exc_info=True)
+            reported = {}
 
         server_version = (
             reported.get("engine_version")
@@ -161,6 +176,16 @@ class RapidOcrOrientProvider:
             "provider": server_version,
             **reported,
         }
+
+    def _server_versions(self, client: httpx.Client) -> dict[str, str]:
+        """Version fields the server reports, filtered to artifact identity."""
+        response = client.get(VERSION_PATH)
+        if response.status_code != 200:
+            return {}
+        data = response.json()
+        if not isinstance(data, dict):
+            return {}
+        return {k: str(v) for k, v in data.items() if k in VERSION_KEYS}
 
     def health(self) -> ProviderHealth:
         checked_at = datetime.now(UTC)

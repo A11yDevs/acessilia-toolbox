@@ -1,12 +1,16 @@
 ﻿"""RapidOCR orientation detection and page correction sidecar server.
 
-Implements two-stage page orientation detection (0°, 90°, 180°, 270°) and correction.
-Stage 1: Detect bounding boxes at 0°. If majority of boxes have H/W > 1.5, candidate 90°/270°.
-Stage 2: Evaluate OCR confidence and horizontal text alignment at 90° vs 270° (and 180°).
+Detects the natural reading rotation of a page image (0°, 90°, 180°, 270°) and
+optionally returns the upright image.
+
+Stage 1 reads the page once; the OCR angle classifier settles the 180° case,
+which keeps text horizontal and is therefore invisible to geometry heuristics.
+Stage 2 compares how well the page reads at 0° versus 90° and 270°.
 
 Convention:
-All reported angles (0, 90, 180, 270) represent clockwise rotation required to make the image upright.
-PIL Image.rotate(angle) rotates counter-clockwise; so rotating clockwise by `angle` is `image.rotate(360 - angle)`.
+All reported angles (0, 90, 180, 270) represent the clockwise rotation required
+to make the image upright. PIL's `Image.rotate` turns counter-clockwise, so
+rotating clockwise by `angle` is `image.rotate(360 - angle)`.
 """
 
 from __future__ import annotations
@@ -36,7 +40,7 @@ logging.basicConfig(level=logging.INFO)
 
 state: dict[str, Any] = {
     "engine": None,
-    "model_loaded": False,
+    "engine_ready": False,
 }
 
 
@@ -47,13 +51,13 @@ async def lifespan(app: FastAPI):
         if RapidOCR is not None:
             engine = RapidOCR()
             state["engine"] = engine
-            state["model_loaded"] = True
+            state["engine_ready"] = True
             LOG.info("RapidOCR engine initialized successfully.")
         else:
             LOG.warning("RapidOCR package not available in environment.")
     except Exception as exc:
         LOG.exception("Failed to initialize RapidOCR: %s", exc)
-        state["model_loaded"] = False
+        state["engine_ready"] = False
     yield
     state.clear()
 
@@ -63,10 +67,11 @@ app = FastAPI(title="rapidocr-orient", lifespan=lifespan)
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {
-        "status": "ok" if state["model_loaded"] else "degraded",
-        "engine_ready": state["model_loaded"],
-    }
+    # Mirror math-ocr: an unready engine must fail `curl -fsS` with 503 so
+    # Compose never marks a model-less sidecar as healthy.
+    if not state["engine_ready"]:
+        raise HTTPException(status_code=503, detail="Model is not ready")
+    return {"status": "ok", "engine_ready": True}
 
 
 @app.get("/version")
@@ -95,95 +100,130 @@ def _rotate_clockwise(image: Image.Image, angle: int) -> Image.Image:
     return image.rotate(360 - (angle % 360), expand=True)
 
 
+def _recognize(engine: Any, image: Image.Image) -> list[Any]:
+    """Run one detection+recognition pass, returning the OCR line results."""
+    import numpy as np
+
+    results, _ = engine(np.array(image.convert("RGB")))
+    return list(results) if results else []
+
+
+def _text_line_score(results: list[Any]) -> float:
+    """Score a pass by how confidently it reads as horizontal text lines.
+
+    Each box contributes its recognition confidence only when it looks like a
+    horizontal text line (wider than tall). A rotated page yields vertically
+    stacked or unreadable crops, so both its confidence and its wide-box ratio
+    fall, pushing the score down. The mean is never inflated by an empty pass.
+    """
+    if not results:
+        return 0.0
+    total = 0.0
+    for item in results:
+        box = item[0]
+        xs = [point[0] for point in box]
+        ys = [point[1] for point in box]
+        width = max(xs) - min(xs)
+        height = max(ys) - min(ys)
+        if width <= 0 or width < height:
+            continue
+        score = item[2]
+        total += float(score) if score is not None else 0.5
+    return total / len(results)
+
+
+def _classifier_upside_down_confidence(engine: Any, results: list[Any]) -> float | None:
+    """Ask the OCR angle classifier whether the detected lines are upside down.
+
+    PaddleOCR's classifier labels a crop `0` or `180`. Reusing the engine's own
+    crops keeps this to one extra inference batch and makes the 180° case, which
+    keeps text horizontal and therefore invisible to the geometry heuristics,
+    directly observable.
+
+    Returns the mean confidence of the votes when the majority are upside down,
+    otherwise `None`.
+    """
+    classifier = getattr(engine, "text_cls", None)
+    engine_loaded = getattr(engine, "use_cls", False)
+    if classifier is None or not engine_loaded:
+        return None
+
+    import numpy as np
+
+    crops = [np.array(item[1]) for item in results if item[1] is not None]
+    crops = [crop for crop in crops if crop.ndim == 3 and min(crop.shape[:2]) > 0]
+    if not crops:
+        return None
+
+    try:
+        _, labels, _ = classifier(crops)
+    except Exception as exc:  # pragma: no cover - defensive around native code
+        LOG.warning("Angle classifier failed: %s", exc)
+        return None
+
+    threshold = float(getattr(classifier, "cls_thresh", 0.9))
+    votes = [
+        float(score)
+        for label, score in labels
+        if "180" in str(label) and float(score) > threshold
+    ]
+    if len(votes) * 2 <= len(crops):
+        return None
+    return sum(votes) / len(votes)
+
+
 def _detect_orientation(engine: Any, image: Image.Image) -> tuple[int, float, str]:
-    """Two-stage orientation detection algorithm.
+    """Detect the clockwise rotation that makes the page upright.
+
+    Stage 1 reads the page once and asks the OCR angle classifier about 180°,
+    which horizontal geometry cannot reveal. Stage 2 compares how well the page
+    reads at 0° versus 90° and 270° for the rotations that exchange width and
+    height.
 
     Returns:
         (detected_angle, confidence, stage_description)
-        detected_angle is 0, 90, 180, or 270 (degrees clockwise to rotate to make upright).
+        detected_angle is 0, 90, 180, or 270 degrees clockwise to make it upright.
     """
     if engine is None:
         return 0, 0.0, "engine_unavailable"
 
-    # Stage 1: Run detection at 0° on downscaled image
+    # Downscaling bounds the cost: orientation is a page-level decision and the
+    # text layout it depends on survives the resize.
     downscaled = _downscale_if_needed(image, max_dim=1024)
     downscaled_rgb = downscaled.convert("RGB")
 
-    import numpy as np
-    img_np = np.array(downscaled_rgb)
-
-    # RapidOCR returns: result, elapse_list
-    results, _ = engine(img_np)
+    results = _recognize(engine, downscaled_rgb)
     if not results:
-        return 0, 0.5, "stage1_no_text"
+        return 0, 0.0, "no_text_detected"
 
-    tall_boxes = 0
-    total_boxes = len(results)
-    total_conf = 0.0
+    upside_down_confidence = _classifier_upside_down_confidence(engine, results)
+    if upside_down_confidence is not None:
+        return 180, round(float(upside_down_confidence), 4), "stage1_classifier_180"
 
-    for item in results:
-        box = item[0]  # 4 points: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-        score = item[2]
-        total_conf += float(score) if score is not None else 0.5
-        xs = [p[0] for p in box]
-        ys = [p[1] for p in box]
-        bw = max(xs) - min(xs)
-        bh = max(ys) - min(ys)
-        if bw > 0 and (bh / bw) > 1.5:
-            tall_boxes += 1
-
-    mean_conf_0 = total_conf / max(1, total_boxes)
-    tall_ratio = tall_boxes / max(1, total_boxes)
-
-    # Compute horizontal box ratio at 0°
-    wide_boxes_0 = sum(
-        1 for item in results
-        if (max(p[0] for p in item[0]) - min(p[0] for p in item[0])) >=
-           (max(p[1] for p in item[0]) - min(p[1] for p in item[0]))
-    )
-    wide_ratio_0 = wide_boxes_0 / max(1, total_boxes)
-
-    # If less than 35% tall boxes and majority are horizontal, upright (0°)
-    if tall_ratio < 0.35 and wide_ratio_0 >= 0.50:
-        return 0, round(float(mean_conf_0), 4), "stage1_upright"
-
-    # Stage 2: Tall boxes dominant (or horizontal ratio low).
-    # Test candidate clockwise angles (90, 270, 180).
-    # Evaluate score based on horizontal box alignment and OCR confidence.
-    score_0 = mean_conf_0 * wide_ratio_0
+    score_0 = _text_line_score(results)
     best_angle = 0
     best_score = score_0
 
-    candidates = [90, 270, 180]
-
-    for angle in candidates:
+    # Only 90° and 270° are compared: a quarter turn is the case the geometry
+    # heuristics can detect, and 180° is already settled by the classifier.
+    for angle in (90, 270):
         rotated = _rotate_clockwise(downscaled_rgb, angle)
-        rot_np = np.array(rotated)
-        rot_res, _ = engine(rot_np)
-        if not rot_res:
-            continue
-        rot_count = len(rot_res)
-        rot_conf = sum(float(item[2]) for item in rot_res if item[2] is not None) / max(1, rot_count)
-        wide_boxes = sum(
-            1 for item in rot_res
-            if (max(p[0] for p in item[0]) - min(p[0] for p in item[0])) >=
-               (max(p[1] for p in item[0]) - min(p[1] for p in item[0]))
-        )
-        wide_ratio = wide_boxes / max(1, rot_count)
-
-        # In upright text, wide_ratio is close to 1.0 (horizontal text lines)
-        score_angle = rot_conf * wide_ratio
-        if score_angle > best_score:
-            best_score = score_angle
+        score = _text_line_score(_recognize(engine, rotated))
+        if score > best_score:
+            best_score = score
             best_angle = angle
 
+    if best_angle == 0:
+        return 0, round(float(score_0), 4), "stage1_upright"
     return best_angle, round(float(best_score), 4), "stage2_evaluated"
 
 
 @app.post("/orient")
 async def orient_page(
     file: Annotated[UploadFile, File(description="Page image")],
-    return_image: Annotated[bool, Form(description="Whether to include rotated image payload")] = False,
+    return_image: Annotated[
+        bool, Form(description="Whether to include the rotated image payload")
+    ] = False,
 ) -> dict[str, Any]:
     content = await file.read()
     if not content:
@@ -197,6 +237,9 @@ async def orient_page(
         raise HTTPException(status_code=400, detail=f"Cannot decode image: {exc}") from exc
 
     engine = state.get("engine")
+    if engine is None or not state.get("engine_ready"):
+        raise HTTPException(status_code=503, detail="Model is not ready")
+
     angle, conf, stage = _detect_orientation(engine, image)
 
     response: dict[str, Any] = {
@@ -215,7 +258,8 @@ async def orient_page(
         response["oriented_height"] = rotated_img.size[1]
         if return_image:
             buf = io.BytesIO()
-            save_format = orig_format if orig_format.upper() in {"PNG", "JPEG", "TIFF", "WEBP"} else "PNG"
+            valid_formats = {"PNG", "JPEG", "TIFF", "WEBP"}
+            save_format = orig_format if orig_format.upper() in valid_formats else "PNG"
             if save_format.upper() == "JPEG" and rotated_img.mode in ("RGBA", "P"):
                 rotated_img = rotated_img.convert("RGB")
             rotated_img.save(buf, format=save_format)

@@ -10,6 +10,7 @@ import pytest
 from acessilia_toolbox.core.errors import (
     ProviderExecutionError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
 )
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
@@ -87,12 +88,70 @@ def test_health_check_unreachable() -> None:
 
 def test_versions_reported() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"version": "1.0.0", "engine_version": "1.3.0"})
+        return httpx.Response(
+            200,
+            json={"version": "1.0.0", "engine_version": "1.3.0", "capability": "image.page.orient"},
+        )
 
     adapter = provider_with(handler)
     versions = adapter.versions()
     assert versions["provider"] == "1.3.0"
     assert versions["engine_version"] == "1.3.0"
+
+
+def test_versions_exclude_non_version_keys() -> None:
+    """Only artifact identity belongs in provenance and the cache key."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "version": "1.0.0",
+                "engine": "rapidocr_onnxruntime",
+                "engine_version": "1.3.0",
+                "capability": "image.page.orient",
+            },
+        )
+
+    adapter = provider_with(handler)
+    versions = adapter.versions()
+    assert versions == {"provider": "1.3.0", "version": "1.0.0", "engine_version": "1.3.0"}
+
+
+def test_versions_fall_back_to_declared_version_when_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("Connection refused")
+
+    adapter = provider_with(handler)
+    assert adapter.versions() == {"provider": "1.0"}
+
+
+def test_orient_non_object_json_fails_with_accurate_message() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=["unexpected"])
+
+    adapter = provider_with(handler)
+    with pytest.raises(ProviderExecutionError, match="expected a JSON object"):
+        adapter.execute(
+            "image.page.orient",
+            b"fake-image",
+            filename="page.png",
+            media_type="image/png",
+        )
+
+
+def test_orient_connection_error_raises_unavailable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadError("connection reset")
+
+    adapter = provider_with(handler)
+    with pytest.raises(ProviderUnavailableError):
+        adapter.execute(
+            "image.page.orient",
+            b"fake-image",
+            filename="page.png",
+            media_type="image/png",
+        )
 
 
 def test_orient_upright_page() -> None:

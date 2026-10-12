@@ -16,6 +16,7 @@ toolbox.
 | [api.md](api.md)                                     | REST and MCP interface principles                                   |
 | [artifacts.md](artifacts.md)                         | Artifact references, object storage, hashing, and cache             |
 | [tools.md](tools.md)                                 | Candidate capabilities and providers                                |
+| [rapidocr-orient.md](rapidocr-orient.md)             | Optional page orientation sidecar and auto-rotate preprocessing     |
 | [installation.md](installation.md)                   | Development and deployment guidance                                 |
 | [testing.md](testing.md)                             | Testing strategy                                                    |
 | [contribution.md](contribution.md)                   | Contribution workflow                                               |
