@@ -16,6 +16,9 @@ toolbox.
 | [api.md](api.md)                                     | REST and MCP interface principles                                   |
 | [artifacts.md](artifacts.md)                         | Artifact references, object storage, hashing, and cache             |
 | [tools.md](tools.md)                                 | Candidate capabilities and providers                                |
+| [rapidocr-orient.md](rapidocr-orient.md)             | Page orientation provider (English)                                 |
+| [rapidocr-orient.pt-br.md](rapidocr-orient.pt-br.md) | Page orientation provider (Brazilian Portuguese)                    |
+| [rapidocr-orient.md](rapidocr-orient.md)             | Optional page orientation sidecar and auto-rotate preprocessing     |
 | [installation.md](installation.md)                   | Development and deployment guidance                                 |
 | [testing.md](testing.md)                             | Testing strategy                                                    |
 | [media-inspect.md](media-inspect.md)                 | Deterministic media triage before heavy extraction                  |

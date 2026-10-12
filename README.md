@@ -197,6 +197,7 @@ flowchart TB
 | `math.convert`, `math.verbalize` | pure-python (in-process) | ✅ |
 | `media.inspect` | pure-python (in-process, optional `media` extra) | ✅ |
 | `music.omr` | homr (in-process, optional extra), audiveris-serve (sidecar) | ✅ |
+| `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
 | `chem.recognize` | docling-serve VLM (Granite Vision) | ✅ |
 | `chem.convert` | pure-python mhchem (in-process) | ✅ |
 | `accessibility.validate` | pure-python (in-process) | ✅ |
@@ -287,6 +288,7 @@ pages: 1; elements: 7; obligations: 0
 | [Capability Model](docs/capability-model.md) | Contracts, manifests, interchangeability |
 | [PDDL Integration](docs/pddl.md) | Planning semantics |
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
+| [Page Orientation](docs/rapidocr-orient.md) | Optional `image.page.orient` sidecar and auto-rotate preprocessing |
 | [TeleOCR Adapter](docs/teleocr.md) | Optional image extraction, configuration and HTTP contract |
 | [TeleOCR Evaluation](docs/teleocr-evaluation.md) | Local gains, failure cases, coverage and remaining service validation |
 | [Constitution](docs/constitution.md) | Design principles |

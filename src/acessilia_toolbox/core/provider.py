@@ -22,7 +22,9 @@ from acessilia_toolbox.core.errors import (
     ProviderNotFoundError,
 )
 
-ENV_PLACEHOLDER = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
+# `${VAR}` and `${VAR:-default}`. The default keeps a provider entry usable when
+# the deployment does not override the endpoint (Docker Compose service name).
+ENV_PLACEHOLDER = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)(?::-([^}]*))?\}")
 
 Transport = Literal["http", "s3", "redis", "in_process"]
 
@@ -213,16 +215,23 @@ def _is_secret(key: str) -> bool:
 
 
 def expand_env(value: Any) -> Any:
-    """Resolve `${VAR}` placeholders. Missing variables are kept as-is so the
-    registry stays loadable even when optional providers are not configured;
-    they will fail naturally when actually used.
+    """Resolve `${VAR}` and `${VAR:-default}` placeholders.
+
+    An unset variable falls back to its inline default when one is given.
+    Without a default it is kept as-is so the registry stays loadable even
+    when optional providers are not configured; the placeholder then fails
+    naturally when the provider is actually used.
     """
     if isinstance(value, str):
 
         def _replace(match: re.Match[str]) -> str:
-            name = match.group(1)
+            name, default = match.group(1), match.group(2)
             resolved = os.environ.get(name)
-            return resolved if resolved is not None else match.group(0)
+            if resolved is not None:
+                return resolved
+            if default is not None:
+                return default
+            return match.group(0)
 
         return ENV_PLACEHOLDER.sub(_replace, value)
     if isinstance(value, dict):

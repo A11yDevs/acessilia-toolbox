@@ -29,6 +29,8 @@ services:
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
       TOOLBOX_API_KEY: ${TOOLBOX_API_KEY}
       AUDIVERIS_SERVE_URL: ${AUDIVERIS_SERVE_URL:-http://audiveris-serve:5003}
+      RAPID_LATEX_OCR_URL: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
+      RAPIDOCR_ORIENT_URL: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
     env_file:
       - .env
     volumes:
@@ -112,6 +114,21 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    restart: unless-stopped
+
+  # RapidOCR page orientation sidecar (optional). Built from
+  # docker/rapidocr-orient.Dockerfile; reports 503 until the engine is ready.
+  rapidocr-orient:
+    image: ${RAPIDOCR_ORIENT_IMAGE:-rapidocr-orient:latest}
+    container_name: rapidocr-orient-staging
+    ports:
+      - "${RAPIDOCR_ORIENT_PORT:-5006}:5006"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5006/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   minio:

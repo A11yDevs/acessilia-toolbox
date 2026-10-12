@@ -26,6 +26,7 @@ from acessilia_toolbox.providers.pure_math import PureMathProvider
 from acessilia_toolbox.providers.pure_text import PureTextProvider
 from acessilia_toolbox.providers.pymupdf_pdf import PyMuPDFProvider
 from acessilia_toolbox.providers.rapid_latex_ocr import RapidLatexOcrProvider
+from acessilia_toolbox.providers.rapidocr_orient import RapidOcrOrientProvider
 from acessilia_toolbox.providers.teleocr import TeleOCRProvider
 
 # Global store/cache references injected by app.py for dataset mirroring.
@@ -88,6 +89,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "pure-text": PureTextProvider,
     "pymupdf-pdf": PyMuPDFProvider,
     "rapid-latex-ocr": RapidLatexOcrProvider,
+    "rapidocr-orient": RapidOcrOrientProvider,
     "teleocr": TeleOCRProvider,
 }
 
@@ -127,6 +129,7 @@ __all__ = [
     "PureTextProvider",
     "PyMuPDFProvider",
     "RapidLatexOcrProvider",
+    "RapidOcrOrientProvider",
     "TeleOCRProvider",
     "create_adapter",
 ]
