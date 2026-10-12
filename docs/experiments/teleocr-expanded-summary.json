@@ -7,6 +7,32 @@
   "metric_definition": "Derived Overall averages each page's available text/RO/TEDS components and excludes formulas without CDM. It is not an official leaderboard score. Native Omni TEDS weights tables; paired TEDS weights pages. Provider-dependent component coverage can confound derived Overall rankings.",
   "bootstrap": "3000 whole source-group resamples; tie tolerance 0.05 point; exploratory multiple variants and strata.",
   "runtime_amendment": "After repeated OOM and stalled generation, all 78 pending pages used a fresh unchanged CLI process with a 90-minute active wall budget, including model startup. One dense newspaper was deferred to the end. After another reboot, elapsed budget accounting was persisted every 30 seconds; the interrupted final page used a retrospectively disclosed conservative 3600-second allocation and only 1800 seconds remained. Computer-off downtime was excluded; no fresh budget was granted. The runtime amendment was not preregistered. Failures remain explicit empty predictions; no speed improvement is claimed.",
+  "runtime_failures": {
+    "pages_requested": 240,
+    "model_extractions_completed": 238,
+    "pages_failed_active_wall_budget": 2,
+    "benchmark": "omnidocbench",
+    "content_stratum": "newspaper",
+    "retained_as": "explicit empty predictions",
+    "note": "Both failures remain in the scored denominators; no fresh budget, threshold or frozen selector was changed after them."
+  },
+  "qualitative_observations": {
+    "repeated_caption_page": {
+      "captured_characters": 6772,
+      "text_score": 0.40,
+      "derived_overall": 50.20,
+      "baseline_derived_overall": 52.85,
+      "generation_seconds": 2150,
+      "oom_retry_batches": [8, 3, 1]
+    },
+    "deferred_dense_newspaper_page": {
+      "conservative_allocation_seconds": 3600,
+      "remaining_at_interruption_seconds": 1800
+    },
+    "failed_dense_newspaper_zero_table_records": 26,
+    "provenance": "Operator session logs and visual checks. These values are not derived from the arrays above and are not covered by the aggregate identity checks applied to the tables; they are recorded here so the narrative report stays traceable."
+  },
+  "derived_fields_note": "In the Omnidocbench section, summary holds every per-page component mean. native_components now holds only the table-record-weighted native TEDS (native_teds_per_table) and its denominators, which are not derivable from summary. Previously duplicated component means were removed so each metric has a single source; summary.* is authoritative for text, reading_order and formula_1_minus_edit.",
   "inference": {
     "model_repository": "StarDoc-AI/TeleOCR",
     "model_revision": "e92585356c0d0b7b7a65938f3da035c6593cc9a6",
@@ -3352,6 +3378,13 @@
       },
       "cost_limit": "Counts are unique pages, not all model/block invocations. OOM retries, interruptions and process startup add cost. PRE savings are simulated; POST and empty-text fallback still require extraction.",
       "sampling_limit": "Known-book page holdout; books overlap earlier experiments.",
+      "known_books": {
+        "pages_requested": 120,
+        "scorable_pages": 115,
+        "requested_books": 66,
+        "books_with_scorable_pages": 65,
+        "note": "The operator sample manifest selected 66 known books; 65 contribute at least one scorable page, which matches paired.base.vs_base.overall.groups. Book identities are not included in this artifact."
+      },
       "native_table_coverage_limit": "Native Dr TEDS omits some GT tables when compatible predicted table markup is absent; missing records are not zero scores. Compare coverage and equal-component support before ranking providers.",
       "gt_table_counts": {"gt_table_pages": 6, "gt_table_count": 16},
       "table_coverage": {
@@ -4637,50 +4670,17 @@
       "cost_limit": "Counts are unique pages, not all model/block invocations. OOM retries, interruptions and process startup add cost. PRE savings are simulated; POST and empty-text fallback still require extraction.",
       "sampling_limit": "Balanced English diagnostic sample: 40 tables, 40 formula-without-table, 40 other. Filename-inferred groups do not prove unseen original books; not a full-benchmark estimate.",
       "native_components": {
-        "base": {
-          "scores": {"text": 89.92690595266247, "reading_order": 69.72668398669609, "formula_1_minus_edit": 17.759539996400708, "teds_per_table": 53.211176720001276},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "xycut": {
-          "scores": {"text": 89.96326673851695, "reading_order": 70.02477795486678, "formula_1_minus_edit": 17.759539996400708, "teds_per_table": 53.211176720001276},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "tele_raw": {
-          "scores": {"text": 96.83219165112111, "reading_order": 85.55901683860439, "formula_1_minus_edit": 93.18006880677699, "teds_per_table": 71.08292020350147},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "tele_decor": {
-          "scores": {"text": 96.83219165112111, "reading_order": 85.2528034441557, "formula_1_minus_edit": 93.18006880677699, "teds_per_table": 71.08292020350147},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "pre": {
-          "scores": {"text": 95.22533923368354, "reading_order": 83.35568095879793, "formula_1_minus_edit": 90.79074662071481, "teds_per_table": 70.74674953454779},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "post": {
-          "scores": {"text": 95.3173346332159, "reading_order": 82.7135268639584, "formula_1_minus_edit": 88.73681782217261, "teds_per_table": 71.08292020350147},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "zero_text_guard": {
-          "scores": {"text": 98.17115664201012, "reading_order": 85.55069483040101, "formula_1_minus_edit": 93.18006880677699, "teds_per_table": 72.91076218610013},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "doctele": {
-          "scores": {"text": 93.08046020290219, "reading_order": 77.74060755171479, "formula_1_minus_edit": 65.29261021237747, "teds_per_table": 71.08292020350147},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "docteleform": {
-          "scores": {"text": 92.68001194498392, "reading_order": 81.37493994958713, "formula_1_minus_edit": 93.02946872062556, "teds_per_table": 71.08292020350147},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "docling": {
-          "scores": {"text": 89.07425945473807, "reading_order": 65.2865411048109, "formula_1_minus_edit": 24.28411873275448, "teds_per_table": 0.0},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        },
-        "mineru": {
-          "scores": {"text": 83.80743108054712, "reading_order": 64.08557401085983, "formula_1_minus_edit": 15.474921284123699, "teds_per_table": 53.211176720001276},
-          "table_denominators": {"table_score_records": 100, "table_scored_pages": 40}
-        }
+        "base": {"native_teds_per_table": 53.211176720001276, "table_score_records": 100, "table_scored_pages": 40},
+        "xycut": {"native_teds_per_table": 53.211176720001276, "table_score_records": 100, "table_scored_pages": 40},
+        "tele_raw": {"native_teds_per_table": 71.08292020350147, "table_score_records": 100, "table_scored_pages": 40},
+        "tele_decor": {"native_teds_per_table": 71.08292020350147, "table_score_records": 100, "table_scored_pages": 40},
+        "pre": {"native_teds_per_table": 70.74674953454779, "table_score_records": 100, "table_scored_pages": 40},
+        "post": {"native_teds_per_table": 71.08292020350147, "table_score_records": 100, "table_scored_pages": 40},
+        "zero_text_guard": {"native_teds_per_table": 72.91076218610013, "table_score_records": 100, "table_scored_pages": 40},
+        "doctele": {"native_teds_per_table": 71.08292020350147, "table_score_records": 100, "table_scored_pages": 40},
+        "docteleform": {"native_teds_per_table": 71.08292020350147, "table_score_records": 100, "table_scored_pages": 40},
+        "docling": {"native_teds_per_table": 0.0, "table_score_records": 100, "table_scored_pages": 40},
+        "mineru": {"native_teds_per_table": 53.211176720001276, "table_score_records": 100, "table_scored_pages": 40}
       }
     }
   }
