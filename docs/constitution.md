@@ -106,8 +106,37 @@ changes require explicit major-version transitions.
 
 ## Language and contribution conventions
 
-- Source identifiers, public APIs, documentation, issues, and pull
-  requests: English.
+### English-first, with Brazilian Portuguese as the official secondary language
+
+English is the mandatory, authoritative language of the project. All source
+code — identifiers, comments, docstrings, and log messages — as well as
+Markdown documentation, issues, pull requests, and commit messages must be
+written in English.
+
+Brazilian Portuguese (pt-BR) is the official secondary language. Producing
+pt-BR documentation is desirable for all documentation. Every `*.pt-br.md`
+mirror must be updated in the same pull request whenever its English source
+changes, and the English version is authoritative in case of divergence.
+
+### Internationalization
+
+Translation and support for other languages is an important secondary goal,
+aimed at a broad and inclusive audience. Localized content in other languages
+is welcome but never blocks a merge.
+
+User-facing content — Telegram messages, rendered output, and prompts for AI
+models — must be localized according to the user's locale, covering English
+and Brazilian Portuguese and extending to other languages as the
+internationalization effort grows.
+
+Educational materials are a priority domain for internationalization: they
+should be produced in the audience's language whenever possible, with English
+and Brazilian Portuguese as the primary supported languages.
+
+### Contribution rules
+
 - Mandatory type hints for Python code where Python is used.
 - Conventional Commits are recommended.
 - Tests and documentation accompany behavior changes.
+- Documentation published as a `*.pt-br.md` mirror must have a sibling English
+  source; the mirror is never the only copy.

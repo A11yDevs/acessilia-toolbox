@@ -5,6 +5,11 @@ patterns (callout titles, chapter-heading regex) are exempt — the former
 are real document content, the latter are language-agnostic classifiers.
 
 Add new exemptions here when adding intentional Portuguese detection patterns.
+
+Localized `*.pt-br.md` mirrors are intentionally exempt: the project
+constitution sanctions them as translations of an authoritative English
+source. Every mirror must keep a sibling English document, which
+``test_pt_br_mirrors_have_english_source`` enforces.
 """
 
 from __future__ import annotations
@@ -107,6 +112,14 @@ def _iter_project_files(root: Path) -> list[Path]:
     return files
 
 
+def _iter_pt_br_mirrors(root: Path) -> list[Path]:
+    """Find every localized pt-BR documentation mirror."""
+    return sorted(
+        p for p in root.glob("**/*.pt-br.md")
+        if "__pycache__" not in p.parts
+    )
+
+
 # Patterns that match a Portuguese (accented) character.
 # Only check .py, .md, .json, .yaml, .toml files for accented strings.
 _PORTUGUESE_RE = pytest.importorskip("re").compile(r"[áàâãéèêíìóòôõúùûç]")
@@ -129,6 +142,8 @@ def test_no_portuguese_in_code(project_files: list[Path]) -> None:
 
         rel = filepath.relative_to(PROJECT_ROOT).as_posix()
         if rel in EXEMPT_FILES:
+            continue
+        if rel.endswith(".pt-br.md"):
             continue
         exempt_lines = _EXEMPT_BY_FILE.get(rel, set())
 
@@ -165,3 +180,24 @@ def test_exempt_paths_still_exist() -> None:
     for rel in EXEMPT_FILES:
         path = PROJECT_ROOT / rel
         assert path.exists(), f"Exempt file {rel} no longer exists"
+
+
+def test_pt_br_mirrors_have_english_source() -> None:
+    """Every localized mirror must have a sibling English source.
+
+    The constitution makes English authoritative and forbids a `*.pt-br.md`
+    mirror from being the only copy of a document.
+    """
+    missing: list[str] = []
+    for mirror in _iter_pt_br_mirrors(PROJECT_ROOT):
+        source = mirror.with_name(mirror.name.replace(".pt-br.md", ".md"))
+        if not source.exists():
+            missing.append(
+                f"  {mirror.relative_to(PROJECT_ROOT).as_posix()} "
+                f"(expected sibling {source.name})"
+            )
+    if missing:
+        pytest.fail(
+            "Found pt-BR mirrors without an English source:\n"
+            + "\n".join(missing)
+        )
