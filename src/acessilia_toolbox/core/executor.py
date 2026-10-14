@@ -145,22 +145,6 @@ class CapabilityExecutor:
                 # The rotated bytes are the real input, so they replace the
                 # fingerprint; otherwise the cache could serve a stale result.
                 input_fingerprint = fingerprint_bytes(execution_payload)
-                cache_key = compute_cache_key(
-                    capability_id=manifest.id,
-                    capability_version=manifest.version,
-                    provider_id=descriptor.id,
-                    provider_version=provider_version,
-                    input_fingerprints=[input_fingerprint],
-                    parameters=parameters,
-                    model_versions=versions,
-                    filename=filename,
-                    media_type=media_type,
-                    language=language,
-                )
-                if manifest.execution.cacheable and not no_cache:
-                    cached = self._cache.get(cache_key)
-                    if cached is not None:
-                        return _restore(cached, cache_key)
 
         extraction = adapter.execute(
             manifest.id,

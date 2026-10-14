@@ -32,6 +32,7 @@ def compute_cache_key(
     """
     material = canonical_json(
         {
+            "schema_version": 2,
             "capability": f"{capability_id}@{capability_version}",
             "provider": f"{provider_id}@{provider_version}",
             "inputs": list(input_fingerprints),
