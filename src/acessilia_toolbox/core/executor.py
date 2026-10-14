@@ -15,7 +15,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactStore, ExecutionCache, NullCache
+from acessilia_toolbox.core.artifact import (
+    ArtifactRef,
+    ArtifactStore,
+    ExecutionCache,
+    NullCache,
+    shards,
+)
 from acessilia_toolbox.core.cache import compute_cache_key
 from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
 from acessilia_toolbox.core.errors import (
@@ -194,9 +200,7 @@ class CapabilityExecutor:
                 )
             )
         else:
-            artifacts.append(
-                ArtifactRef.of(serialized, media_type="application/json")
-            )
+            artifacts.append(ArtifactRef.of(serialized, media_type="application/json"))
 
         result = CapabilityResult(
             capability=manifest.key,
@@ -227,13 +231,17 @@ class CapabilityExecutor:
     def store_artifact(
         self, payload: bytes, *, media_type: str, filename: str | None = None
     ) -> ArtifactRef:
-        return self._require_store().put(
-            payload, media_type=media_type, filename=filename
-        )
+        return self._require_store().put(payload, media_type=media_type, filename=filename)
 
-    def retrieve_artifact(self, artifact_id: str) -> tuple[bytes, ArtifactRef]:
+    def retrieve_artifact(
+        self, artifact_id: str, *, max_bytes: int | None = None
+    ) -> tuple[bytes, ArtifactRef]:
+        shards(artifact_id)
         store = self._require_store()
-        return store.get(artifact_id), store.stat(artifact_id)
+        ref = store.stat(artifact_id)
+        if max_bytes is not None and ref.size > max_bytes:
+            raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+        return store.get(artifact_id), ref
 
     def _require_store(self) -> ArtifactStore:
         if self._store is None:

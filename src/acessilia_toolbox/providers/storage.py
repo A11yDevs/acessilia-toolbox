@@ -67,9 +67,7 @@ class FilesystemArtifactStore:
     def get(self, artifact_id: str) -> bytes:
         target = self._path(artifact_id)
         if not target.is_file():
-            raise ArtifactNotFoundError(
-                f"unknown artifact {artifact_id}", artifact_id=artifact_id
-            )
+            raise ArtifactNotFoundError(f"unknown artifact {artifact_id}", artifact_id=artifact_id)
         return target.read_bytes()
 
     def exists(self, artifact_id: str) -> bool:
@@ -78,9 +76,7 @@ class FilesystemArtifactStore:
     def stat(self, artifact_id: str) -> ArtifactRef:
         target = self._path(artifact_id)
         if not target.is_file():
-            raise ArtifactNotFoundError(
-                f"unknown artifact {artifact_id}", artifact_id=artifact_id
-            )
+            raise ArtifactNotFoundError(f"unknown artifact {artifact_id}", artifact_id=artifact_id)
         metadata = target.with_suffix(target.suffix + METADATA_SUFFIX)
         if metadata.is_file():
             return ArtifactRef.model_validate_json(metadata.read_text(encoding="utf-8"))
@@ -93,7 +89,10 @@ class FilesystemArtifactStore:
 
     def _path(self, artifact_id: str) -> Path:
         first, second, digest = shards(artifact_id)
-        return self.root / first / second / digest
+        target = (self.root / first / second / digest).resolve()
+        if not target.is_relative_to(self.root.resolve()):
+            raise ConfigurationError("artifact path escapes storage root")
+        return target
 
 
 class S3ArtifactStore:
@@ -107,8 +106,7 @@ class S3ArtifactStore:
             from botocore.config import Config
         except ImportError as exc:
             raise ConfigurationError(
-                "S3 storage requires the 'storage' extra: pip install "
-                "'acessilia-toolbox[storage]'",
+                "S3 storage requires the 'storage' extra: pip install 'acessilia-toolbox[storage]'",
                 provider=descriptor.id,
             ) from exc
 
@@ -162,9 +160,7 @@ class S3ArtifactStore:
 
     def get(self, artifact_id: str) -> bytes:
         try:
-            response = self._client.get_object(
-                Bucket=self.bucket, Key=self._key(artifact_id)
-            )
+            response = self._client.get_object(Bucket=self.bucket, Key=self._key(artifact_id))
             body: bytes = response["Body"].read()
         except Exception as exc:
             self._raise_read_error(exc, artifact_id)
@@ -205,7 +201,9 @@ class S3ArtifactStore:
             return False
         error = response.get("Error")
         return isinstance(error, dict) and str(error.get("Code")) in {
-            "404", "NoSuchKey", "NotFound"
+            "404",
+            "NoSuchKey",
+            "NotFound",
         }
 
     @classmethod
