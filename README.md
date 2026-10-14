@@ -17,8 +17,11 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 # 2. Start the extraction provider (Docker required)
+# The image caches models under /opt/app-root/src/.cache/docling/models, so the
+# volume is mounted there; /root/.cache/docling would stay empty.
 docker run -d --name docling-serve -p 5001:5001 \
-  -v docling-models:/root/.cache/docling \
+  -e DOCLING_SERVE_ARTIFACTS_PATH=/opt/app-root/src/.cache/docling/models \
+  -v docling-models:/opt/app-root/src/.cache/docling \
   ghcr.io/docling-project/docling-serve-cpu:v1.32.0
 
 # 3. Configure

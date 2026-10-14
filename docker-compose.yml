@@ -53,9 +53,14 @@ services:
       - "${DOCLING_SERVE_PORT:-5001}:5001"
     environment:
       DOCLING_SERVE_ENABLE_UI: "${DOCLING_SERVE_ENABLE_UI:-false}"
+      # The image caches models under /opt/app-root/src/.cache/docling/models
+      # (its own DOCLING_SERVE_ARTIFACTS_PATH default), not under /root/.cache.
+      # Mounting the volume at the wrong path leaves it permanently empty, so
+      # every container start re-downloads the models.
+      DOCLING_SERVE_ARTIFACTS_PATH: /opt/app-root/src/.cache/docling/models
     volumes:
       # Models are downloaded on first request and cached here.
-      - docling-models:/root/.cache/docling
+      - docling-models:/opt/app-root/src/.cache/docling
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:5001/health')"]
       interval: 10s
