@@ -184,7 +184,24 @@ docling-serve        ghcr.io/docling-project/docling-serve-cpu:...   Up (healthy
 > **Note:** `docling-serve` may take 30–60 seconds to become healthy
 > because it downloads ML models on the first request. Subsequent
 > startups are faster since models are cached in the `docling-models`
-> volume.
+> volume, which is mounted at the image's own cache path
+> (`/opt/app-root/src/.cache/docling`).
+
+### Enabling the VLM pipeline (`chem.recognize`)
+
+`chem.recognize` runs docling-serve's VLM pipeline, which needs the Granite
+Vision model. The CPU image does not ship it, so the first call fails with
+`Model 'ibm-granite/granite-docling-258M' not found in artifacts_path` until it
+is downloaded into the cache volume:
+
+``` bash
+docker compose exec docling-serve \
+  docling-tools models download-hf-repo ibm-granite/granite-docling-258M
+```
+
+The download lands in the mounted volume, so it survives container recreation.
+Without it, `chem.recognize` answers `502` while every other docling-backed
+capability keeps working.
 
 To stop the providers:
 
@@ -204,8 +221,11 @@ If you prefer to run providers individually instead of using Compose:
 
 ``` bash
 # docling-serve
+# The image caches models under /opt/app-root/src/.cache/docling/models, so the
+# volume must be mounted there; mounting /root/.cache/docling leaves it empty.
 docker run -d --name docling-serve -p 5001:5001 \
-  -v docling-models:/root/.cache/docling \
+  -e DOCLING_SERVE_ARTIFACTS_PATH=/opt/app-root/src/.cache/docling/models \
+  -v docling-models:/opt/app-root/src/.cache/docling \
   ghcr.io/docling-project/docling-serve-cpu:v1.32.0
 
 # MinIO
