@@ -9,6 +9,11 @@
 # Environment variables (alternative to arguments):
 #   GITHUB_USER=<user> GHCR_TOKEN=<token> ./scripts/setup-homologacao.sh
 #
+# Layout variables (defaults match the staging server):
+#   DEPLOY_DIR=/opt/a9a-toolbox/staging   where .env and the compose file live
+#   SCRIPTS_DIR=/opt/a9a-toolbox/scripts  where the update scripts are installed
+#   DEPLOY_USER=$USER                     owner of the systemd user timer
+#
 # Prerequisites:
 #   - Docker + Docker Compose installed
 #   - jq installed (sudo apt install jq)
@@ -128,21 +133,29 @@ docker compose -f docker-compose.staging.yml up -d
 echo ""
 echo "[5/5] Configuring automatic update via systemd user timer..."
 
-SCRIPTS_DIR="$(pwd)/scripts"
+SOURCE_SCRIPTS_DIR="$(pwd)/scripts"
 
-# Cria o diretório para os scripts
-sudo mkdir -p /opt/acessilia-toolbox/scripts
-sudo cp "$SCRIPTS_DIR/staging-update.sh" /opt/acessilia-toolbox/scripts/
-sudo chmod +x /opt/acessilia-toolbox/scripts/staging-update.sh
-
-# Detect the staging directory (where .env and docker-compose.staging.yml live)
-STAGING_DIR="${STAGING_DIR:-}"
+# Detect the staging directory (where .env and docker-compose.staging.yml live).
+# The staging server keeps it under /opt/a9a-toolbox; older installs used
+# /opt/acessilia-toolbox. Both are checked before falling back to the repo.
+STAGING_DIR="${STAGING_DIR:-${DEPLOY_DIR:-}}"
+if [ -z "$STAGING_DIR" ] && [ -d /opt/a9a-toolbox/staging ]; then
+  STAGING_DIR="/opt/a9a-toolbox/staging"
+fi
 if [ -z "$STAGING_DIR" ] && [ -d /opt/acessilia-toolbox/staging ]; then
   STAGING_DIR="/opt/acessilia-toolbox/staging"
 fi
 if [ -z "$STAGING_DIR" ]; then
   STAGING_DIR="$(pwd)"
 fi
+
+# Install the update scripts next to the deployment, not in a fixed path that
+# may not exist on this host.
+SCRIPTS_DIR="${SCRIPTS_DIR:-$(dirname "$STAGING_DIR")/scripts}"
+sudo mkdir -p "$SCRIPTS_DIR"
+sudo cp "$SOURCE_SCRIPTS_DIR/staging-update.sh" "$SCRIPTS_DIR/"
+sudo cp "$SOURCE_SCRIPTS_DIR/staging-update-wrapper.sh" "$SCRIPTS_DIR/"
+sudo chmod +x "$SCRIPTS_DIR/staging-update.sh" "$SCRIPTS_DIR/staging-update-wrapper.sh"
 
 # Persist token in staging .env
 if [ -n "$GHCR_TOKEN" ]; then
@@ -172,14 +185,16 @@ fi
 # Create user units directory
 mkdir -p ~/.config/systemd/user
 
-# Create the service unit (user)
-cat > ~/.config/systemd/user/staging-update.service << 'SERVICE'
+# Create the service unit (user). The wrapper loads GHCR_TOKEN from the
+# deployment .env, which a timer without a login shell does not have.
+cat > ~/.config/systemd/user/staging-update.service << SERVICE
 [Unit]
 Description=Update acessilia-toolbox staging container
 
 [Service]
 Type=oneshot
-ExecStart=/opt/acessilia-toolbox/scripts/staging-update.sh
+Environment=STAGING_DIR=$STAGING_DIR
+ExecStart=$SCRIPTS_DIR/staging-update-wrapper.sh
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 SERVICE
 

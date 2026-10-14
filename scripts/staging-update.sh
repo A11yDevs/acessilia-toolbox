@@ -39,9 +39,13 @@ set -euo pipefail
 # Supported layouts:
 #   A) Staging server: /opt/acessilia-toolbox/staging/
 #   B) Cloned repo: <repo>/scripts/staging-update.sh -> <repo>/
-# Priority: 1. STAGING_DIR (env)  2. /opt/acessilia-toolbox/staging  3. script parent
+# Priority: 1. STAGING_DIR/DEPLOY_DIR (env)  2. known server layouts  3. script parent
 if [ -n "${STAGING_DIR:-}" ]; then
   STAGING_DIR="$STAGING_DIR"
+elif [ -n "${DEPLOY_DIR:-}" ]; then
+  STAGING_DIR="$DEPLOY_DIR"
+elif [ -d /opt/a9a-toolbox/staging ]; then
+  STAGING_DIR="/opt/a9a-toolbox/staging"
 elif [ -d /opt/acessilia-toolbox/staging ]; then
   STAGING_DIR="/opt/acessilia-toolbox/staging"
 else
@@ -49,8 +53,10 @@ else
 fi
 cd "$STAGING_DIR"
 
-COMPOSE_FILE="docker-compose.staging.yml"
-CONTAINER_NAME="acessilia-toolbox-staging"
+# Overridable so production-update.sh can reuse this script: it exports
+# COMPOSE_FILE and CONTAINER_NAME for its own deployment.
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.staging.yml}"
+CONTAINER_NAME="${CONTAINER_NAME:-acessilia-toolbox-staging}"
 GITHUB_REPO="A11yDevs/acessilia-toolbox"
 
 # Cache and status live in a local directory
@@ -92,9 +98,9 @@ if [ -z "${GHCR_TOKEN:-}" ]; then
   fi
 fi
 
-# Tracked branch/tag: "develop" by default, or TRACK_BRANCH (env or .env)
-# during the BHS cycle (e.g. release/0.1.0)
-GITHUB_BRANCH="${TRACK_BRANCH:-develop}"
+# Tracked branch/tag: TRACK_BRANCH (env or .env) wins, then the caller's
+# DEFAULT_TRACK_BRANCH (production passes "main"), then "develop".
+GITHUB_BRANCH="${TRACK_BRANCH:-${DEFAULT_TRACK_BRANCH:-develop}}"
 
 # Docker tags don't accept "/" (e.g. release/0.1.0 -> release-0.1.0)
 TRACK_TAG="${GITHUB_BRANCH//\//-}"
