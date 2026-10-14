@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from acessilia_toolbox.core.errors import (
+    InvalidInputError,
     ProviderExecutionError,
     ProviderTimeoutError,
     ProviderUnavailableError,
@@ -274,6 +275,32 @@ class TestPureChemProvider:
         )
         assert result.document["kind"] == "reaction"
         assert result.document["text"]
+
+    def test_execute_json_payload(self) -> None:
+        """`artifact/latex@1` is a JSON object, so the field must be read."""
+        import json
+
+        provider = PureChemProvider(descriptor(id="pure-chem"))
+        result = provider.execute(
+            "chem.convert",
+            json.dumps({"latex": r"\ce{CO2}"}).encode("utf-8"),
+            filename="expr.json",
+            media_type="application/json",
+        )
+        assert result.document["kind"] == "formula"
+        assert result.document["formula"] == "CO2"
+
+    def test_json_payload_without_latex_is_rejected(self) -> None:
+        import json
+
+        provider = PureChemProvider(descriptor(id="pure-chem"))
+        with pytest.raises(InvalidInputError, match="latex"):
+            provider.execute(
+                "chem.convert",
+                json.dumps({"formula": "CO2"}).encode("utf-8"),
+                filename="expr.json",
+                media_type="application/json",
+            )
 
     def test_rejects_unknown_capability(self) -> None:
         provider = PureChemProvider(descriptor(id="pure-chem"))

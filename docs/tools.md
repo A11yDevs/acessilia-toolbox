@@ -70,6 +70,17 @@ math.convert   : LaTeX <-> MathML (pure-python, latex2mathml)
 math.verbalize : LaTeX -> natural language (pure-python, pt-BR)
 ```
 
+These capabilities accept `artifact/latex@1`, a JSON object carrying the
+expression under `latex`:
+
+``` json
+{ "latex": "x^2+1" }
+```
+
+`text/plain` is accepted too, and then the body is the expression itself. The
+JSON form is the one to prefer: it is the declared schema and it leaves room for
+`confidence`, `page` and `bbox` when the expression came from recognition.
+
 Note: UniMERNet — the formula recognition model used internally by
 MinerU's pipeline backend — is reached through `document.structure.extract`
 and `math.recognize` (docling-math); the Toolbox does not run it as a
@@ -131,6 +142,13 @@ unrotated. See [rapidocr-orient.md](rapidocr-orient.md).
 ``` text
 chem.recognize : image -> reaction description + mhchem (docling-serve VLM)
 chem.convert   : \ce{...} LaTeX -> structured reaction + pt-BR text (pure-python)
+```
+
+`chem.convert` takes the same `artifact/latex@1` payload as the math
+capabilities, so the expression travels under `latex`:
+
+``` json
+{ "latex": "\\ce{CH4 + 2O2 -> CO2 + 2H2O}" }
 ```
 
 `chem.recognize` uses docling-serve's VLM pipeline (Granite Vision) and

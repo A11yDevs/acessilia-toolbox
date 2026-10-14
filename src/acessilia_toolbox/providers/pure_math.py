@@ -15,6 +15,7 @@ from typing import Any
 
 from acessilia_toolbox.core.errors import ProviderUnavailableError
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+from acessilia_toolbox.core.payload import latex_from_payload
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
 # ---------------------------------------------------------------------------
@@ -430,7 +431,9 @@ class PureMathProvider:
         started_clock = perf_counter()
 
         params = dict(parameters or {})
-        latex = payload.decode("utf-8", errors="replace").strip()
+        latex = latex_from_payload(
+            payload, media_type=media_type, capability=capability_id
+        )
 
         if capability_id == "math.convert":
             direction = params.get("direction", "latex-to-mathml")
