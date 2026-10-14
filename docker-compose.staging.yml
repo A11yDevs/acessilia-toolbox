@@ -21,7 +21,9 @@ services:
       TOOLBOX_PORT: 8002
       TOOLBOX_PROVIDERS_CONFIG: /app/providers-config.yaml
       DOCLING_SERVE_URL: ${DOCLING_SERVE_URL:-http://docling-serve:5001}
-      MINERU_SERVE_URL: ${MINERU_SERVE_URL:-http://mineru-serve:5002}
+      # mineru-api listens on 8000 inside its container; MINERU_SERVE_PORT only
+      # maps that port on the host, so the service-to-service URL must use 8000.
+      MINERU_SERVE_URL: ${MINERU_SERVE_URL:-http://mineru-serve:8000}
       NOUGAT_SERVE_URL: ${NOUGAT_SERVE_URL:-http://nougat-serve:5004}
       MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
