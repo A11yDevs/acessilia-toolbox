@@ -32,7 +32,16 @@ RUN apt-get update && \
 RUN pip install --no-cache-dir "numpy<2" six
 
 # MinerU with the CPU pipeline backend only (no vllm, no CUDA, no torch CUDA).
-RUN pip install --no-cache-dir "mineru[pipeline]" && \
+#
+# Pinned to the 2.x line: the provider adapter speaks the 2.x HTTP contract
+# (`POST /file_parse`). MinerU 3.x replaced it with an upload/task API
+# (`/v1/uploads`, `/v1/tasks`), so an unpinned install silently produced a
+# sidecar the toolbox could not talk to.
+#
+# The `api` extra is required separately: `pipeline` installs the parsing
+# backend but not the HTTP server, so `mineru-api` would exit with
+# "No module named 'uvicorn'".
+RUN pip install --no-cache-dir "mineru[pipeline,api]>=2.7,<3" && \
     pip cache purge
 
 # Non-root runtime user.
