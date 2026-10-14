@@ -16,7 +16,11 @@ def docling_table(data: Any) -> Any:
         grid = data["grid"]
         cells = []
         for row_index, row in enumerate(grid):
+            if not isinstance(row, list):
+                raise ProviderExecutionError("native table grid rows must be lists")
             for col_index, cell in enumerate(row):
+                if not isinstance(cell, dict):
+                    raise ProviderExecutionError("native table grid cells must be objects")
                 cells.append(
                     {"start_row_offset_idx": row_index, "start_col_offset_idx": col_index, **cell}
                 )
@@ -56,11 +60,21 @@ def docling_table(data: Any) -> Any:
             "scope": "col" if column_header else "row" if row_header else "none",
             "rowspan": end_r - r,
             "colspan": end_c - c,
+            "metadata": {"column_index": c},
         }
         covered.update((rr, cc) for rr in range(r, end_r) for cc in range(c, end_c))
+    omitted = {
+        r
+        for r in range(rows)
+        if all((r, c) in covered and (r, c) not in anchors for c in range(cols))
+    }
+    for (r, _), cell in anchors.items():
+        cell["rowspan"] -= sum(rr in omitted for rr in range(r + 1, r + cell["rowspan"]))
     header: list[dict[str, Any]] = []
     body: list[dict[str, Any]] = []
     for r in range(rows):
+        if r in omitted:
+            continue
         cells = [
             anchors.get((r, c), {"text": ""})
             for c in range(cols)

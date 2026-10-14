@@ -180,7 +180,14 @@ def test_native_tables_preserve_headers_spans_and_blank_cells():
     assert table["body"][0]["cells"] == [
         {"text": ""},
         {"text": ""},
-        {"text": "Recife", "header": False, "scope": "none", "rowspan": 1, "colspan": 1},
+        {
+            "text": "Recife",
+            "header": False,
+            "scope": "none",
+            "rowspan": 1,
+            "colspan": 1,
+            "metadata": {"column_index": 2},
+        },
     ]
     html = html_table(
         '<table><thead><tr><th colspan="2">Region</th></tr></thead>'

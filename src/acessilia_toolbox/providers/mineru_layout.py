@@ -12,7 +12,7 @@ from typing import Any
 
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.providers.mineru import MineruProvider
-from acessilia_toolbox.providers.mineru_document import MineruDocument
+from acessilia_toolbox.providers.mineru_document import FORMULA_TYPES, MineruDocument
 
 # Canonical region categories (same vocabulary as DoclingLayoutProvider).
 _REGION_TYPES = {
@@ -21,7 +21,7 @@ _REGION_TYPES = {
     "list_block": {"list"},
     "table": {"table"},
     "embedded_image": {"image"},
-    "formula": {"interline_equation", "formula"},
+    "formula": {*FORMULA_TYPES, "formula"},
     "ignore": {"discarded"},
 }
 
