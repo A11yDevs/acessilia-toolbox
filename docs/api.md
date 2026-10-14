@@ -434,3 +434,8 @@ mcp dev scripts/mcp_server.py
 This opens an interactive inspector in the browser where you can browse
 tools, call them, and inspect resources. Ensure `DOCLING_SERVE_URL` is
 set in the environment before starting.
+
+### Upload and capacity errors
+
+- HTTP **413**: the request body exceeds the 201 MiB limit (200 MiB upload plus 1 MiB multipart overhead). Reduce the upload size.
+- HTTP **503**: execution capacity is exhausted or a required provider/dependency is unavailable. Retry capacity failures after load decreases; check provider health and installation for unavailable dependencies.

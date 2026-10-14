@@ -33,7 +33,14 @@ def unauthenticated_allowed() -> bool:
     return os.getenv(ALLOW_UNAUTHENTICATED_ENV, "").strip().lower() in {"1", "true", "yes"}
 
 
-bearer_scheme = HTTPBearer(auto_error=False, scheme_name="ApiKeyAuth")
+bearer_scheme = HTTPBearer(
+    auto_error=False,
+    scheme_name="ApiKeyAuth",
+    description=(
+        "API key configured by TOOLBOX_API_KEY. Send Authorization: Bearer <token>. "
+        "Authentication is disabled when the key is unset."
+    ),
+)
 
 
 async def require_api_key(
