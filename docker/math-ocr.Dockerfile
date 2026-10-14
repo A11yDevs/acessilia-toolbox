@@ -22,8 +22,13 @@ RUN pip install --no-cache-dir \
     "Pillow>=10.0" \
     requests \
     pyyaml \
-    "rapid_latex_ocr>=0.1.1" && \
+    "rapid_latex_ocr>=0.0.9" && \
     pip cache purge
+
+# Fetch the model weights at build time. rapid_latex_ocr downloads them into its
+# own package directory on first use, which the non-root runtime user cannot
+# write to, so the container would start and then never become ready.
+RUN python -c "from rapid_latex_ocr import LaTeXOCR; LaTeXOCR()"
 
 # Non-root runtime user for security and consistency
 RUN useradd --create-home --shell /bin/bash appuser && \
