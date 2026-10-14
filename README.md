@@ -199,7 +199,7 @@ flowchart TB
 | `math.recognize` | docling-serve | ✅ |
 | `math.convert`, `math.verbalize` | pure-python (in-process) | ✅ |
 | `media.inspect` | pure-python (in-process, optional `media` extra) | ✅ |
-| `music.omr` | homr (in-process, optional extra), audiveris-serve (sidecar) | ✅ |
+| `music.omr` | audiveris-serve (sidecar), homr (in-process, local installs only) | ✅ |
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
 | `chem.recognize` | docling-serve VLM (Granite Vision) | ✅ |
 | `chem.convert` | pure-python mhchem (in-process) | ✅ |

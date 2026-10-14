@@ -92,11 +92,20 @@ music.omr : sheet-music image/PDF -> MusicXML or MEI
 
 Two interchangeable providers:
 
-- `homr` — runs the homr Python package in-process (install the
-  `music` extra: `pip install .[music]`).
 - `audiveris` — HTTP adapter for the `audiveris-serve` sidecar container
   (Java Audiveris + Tesseract behind a small REST wrapper). Configure via
-  `AUDIVERIS_SERVE_URL`.
+  `AUDIVERIS_SERVE_URL`. **This is the only provider usable in the published
+  image**: build the sidecar with
+  `docker build -f docker/audiveris-serve.Dockerfile -t audiveris-serve:latest .`
+  and start it with `docker compose up -d audiveris-serve`.
+- `homr` — runs the homr Python package in-process (install the
+  `music` extra: `pip install .[music]`). Only viable for a local, derived
+  install: `homr` depends on `rapidocr`, which the Delivery guardrail forbids in
+  the published image, so the `music` extra can never be part of it.
+
+Audiveris is a desktop application: the sidecar runs it in batch mode under
+Xvfb, and it exports compressed MusicXML (`.mxl`), which the sidecar unpacks
+before returning the score.
 
 ## Page orientation
 
