@@ -14,13 +14,28 @@ persisted in the store for subsequent fast retrieval.  Metadata
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
-from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactStore, ExecutionCache, NullCache
-from acessilia_toolbox.core.dataset import DatasetInfo, DatasetItem, ItemSummary, SplitInfo
-from acessilia_toolbox.core.errors import DatasetProviderError, ToolboxError
+from acessilia_toolbox.core.artifact import (
+    ArtifactRef,
+    ArtifactStore,
+    ExecutionCache,
+    NullCache,
+)
+from acessilia_toolbox.core.dataset import (
+    DatasetInfo,
+    DatasetItem,
+    ItemSummary,
+    SplitInfo,
+)
+from acessilia_toolbox.core.errors import (
+    ArtifactNotFoundError,
+    DatasetProviderError,
+    ToolboxError,
+)
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
@@ -336,24 +351,19 @@ class DatasetAdapter:
         if not self._mirror or self._store is None:
             return self._provider.get_artifact(dataset_id, artifact_path, revision)
 
-        # Check store first (content-addressed lookup).
-        store_key = self._store_key(dataset_id, artifact_path)
-        if self._store.exists(store_key):
-            payload = self._store.get(store_key)
-            ref = self._store.stat(store_key)
-            return payload, ref.media_type
+        store_key = self._store_key(dataset_id, artifact_path, revision)
+        cached = self._cache.get(_ARTIFACT_CACHE_PREFIX + store_key)
+        if cached is not None:
+            ref = ArtifactRef.model_validate(cached)
+            try:
+                return self._store.get(ref.artifact_id), ref.media_type
+            except ArtifactNotFoundError:
+                pass  # An evicted object must be fetched again.
 
         # Fetch from remote.
         payload, media_type = self._provider.get_artifact(dataset_id, artifact_path, revision)
 
-        # Store with a deterministic key derived from the dataset path.
-        self._store.put(
-            payload,
-            media_type=media_type,
-            filename=artifact_path.rsplit("/", 1)[-1],
-        )
-        # Also store a reference under the dataset-scoped key so we can find it.
-        ref = ArtifactRef.of(
+        ref = self._store.put(
             payload,
             media_type=media_type,
             filename=artifact_path.rsplit("/", 1)[-1],
@@ -432,29 +442,20 @@ class DatasetAdapter:
 
         return synced
 
-    def _store_key(self, dataset_id: str, artifact_path: str) -> str:
-        """Deterministic store key for a dataset artifact."""
-        raw = f"datasets/{dataset_id}/{artifact_path}".encode()
+    def _store_key(
+        self, dataset_id: str, artifact_path: str, revision: str | None = None
+    ) -> str:
+        """Reference identity; artifact identities remain content-addressed."""
+        raw = json.dumps([self.descriptor.id, dataset_id, revision, artifact_path]).encode()
         return fingerprint_bytes(raw)
 
     def _meta_cache_key(self, operation: str, kw: dict[str, Any]) -> str:
         """Cache key for metadata operations."""
-        rev = kw.get("revision") or "latest"
-        parts = [
-            _META_CACHE_PREFIX,
-            self.descriptor.id,
-            ":",
-            kw.get("dataset_id", ""),
-            ":",
-            rev,
-            ":",
-            operation,
-        ]
-        # Pagination params must be part of the key, otherwise a page fetched
-        # with limit=5 would be served for any other limit/offset combination.
+        identity = [self.descriptor.id, operation, kw.get("dataset_id"), kw.get("revision")]
         if operation == "list_items":
-            parts += [":", str(kw.get("limit", "")), ":", str(kw.get("offset", ""))]
-        return "".join(parts)
+            identity += [kw.get("split"), kw.get("limit"), kw.get("offset")]
+        return _META_CACHE_PREFIX + fingerprint_bytes(json.dumps(identity).encode())
+
 
 
 __all__ = [
