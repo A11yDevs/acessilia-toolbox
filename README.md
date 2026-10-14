@@ -203,7 +203,10 @@ flowchart TB
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
 | `chem.recognize` | docling-serve VLM (Granite Vision) | ✅ |
 | `chem.convert` | pure-python mhchem (in-process) | ✅ |
-| `accessibility.validate` | pure-python (in-process) | ✅ |
+| `code.normalize` | pure-python (in-process) | ✅ |
+| `text.postprocess` | pure-python (in-process) | ✅ |
+| `accessibility.mark` | pure-python (in-process) | ✅ |
+| `dataset.*` | GitHub / HuggingFace (in-process, optional) | ✅ |
 | `artifact.store` / `artifact.retrieve` | MinIO (optional) | ✅ |
 | `cache.get` / `cache.put` | Valkey (optional) | ✅ |
 

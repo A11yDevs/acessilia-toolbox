@@ -29,5 +29,5 @@ semantics:
     - accessibility_annotated
 
 providers:
-  - id: pure-python
+  - id: pure-accessibility
     version: "1.0+"
