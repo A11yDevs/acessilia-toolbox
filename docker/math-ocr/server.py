@@ -21,11 +21,14 @@ logging.basicConfig(level=logging.INFO)
 
 # ---------------------------------------------------------------------------
 # Upstream Monkey Patch
-# RapidLaTeXOCR (v0.1.1+) contains an issue in LaTeXOCR.loop_image_resizer where
-# on images with certain aspect ratios, `np.argmax(resizer_res, axis=-1)` returns
-# a 1D numpy array instead of a scalar, causing `int()` conversion to fail with:
+# LaTeXOCR.loop_image_resizer can return a 1D numpy array from
+# `np.argmax(resizer_res, axis=-1)` for images with certain aspect ratios,
+# instead of a scalar, so `int()` fails with:
 # "TypeError: only 0-dimensional arrays can be converted to Python scalars".
 # We patch loop_image_resizer with np.squeeze to ensure scalar extraction.
+#
+# The patch is defensive: it is a no-op when the upstream method already yields
+# a scalar, so it stays correct across the versions this image can install.
 # ---------------------------------------------------------------------------
 def _patched_loop(self: Any, img: np.ndarray) -> np.ndarray:
     pillow_img = Image.fromarray(img)
