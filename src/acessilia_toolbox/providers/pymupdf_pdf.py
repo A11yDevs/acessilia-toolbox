@@ -14,6 +14,7 @@ from time import perf_counter
 from typing import Any
 
 from acessilia_toolbox.core.errors import (
+    InvalidInputError,
     ProviderExecutionError,
     ProviderUnavailableError,
 )
@@ -25,6 +26,13 @@ try:
     import pymupdf as fitz
 except ImportError:
     fitz = None
+
+
+def _positive_integer(params: dict[str, Any], name: str, default: int, maximum: int) -> int:
+    value = params.get(name, default)
+    if type(value) is not int or not 1 <= value <= maximum:
+        raise InvalidInputError(f"{name} must be an integer between 1 and {maximum}")
+    return value
 
 
 class PyMuPDFProvider:
@@ -105,8 +113,8 @@ class PyMuPDFProvider:
         self, payload: bytes, filename: str, params: dict[str, Any]
     ) -> dict[str, Any]:
         """Split a multi-page PDF into individual pages."""
-        max_pages = int(params.get("max_pages", 50))
-        dpi = int(params.get("dpi", 150))
+        max_pages = _positive_integer(params, "max_pages", 50, 1000)
+        dpi = _positive_integer(params, "dpi", 150, 600)
 
         pages: list[dict[str, Any]] = []
         total = 0
@@ -137,15 +145,15 @@ class PyMuPDFProvider:
         self, payload: bytes, filename: str, params: dict[str, Any]
     ) -> dict[str, Any]:
         """Render a single PDF page to PNG."""
-        dpi = int(params.get("dpi", 150))
-        page_number = int(params.get("page_number", 1))
+        dpi = _positive_integer(params, "dpi", 150, 600)
+        page_number = _positive_integer(params, "page_number", 1, 1000000)
 
         width = height = 0.0
         png_bytes = b""
         doc = fitz.open(stream=payload, filetype="pdf")
         try:
             if page_number < 1 or page_number > len(doc):
-                raise ProviderExecutionError(
+                raise InvalidInputError(
                     f"page {page_number} out of range (1-{len(doc)})",
                     provider=self.descriptor.id,
                 )
