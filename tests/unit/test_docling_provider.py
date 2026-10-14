@@ -148,6 +148,20 @@ def test_timeout_is_normalized() -> None:
     assert error.value.code == "provider_timeout"
 
 
+@pytest.mark.parametrize(
+    ("status", "error_type"),
+    [(504, ProviderTimeoutError), (503, ProviderUnavailableError)],
+)
+def test_transient_gateway_response_retains_its_error_category(status, error_type) -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, json={"detail": "conversion temporarily unavailable"})
+
+    with pytest.raises(error_type) as error:
+        extract(provider_with(handler))
+
+    assert error.value.http_status == status
+
+
 def test_connection_failure_is_normalized_as_unavailable() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("refused")

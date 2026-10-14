@@ -130,6 +130,16 @@ class DoclingProvider:
                 provider=self.descriptor.id,
             ) from exc
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 504:
+                raise ProviderTimeoutError(
+                    "docling-serve conversion exceeded its gateway deadline",
+                    provider=self.descriptor.id,
+                ) from exc
+            if exc.response.status_code == 503:
+                raise ProviderUnavailableError(
+                    "docling-serve is temporarily unavailable",
+                    provider=self.descriptor.id,
+                ) from exc
             raise ProviderExecutionError(
                 f"docling-serve rejected the document: HTTP {exc.response.status_code}",
                 provider=self.descriptor.id,
