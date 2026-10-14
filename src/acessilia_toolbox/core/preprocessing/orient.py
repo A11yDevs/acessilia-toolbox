@@ -132,7 +132,9 @@ def detect_and_orient_image(
         if not math.isfinite(confidence) or not 0 <= confidence <= 1:
             raise ValueError("invalid orientation confidence")
         for name in ("original_width", "original_height", "oriented_width", "oriented_height"):
-            if name in document and (type(document[name]) is not int or document[name] <= 0):
+            if document.get(name) is not None and (
+                type(document[name]) is not int or document[name] <= 0
+            ):
                 raise ValueError("invalid orientation dimensions")
         stage = str(document.get("stage", "provider"))
         original = (
