@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from acessilia_toolbox.core.errors import ProviderUnavailableError
+from acessilia_toolbox.core.errors import InvalidInputError, ProviderUnavailableError
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter, pure_math
 from acessilia_toolbox.providers.pure_math import (
@@ -34,6 +34,24 @@ def extract(
         latex.encode("utf-8"),
         filename="expression.txt",
         media_type="text/plain",
+        parameters=params if params else None,
+    )
+
+
+def extract_json(
+    adapter: PureMathProvider,
+    capability: str,
+    document: object,
+    **params: object,
+):
+    """Send the payload the way the capability's JSON media type declares it."""
+    import json
+
+    return adapter.execute(
+        capability,
+        json.dumps(document).encode("utf-8"),
+        filename="expression.json",
+        media_type="application/json",
         parameters=params if params else None,
     )
 
@@ -204,6 +222,70 @@ class TestVerbalizeLatex:
     def test_verbalize_text_mode(self) -> None:
         result = _verbalize_latex(r"\text{hello}")
         assert "hello" in result
+
+
+class TestJsonPayload:
+    """`artifact/latex@1` is a JSON object, so a JSON payload must be parsed.
+
+    Reading it as raw text turned the document into the expression, which is how
+    `{"latex":"x^2+1"}` produced MathML for the literal string.
+    """
+
+    def test_convert_reads_the_latex_field(self) -> None:
+        adapter = PureMathProvider(descriptor())
+
+        result = extract_json(
+            adapter, "math.convert", {"latex": "x^2+1"}, direction="latex-to-mathml"
+        )
+
+        assert result.document["latex"] == "x^2+1"
+        assert "<math " in result.document["mathml"]
+        assert "latex" not in result.document["mathml"]
+
+    def test_verbalize_reads_the_latex_field(self) -> None:
+        adapter = PureMathProvider(descriptor())
+
+        result = extract_json(adapter, "math.verbalize", {"latex": "E = mc^2"})
+
+        assert "elevado a" in result.document["verbalized"]
+
+    def test_extra_fields_are_ignored(self) -> None:
+        """The schema carries confidence, page and bbox alongside the expression."""
+        adapter = PureMathProvider(descriptor())
+
+        result = extract_json(
+            adapter,
+            "math.convert",
+            {"latex": "a+b", "confidence": 0.9, "page": 2, "bbox": [0, 0, 1, 1]},
+            direction="latex-to-mathml",
+        )
+
+        assert result.document["latex"] == "a+b"
+
+    def test_missing_latex_field_is_rejected(self) -> None:
+        adapter = PureMathProvider(descriptor())
+
+        with pytest.raises(InvalidInputError, match="latex"):
+            extract_json(adapter, "math.convert", {"expression": "x"})
+
+    def test_malformed_json_is_rejected(self) -> None:
+        adapter = PureMathProvider(descriptor())
+
+        with pytest.raises(InvalidInputError, match="not valid JSON"):
+            adapter.execute(
+                "math.convert",
+                b"{not json",
+                filename="expression.json",
+                media_type="application/json",
+            )
+
+    def test_plain_text_payload_still_works(self) -> None:
+        """text/plain carries the expression itself, with no wrapper."""
+        adapter = PureMathProvider(descriptor())
+
+        result = extract(adapter, "math.convert", "x^2+1", direction="latex-to-mathml")
+
+        assert result.document["latex"] == "x^2+1"
 
 
 class TestWithoutLatex2Mathml:

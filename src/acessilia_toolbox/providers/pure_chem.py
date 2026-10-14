@@ -22,6 +22,7 @@ from typing import Any
 
 from acessilia_toolbox.core.errors import ProviderExecutionError
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+from acessilia_toolbox.core.payload import latex_from_payload
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
 VERSION = "1.0.0"
@@ -219,7 +220,9 @@ class PureChemProvider:
         started_at = datetime.now(UTC)
         started_clock = perf_counter()
 
-        latex = payload.decode("utf-8", errors="replace").strip()
+        latex = latex_from_payload(
+            payload, media_type=media_type, capability=capability_id
+        )
         result = normalize_mhchem(latex)
 
         completed_at = datetime.now(UTC)
