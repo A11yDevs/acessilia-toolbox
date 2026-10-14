@@ -21,6 +21,9 @@ def compute_cache_key(
     input_fingerprints: Sequence[str],
     parameters: Mapping[str, object] | None = None,
     model_versions: Mapping[str, str] | None = None,
+    filename: str = "",
+    media_type: str = "",
+    language: str = "",
 ) -> str:
     """Derive a stable key from the full execution context.
 
@@ -34,6 +37,9 @@ def compute_cache_key(
             "inputs": list(input_fingerprints),
             "parameters": dict(parameters or {}),
             "models": dict(model_versions or {}),
+            "filename": filename,
+            "media_type": media_type,
+            "language": language,
         }
     )
     return fingerprint_bytes(material.encode("utf-8"))

@@ -102,6 +102,9 @@ class CapabilityExecutor:
             input_fingerprints=[input_fingerprint],
             parameters=parameters,
             model_versions=versions,
+            filename=filename,
+            media_type=media_type,
+            language=language,
         )
 
         if manifest.execution.cacheable and not no_cache:
@@ -144,6 +147,9 @@ class CapabilityExecutor:
                     input_fingerprints=[input_fingerprint],
                     parameters=parameters,
                     model_versions=versions,
+                    filename=filename,
+                    media_type=media_type,
+                    language=language,
                 )
                 if manifest.execution.cacheable and not no_cache:
                     cached = self._cache.get(cache_key)
