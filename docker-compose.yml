@@ -156,6 +156,27 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # MinerU document parsing (CPU pipeline backend). The image is built from the
+  # official repo via scripts/build-mineru-image.sh (MinerU publishes no
+  # pre-built images). On a GPU host, build with the vllm base and add
+  # `deploy.resources.reservations.devices` for GPU access.
+  mineru-serve:
+    image: ${MINERU_SERVE_IMAGE:-mineru:latest}
+    container_name: mineru-serve
+    entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${MINERU_SERVE_PORT:-5002}:8000"
+    environment:
+      MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+    volumes:
+      - mineru-models:/home/mineru/.cache/modelscope
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
   # Lightweight math formula OCR sidecar (RapidLaTeXOCR).
   rapid-latex-ocr:
     build:
@@ -193,6 +214,7 @@ services:
 volumes:
   artifact-fallback:
   docling-models:
+  mineru-models:
   minio-data:
   nougat-models:
   nougat-torch-models:

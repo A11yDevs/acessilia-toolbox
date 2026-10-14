@@ -121,6 +121,22 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # RapidLaTeXOCR math formula sidecar (optional). Built from
+  # docker/math-ocr.Dockerfile via scripts/build-math-ocr-image.sh; the Toolbox
+  # reaches it through RAPID_LATEX_OCR_URL.
+  rapid-latex-ocr:
+    image: ${RAPID_LATEX_OCR_IMAGE:-rapid-latex-ocr:latest}
+    container_name: rapid-latex-ocr-staging
+    ports:
+      - "${RAPID_LATEX_OCR_PORT:-5005}:5004"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
   # RapidOCR page orientation sidecar (optional). Built from
   # docker/rapidocr-orient.Dockerfile; reports 503 until the engine is ready.
   rapidocr-orient:

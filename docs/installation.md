@@ -247,6 +247,27 @@ docker build -f docker/audiveris-serve.Dockerfile -t audiveris-serve:latest .
 docker run -d --name audiveris-serve -p 5003:5003 audiveris-serve:latest
 ```
 
+### Sidecars that need a local build
+
+Four sidecars have no published image, so Compose can only start them after the
+image exists on the host. Each one backs a capability that stays unavailable
+until then:
+
+| Sidecar | Build | Capability |
+|---|---|---|
+| `mineru-serve` | `./scripts/build-mineru-image.sh` | `document.structure.extract`, `document.layout.analyze`, `document.ocr` |
+| `nougat-serve` | `./scripts/build-nougat-image.sh` | `document.structure.extract` |
+| `rapid-latex-ocr` | `./scripts/build-math-ocr-image.sh` | `math.recognize` |
+| `audiveris-serve` | `docker build -f docker/audiveris-serve.Dockerfile -t audiveris-serve:latest .` | `music.omr` |
+
+`rapidocr-orient` is built the same way
+(`docker build -f docker/rapidocr-orient.Dockerfile -t rapidocr-orient:latest .`)
+and backs `image.page.orient`.
+
+The Toolbox starts regardless: a provider whose endpoint does not resolve is
+reported as unhealthy and its capability answers `503`, while every other
+capability keeps working.
+
 ### Provider topology file
 
 The file `providers-config.yaml` declares how the Toolbox reaches each
