@@ -219,6 +219,12 @@ docker run -d --name acessilia-minio -p 9000:9000 -p 9001:9001 \
 docker run -d --name acessilia-valkey -p 6379:6379 \
   -v valkey-data:/data \
   valkey/valkey:8-alpine
+
+# audiveris-serve (optical music recognition, optional)
+# Built from the repository recipe; the Toolbox image never carries the OMR
+# engine itself.
+docker build -f docker/audiveris-serve.Dockerfile -t audiveris-serve:latest .
+docker run -d --name audiveris-serve -p 5003:5003 audiveris-serve:latest
 ```
 
 ### Provider topology file
