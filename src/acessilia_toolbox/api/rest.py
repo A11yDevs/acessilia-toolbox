@@ -479,7 +479,7 @@ def sample_dataset(
         filename="query.json",
         media_type="application/json",
         provider_id=provider_id,
-        parameters={"dataset_id": dataset_id, "revision": revision, "n": n},
+        parameters={"dataset_id": dataset_id, "split": split, "revision": revision, "n": n},
     )
     return result.document  # type: ignore[no-any-return]
 
