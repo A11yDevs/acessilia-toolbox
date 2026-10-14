@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -167,6 +168,7 @@ def make_dataset_adapter(tmp_path, provider_id="source"):
     adapter = DatasetAdapter.__new__(DatasetAdapter)
     adapter.descriptor = SimpleNamespace(id=provider_id)
     adapter._mirror = True
+    adapter._mirror_refs = OrderedDict()
     adapter._cache = MemoryCache()
     adapter._store = FilesystemArtifactStore(tmp_path)
     return adapter

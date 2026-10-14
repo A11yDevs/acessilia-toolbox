@@ -15,6 +15,7 @@ persisted in the store for subsequent fast retrieval.  Metadata
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
@@ -121,6 +122,8 @@ class DatasetAdapter:
         self._store = store
         self._cache = cache or NullCache()
         self._mirror = bool(descriptor.config.get("mirror", False))
+        # A disabled execution cache must not disable artifact mirroring.
+        self._mirror_refs: OrderedDict[str, ArtifactRef] = OrderedDict()
 
     # ------------------------------------------------------------------
     # ProviderAdapter protocol
@@ -353,6 +356,8 @@ class DatasetAdapter:
 
         store_key = self._store_key(dataset_id, artifact_path, revision)
         cached = self._cache.get(_ARTIFACT_CACHE_PREFIX + store_key)
+        if cached is None and store_key in self._mirror_refs:
+            cached = self._mirror_refs[store_key].model_dump(mode="json")
         if cached is not None:
             ref = ArtifactRef.model_validate(cached)
             try:
@@ -368,6 +373,10 @@ class DatasetAdapter:
             media_type=media_type,
             filename=artifact_path.rsplit("/", 1)[-1],
         )
+        self._mirror_refs[store_key] = ref
+        self._mirror_refs.move_to_end(store_key)
+        while len(self._mirror_refs) > 256:
+            self._mirror_refs.popitem(last=False)
         self._cache.put(
             _ARTIFACT_CACHE_PREFIX + store_key,
             ref.model_dump(mode="json"),
