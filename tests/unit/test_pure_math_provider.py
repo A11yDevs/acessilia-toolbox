@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from acessilia_toolbox.core.errors import ProviderUnavailableError
 from acessilia_toolbox.core.provider import ProviderDescriptor
-from acessilia_toolbox.providers import create_adapter
+from acessilia_toolbox.providers import create_adapter, pure_math
 from acessilia_toolbox.providers.pure_math import (
     PureMathProvider,
     _verbalize_latex,
@@ -133,6 +134,7 @@ class TestPureMathProvider:
         health = adapter.health()
         assert health.healthy is True
         assert health.provider == "pure-math"
+        assert health.detail is None
 
     def test_versions_returns_version(self) -> None:
         adapter = PureMathProvider(descriptor())
@@ -202,3 +204,44 @@ class TestVerbalizeLatex:
     def test_verbalize_text_mode(self) -> None:
         result = _verbalize_latex(r"\text{hello}")
         assert "hello" in result
+
+
+class TestWithoutLatex2Mathml:
+    """The `math` extra carries latex2mathml and nothing else.
+
+    An image built without the extra must degrade loudly instead of failing with
+    a bare 500, and health must stop claiming the provider is fully available.
+    """
+
+    def test_conversion_reports_the_missing_extra(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(pure_math, "_latex_to_mathml", None)
+        adapter = PureMathProvider(descriptor())
+
+        with pytest.raises(ProviderUnavailableError) as excinfo:
+            extract(adapter, "math.convert", "E = mc^2", direction="latex-to-mathml")
+
+        message = str(excinfo.value)
+        assert "latex2mathml is not installed" in message
+        assert "math" in message
+
+    def test_health_reports_unavailable_with_a_hint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(pure_math, "_latex_to_mathml", None)
+        adapter = PureMathProvider(descriptor())
+
+        health = adapter.health()
+
+        assert health.healthy is False
+        assert health.detail is not None and "latex2mathml" in health.detail
+
+    def test_verbalize_keeps_working_without_the_extra(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """math.verbalize is pure Python, so it survives the missing extra."""
+        monkeypatch.setattr(pure_math, "_latex_to_mathml", None)
+        adapter = PureMathProvider(descriptor())
+
+        result = extract(adapter, "math.verbalize", "E = mc^2")
+
+        assert "elevado a" in result.document["verbalized"]

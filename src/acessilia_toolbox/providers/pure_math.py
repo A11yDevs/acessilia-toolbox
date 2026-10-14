@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
 
+from acessilia_toolbox.core.errors import ProviderUnavailableError
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
@@ -20,16 +21,25 @@ from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 # LaTeX → MathML
 # ---------------------------------------------------------------------------
 
+LATEX2MATHML_EXTRA = "math"
+
 try:
     from latex2mathml.converter import convert as _latex_to_mathml
 except ImportError:
     _latex_to_mathml = None  # type: ignore[assignment]
 
 
+def _missing_latex2mathml_detail() -> str:
+    return (
+        "latex2mathml is not installed; install the "
+        f"'{LATEX2MATHML_EXTRA}' extra (pip install .[{LATEX2MATHML_EXTRA}])"
+    )
+
+
 def _convert_latex_to_mathml(latex: str) -> str:
     """Convert a LaTeX expression to MathML."""
     if _latex_to_mathml is None:
-        raise RuntimeError("latex2mathml is not installed")
+        raise ProviderUnavailableError(_missing_latex2mathml_detail())
     return _latex_to_mathml(latex)
 
 
@@ -448,10 +458,15 @@ class PureMathProvider:
         return {"provider": VERSION}
 
     def health(self) -> ProviderHealth:
+        # Only latex2mathml is optional: math.verbalize is pure Python and keeps
+        # working without it, so an absent dependency degrades one direction of
+        # math.convert rather than the whole provider.
+        available = _latex_to_mathml is not None
         return ProviderHealth(
             provider=self.descriptor.id,
-            healthy=True,
+            healthy=available,
             version=VERSION,
+            detail=None if available else _missing_latex2mathml_detail(),
             checked_at=datetime.now(UTC),
         )
 
