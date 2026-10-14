@@ -953,6 +953,16 @@
                     "version": {
                         "type": "string",
                         "title": "Version"
+                    },
+                    "git_commit": {
+                        "type": "string",
+                        "title": "Git Commit",
+                        "default": ""
+                    },
+                    "image_tag": {
+                        "type": "string",
+                        "title": "Image Tag",
+                        "default": ""
                     }
                 },
                 "type": "object",

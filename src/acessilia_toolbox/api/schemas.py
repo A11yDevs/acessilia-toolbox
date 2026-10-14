@@ -18,6 +18,8 @@ from acessilia_toolbox.core.provenance import ExecutionProvenance
 class HealthResponse(BaseModel):
     status: str
     version: str
+    git_commit: str = ""
+    image_tag: str = ""
 
 
 class CapabilitySummary(BaseModel):

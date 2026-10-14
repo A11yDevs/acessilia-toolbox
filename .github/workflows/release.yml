@@ -70,6 +70,8 @@ jobs:
           tags: ${{ env.LOCAL_IMAGE }}
           build-args: |
             TOOLBOX_EXTRAS=api,storage,cache,pdf,media,math
+            GIT_COMMIT=${{ github.sha }}
+            IMAGE_TAG=${{ github.ref_name }}
           cache-from: type=gha,scope=production
 
       - name: Verify installed packages
@@ -117,6 +119,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             TOOLBOX_EXTRAS=api,storage,cache,pdf,media,math
+            GIT_COMMIT=${{ github.sha }}
+            IMAGE_TAG=${{ github.ref_name }}
           cache-from: type=gha,scope=production
 
   release:

@@ -27,5 +27,5 @@ semantics:
     - text_processed
 
 providers:
-  - id: pure-python
+  - id: pure-text
     version: "1.0+"

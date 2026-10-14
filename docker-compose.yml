@@ -9,6 +9,10 @@ services:
       target: production
       args:
         TOOLBOX_EXTRAS: api,storage,cache,pdf,media,math
+        # Surfaced by GET /v1/health so a local container reports the revision
+        # it was built from. Override with GIT_COMMIT/IMAGE_TAG in the shell.
+        GIT_COMMIT: ${GIT_COMMIT:-}
+        IMAGE_TAG: ${IMAGE_TAG:-local}
     image: acessilia-toolbox:local
     container_name: acessilia-toolbox
     ports:

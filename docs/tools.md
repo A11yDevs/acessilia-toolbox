@@ -18,7 +18,10 @@ roadmap candidates.
 | Music         | `music.omr`                                             | homr (in-process), Audiveris (sidecar)     | [implemented] |
 | Page layout   | `image.page.orient`                                     | RapidOCR (sidecar)                         | [implemented] |
 | Chemistry     | `chem.recognize`, `chem.convert`                        | docling-serve VLM (Granite Vision), pure-python mhchem | [implemented] |
-| Accessibility | `accessibility.validate`                                | pure-python checks (veraPDF: roadmap)      | [implemented] |
+| Accessibility | `accessibility.mark`                                    | pure-python (in-process; veraPDF validation: roadmap) | [implemented] |
+| Code          | `code.normalize`                                        | pure-python (in-process)                   | [implemented] |
+| Text          | `text.postprocess`                                      | pure-python (in-process)                   | [implemented] |
+| Datasets      | `dataset.list`, `dataset.get_item`, `dataset.sync`, ... | GitHub, HuggingFace (in-process, optional) | [implemented] |
 | Artifacts     | `artifact.store`, `artifact.retrieve`                   | MinIO, S3                                  | [implemented] |
 | Cache         | `cache.get`, `cache.put`                                | Valkey, Redis                              | [implemented] |
 | Metadata      | `artifact.metadata.extract`                             | ExifTool                                   | roadmap       |

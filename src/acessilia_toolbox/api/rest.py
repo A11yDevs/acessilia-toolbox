@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
@@ -72,7 +73,12 @@ def executor(request: Request) -> CapabilityExecutor:
 
 @public_router.get("/health", response_model=HealthResponse, tags=["health"])
 def health() -> HealthResponse:
-    return HealthResponse(status="healthy", version=__version__)
+    return HealthResponse(
+        status="healthy",
+        version=__version__,
+        git_commit=os.getenv("GIT_COMMIT", ""),
+        image_tag=os.getenv("IMAGE_TAG", ""),
+    )
 
 
 @router.get("/capabilities", response_model=list[CapabilitySummary], tags=["capabilities"])

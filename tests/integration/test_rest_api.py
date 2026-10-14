@@ -118,6 +118,35 @@ def test_health_reports_the_service_version(client: TestClient) -> None:
     assert response.json()["version"]
 
 
+def test_health_reports_the_build_identity(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The image passes GIT_COMMIT/IMAGE_TAG; health must surface them.
+
+    Without them there is no way to tell which revision a running Toolbox is
+    serving, which is what made the staging/core comparison a guess.
+    """
+    monkeypatch.setenv("GIT_COMMIT", "abcdef1234567890")
+    monkeypatch.setenv("IMAGE_TAG", "develop")
+
+    body = client.get("/v1/health").json()
+
+    assert body["git_commit"] == "abcdef1234567890"
+    assert body["image_tag"] == "develop"
+
+
+def test_health_build_identity_defaults_to_empty(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GIT_COMMIT", raising=False)
+    monkeypatch.delenv("IMAGE_TAG", raising=False)
+
+    body = client.get("/v1/health").json()
+
+    assert body["git_commit"] == ""
+    assert body["image_tag"] == ""
+
+
 def test_capabilities_are_listed(client: TestClient) -> None:
     response = client.get("/v1/capabilities")
 

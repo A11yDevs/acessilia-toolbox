@@ -27,5 +27,5 @@ semantics:
     - code_normalized
 
 providers:
-  - id: pure-python
+  - id: pure-code
     version: "1.0+"
