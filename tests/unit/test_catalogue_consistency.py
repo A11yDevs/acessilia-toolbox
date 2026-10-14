@@ -45,23 +45,26 @@ def capabilities() -> CapabilityRegistry:
 @pytest.fixture(scope="module")
 def providers() -> ProviderRegistry:
     # The shipped config resolves ${VAR} placeholders; provide values for every
-    # referenced variable so the registry loads the real topology.
-    import os
-
-    for name in (
-        "DOCLING_SERVE_URL",
-        "MINERU_SERVE_URL",
-        "NOUGAT_SERVE_URL",
-        "AUDIVERIS_SERVE_URL",
-        "RAPID_LATEX_OCR_URL",
-        "RAPIDOCR_ORIENT_URL",
-        "MINIO_URL",
-        "MINIO_ACCESS_KEY",
-        "MINIO_SECRET_KEY",
-        "VALKEY_URL",
-    ):
-        os.environ.setdefault(name, f"http://{name.lower()}")
-    return ProviderRegistry.from_file(PROVIDERS_CONFIG)
+    # referenced variable so the registry loads the real topology. The patch is
+    # scoped to loading -- descriptors keep the resolved values afterwards -- so
+    # these variables never reach other suites. ``tests/contract`` reads the same
+    # names straight from the environment to build its own descriptors, and a
+    # leaked placeholder value makes botocore reject the endpoint.
+    with pytest.MonkeyPatch.context() as patch:
+        for name in (
+            "DOCLING_SERVE_URL",
+            "MINERU_SERVE_URL",
+            "NOUGAT_SERVE_URL",
+            "AUDIVERIS_SERVE_URL",
+            "RAPID_LATEX_OCR_URL",
+            "RAPIDOCR_ORIENT_URL",
+            "MINIO_URL",
+            "MINIO_ACCESS_KEY",
+            "MINIO_SECRET_KEY",
+            "VALKEY_URL",
+        ):
+            patch.setenv(name, f"http://{name.lower()}")
+        return ProviderRegistry.from_file(PROVIDERS_CONFIG)
 
 
 def test_every_capability_has_at_least_one_provider(
