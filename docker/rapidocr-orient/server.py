@@ -100,12 +100,43 @@ def _rotate_clockwise(image: Image.Image, angle: int) -> Image.Image:
     return image.rotate(360 - (angle % 360), expand=True)
 
 
-def _recognize(engine: Any, image: Image.Image) -> list[Any]:
-    """Run one detection+recognition pass, returning the OCR line results."""
+def _recognize(engine: Any, image: Image.Image) -> tuple[list[Any], Any]:
+    """Run one detection+recognition pass.
+
+    Returns the line results and the pixel array the boxes refer to. RapidOCR
+    yields ``[box, text, score]`` triples and does not return the crops itself,
+    so the array must travel with the results for the classifier to slice the
+    same regions.
+    """
     import numpy as np
 
-    results, _ = engine(np.array(image.convert("RGB")))
-    return list(results) if results else []
+    page = np.array(image.convert("RGB"))
+    results, _ = engine(page)
+    return (list(results) if results else []), page
+
+
+def _crops_from_results(results: list[Any], page: Any) -> list[Any]:
+    """Cut each detected line box out of the page the boxes were measured on.
+
+    The boxes are converted to pixel coordinates and clipped to the array, so a
+    box touching an edge still yields a usable crop instead of an empty slice.
+    """
+    import numpy as np
+
+    height, width = page.shape[:2]
+    crops = []
+    for item in results:
+        box = item[0]
+        xs = [float(point[0]) for point in box]
+        ys = [float(point[1]) for point in box]
+        left = max(0, int(min(xs)))
+        top = max(0, int(min(ys)))
+        right = min(width, int(max(xs)))
+        bottom = min(height, int(max(ys)))
+        if right - left <= 0 or bottom - top <= 0:
+            continue
+        crops.append(np.ascontiguousarray(page[top:bottom, left:right]))
+    return crops
 
 
 def _text_line_score(results: list[Any]) -> float:
@@ -132,11 +163,13 @@ def _text_line_score(results: list[Any]) -> float:
     return total / len(results)
 
 
-def _classifier_upside_down_confidence(engine: Any, results: list[Any]) -> float | None:
+def _classifier_upside_down_confidence(
+    engine: Any, results: list[Any], page: Any
+) -> float | None:
     """Ask the OCR angle classifier whether the detected lines are upside down.
 
-    PaddleOCR's classifier labels a crop `0` or `180`. Reusing the engine's own
-    crops keeps this to one extra inference batch and makes the 180° case, which
+    PaddleOCR's classifier labels a crop `0` or `180`. Classifying the detected
+    lines keeps this to one extra inference batch and makes the 180° case, which
     keeps text horizontal and therefore invisible to the geometry heuristics,
     directly observable.
 
@@ -148,25 +181,34 @@ def _classifier_upside_down_confidence(engine: Any, results: list[Any]) -> float
     if classifier is None or not engine_loaded:
         return None
 
-    import numpy as np
-
-    crops = [np.array(item[1]) for item in results if item[1] is not None]
-    crops = [crop for crop in crops if crop.ndim == 3 and min(crop.shape[:2]) > 0]
+    crops = _crops_from_results(results, page)
     if not crops:
         return None
 
     try:
-        _, labels, _ = classifier(crops)
+        classifier_result = classifier(crops)
     except Exception as exc:  # pragma: no cover - defensive around native code
         LOG.warning("Angle classifier failed: %s", exc)
         return None
 
+    # RapidOCR returns a three-tuple whose middle slot holds the predictions as
+    # [label, score] pairs; the label is the string "0" or "180".
+    if not isinstance(classifier_result, tuple) or len(classifier_result) < 2:
+        LOG.warning("Unexpected angle classifier output: %r", type(classifier_result))
+        return None
+    predictions = classifier_result[1]
+    if not predictions:
+        return None
+
     threshold = float(getattr(classifier, "cls_thresh", 0.9))
-    votes = [
-        float(score)
-        for label, score in labels
-        if "180" in str(label) and float(score) > threshold
-    ]
+    votes = []
+    for prediction in predictions:
+        if not prediction or len(prediction) < 2:
+            continue
+        label, score = prediction[0], prediction[1]
+        if "180" in str(label) and float(score) > threshold:
+            votes.append(float(score))
+
     if len(votes) * 2 <= len(crops):
         return None
     return sum(votes) / len(votes)
@@ -192,11 +234,11 @@ def _detect_orientation(engine: Any, image: Image.Image) -> tuple[int, float, st
     downscaled = _downscale_if_needed(image, max_dim=1024)
     downscaled_rgb = downscaled.convert("RGB")
 
-    results = _recognize(engine, downscaled_rgb)
+    results, page = _recognize(engine, downscaled_rgb)
     if not results:
         return 0, 0.0, "no_text_detected"
 
-    upside_down_confidence = _classifier_upside_down_confidence(engine, results)
+    upside_down_confidence = _classifier_upside_down_confidence(engine, results, page)
     if upside_down_confidence is not None:
         return 180, round(float(upside_down_confidence), 4), "stage1_classifier_180"
 
@@ -208,7 +250,8 @@ def _detect_orientation(engine: Any, image: Image.Image) -> tuple[int, float, st
     # heuristics can detect, and 180° is already settled by the classifier.
     for angle in (90, 270):
         rotated = _rotate_clockwise(downscaled_rgb, angle)
-        score = _text_line_score(_recognize(engine, rotated))
+        rotated_results, _ = _recognize(engine, rotated)
+        score = _text_line_score(rotated_results)
         if score > best_score:
             best_score = score
             best_angle = angle
