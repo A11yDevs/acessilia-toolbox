@@ -43,7 +43,7 @@ Public contracts should use stable capability identifiers such as:
 - `document.structure.extract`
 - `document.convert`
 - `math.recognize`
-- `accessibility.validate`
+- `accessibility.mark`
 - `artifact.store`
 
 Provider names such as Docling, MinerU, Pandoc, or MinIO are

@@ -16,8 +16,9 @@ from pathlib import Path
 import pytest
 
 from acessilia_toolbox.core.capability import CapabilityRegistry
+from acessilia_toolbox.core.errors import ProviderNotFoundError
 from acessilia_toolbox.core.provider import ProviderRegistry
-from acessilia_toolbox.providers import ADAPTERS
+from acessilia_toolbox.providers import ADAPTERS, create_adapter
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CAPABILITIES_DIR = PROJECT_ROOT / "capabilities"
@@ -108,6 +109,23 @@ def test_every_provider_has_an_adapter(providers: ProviderRegistry) -> None:
     )
 
 
+def test_every_adapter_is_instantiable(providers: ProviderRegistry) -> None:
+    """Presence in ADAPTERS is not enough: the factory must actually build.
+
+    A provider whose adapter raises on construction is still advertised by
+    ``GET /v1/providers`` and only fails once a request reaches it.
+    """
+    failures = []
+    for descriptor in providers.descriptors():
+        if descriptor.id not in ADAPTERS:
+            continue  # platform providers are constructed by api/app.py
+        try:
+            create_adapter(descriptor)
+        except Exception as exc:
+            failures.append((descriptor.id, f"{type(exc).__name__}: {exc}"))
+    assert not failures, f"adapters that cannot be instantiated: {failures}"
+
+
 def test_manifest_provider_bindings_are_registered(
     capabilities: CapabilityRegistry, providers: ProviderRegistry
 ) -> None:
@@ -150,7 +168,7 @@ def test_provider_records_the_capability_the_manifest_claims(
         for binding in manifest.providers:
             try:
                 descriptor = providers.get(binding.id)
-            except Exception:
+            except ProviderNotFoundError:
                 continue  # opt-in profile, covered by the test above
             if not descriptor.implements(manifest.id):
                 asymmetric.append((binding.id, manifest.id))

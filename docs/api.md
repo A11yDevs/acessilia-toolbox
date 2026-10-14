@@ -112,7 +112,7 @@ artifact_identify
 document_ocr
 document_structure_extract
 document_convert
-accessibility_validate
+accessibility_mark
 ```
 
 Example resources:

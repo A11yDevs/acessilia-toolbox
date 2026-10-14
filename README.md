@@ -190,25 +190,25 @@ flowchart TB
 
 ## What it can do today
 
-| Capability | Provider | Status |
+| Capability | Providers (ids from `providers-config.yaml`) | Status |
 |---|---|---|
-| `document.structure.extract` | docling-serve, mineru-serve (optional) | ✅ |
-| `document.layout.analyze` | docling-serve, mineru-serve (optional) | ✅ |
-| `document.ocr` | docling-serve, mineru-serve (optional) | ✅ |
-| `pdf.split`, `pdf.render` | PyMuPDF (in-process) | ✅ |
-| `math.recognize` | docling-serve | ✅ |
-| `math.convert`, `math.verbalize` | pure-python (in-process) | ✅ |
-| `media.inspect` | pure-python (in-process, optional `media` extra) | ✅ |
-| `music.omr` | audiveris-serve (sidecar), homr (in-process, local installs only) | ✅ |
+| `document.structure.extract` | docling, nougat, mineru (teleocr: opt-in) | ✅ |
+| `document.layout.analyze` | docling-layout, mineru-layout | ✅ |
+| `document.ocr` | docling-ocr, mineru-ocr | ✅ |
+| `pdf.split`, `pdf.render` | pymupdf-pdf (in-process) | ✅ |
+| `math.recognize` | docling-math, rapid-latex-ocr | ✅ |
+| `math.convert`, `math.verbalize` | pure-math (in-process) | ✅ |
+| `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
+| `music.omr` | homr (in-process, local installs only), audiveris (sidecar) | ✅ |
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
-| `chem.recognize` | docling-serve VLM (Granite Vision) | ✅ |
-| `chem.convert` | pure-python mhchem (in-process) | ✅ |
-| `code.normalize` | pure-python (in-process) | ✅ |
-| `text.postprocess` | pure-python (in-process) | ✅ |
-| `accessibility.mark` | pure-python (in-process) | ✅ |
-| `dataset.*` | GitHub / HuggingFace (in-process, optional) | ✅ |
-| `artifact.store` / `artifact.retrieve` | MinIO (optional) | ✅ |
-| `cache.get` / `cache.put` | Valkey (optional) | ✅ |
+| `chem.recognize` | docling-chem (Granite Vision VLM) | ✅ |
+| `chem.convert` | pure-chem (in-process, mhchem) | ✅ |
+| `code.normalize` | pure-code (in-process) | ✅ |
+| `text.postprocess` | pure-text (in-process) | ✅ |
+| `accessibility.mark` | pure-accessibility (in-process) | ✅ |
+| `dataset.*` | dataset-github, dataset-huggingface (in-process, optional) | ✅ |
+| `artifact.store` / `artifact.retrieve` | minio (primary), filesystem (failover), optional | ✅ |
+| `cache.get` / `cache.put` | valkey (optional) | ✅ |
 
 ## Key endpoints
 
