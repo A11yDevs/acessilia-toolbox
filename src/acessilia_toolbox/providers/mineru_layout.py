@@ -21,7 +21,7 @@ _REGION_TYPES = {
     "list_block": {"list"},
     "table": {"table"},
     "embedded_image": {"image"},
-    "formula": {"interline_equation"},
+    "formula": {"interline_equation", "formula"},
     "ignore": {"discarded"},
 }
 

@@ -13,16 +13,16 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
+from acessilia_toolbox.providers.table_formats import html_table
+
 # Block types from mineru.utils.enum_class (inlined to avoid importing the
 # mineru package here — the toolbox must stay free of ML runtimes).
 TEXT_TYPES = ("text", "title", "list", "index")
 TABLE_TYPES = ("table",)
 IMAGE_TYPES = ("image",)
-FORMULA_TYPES = ("interline_equation",)
+FORMULA_TYPES = ("interline_equation", "inline_equation", "equation")
 
-_DISCARDABLE_KEYS = frozenset(
-    {"preproc_blocks", "discarded_blocks", "page_idx", "page_size"}
-)
+_DISCARDABLE_KEYS = frozenset({"preproc_blocks", "discarded_blocks", "page_idx", "page_size"})
 
 
 class _BboxProxy:
@@ -97,7 +97,8 @@ class _ItemProxy:
 
     @property
     def label(self) -> str:
-        return str(self._block.get("type", "unknown"))
+        label = str(self._block.get("type", "unknown"))
+        return "formula" if label in FORMULA_TYPES else label
 
     @property
     def page_no(self) -> int:
@@ -127,7 +128,7 @@ class _ItemProxy:
 
     @property
     def text(self) -> str:
-        text = self._block_text()
+        text = (self.latex or self._block_text()) if self.label == "formula" else self._block_text()
         return str(text) if text is not None else ""
 
     def _block_text(self) -> Any:
@@ -141,6 +142,10 @@ class _ItemProxy:
                 if content:
                     parts.append(str(content))
         return "".join(parts) if parts else None
+
+    @property
+    def table_ast(self) -> dict[str, Any] | None:
+        return html_table(self.html) if self.label == "table" else None
 
     @property
     def html(self) -> str | None:
@@ -185,18 +190,13 @@ class MineruDocument:
 
     def __init__(self, payload: Mapping[str, Any]) -> None:
         self._payload = payload
-        self._pages: list[Mapping[str, Any]] = list(
-            payload.get("pdf_info") or []
-        )
+        self._pages: list[Mapping[str, Any]] = list(payload.get("pdf_info") or [])
 
     # -- pages -----------------------------------------------------------
 
     @property
     def pages(self) -> dict[int, _PageProxy]:
-        return {
-            index + 1: _PageProxy(page)
-            for index, page in enumerate(self._pages)
-        }
+        return {index + 1: _PageProxy(page) for index, page in enumerate(self._pages)}
 
     @property
     def page_count(self) -> int:
@@ -212,9 +212,7 @@ class MineruDocument:
         for page in self._pages:
             page_idx = int(page.get("page_idx", 0))
             page_size = page.get("page_size") or []
-            sources: list[Mapping[str, Any]] = list(
-                page.get("preproc_blocks") or []
-            )
+            sources: list[Mapping[str, Any]] = list(page.get("preproc_blocks") or [])
             if include_discarded:
                 sources += list(page.get("discarded_blocks") or [])
             for block in sources:
@@ -232,9 +230,7 @@ class MineruDocument:
         heading structure — titles are level 1, everything else level 2.
         """
         level = 1
-        for page in sorted(
-            self._pages, key=lambda p: int(p.get("page_idx", 0))
-        ):
+        for page in sorted(self._pages, key=lambda p: int(p.get("page_idx", 0))):
             page_idx = int(page.get("page_idx", 0))
             page_size = page.get("page_size") or []
             for block in page.get("preproc_blocks") or []:
@@ -298,11 +294,7 @@ class MineruDocument:
 
     @property
     def metadata(self) -> dict[str, Any]:
-        return {
-            key: value
-            for key, value in self._payload.items()
-            if key not in _DISCARDABLE_KEYS
-        }
+        return {key: value for key, value in self._payload.items() if key not in _DISCARDABLE_KEYS}
 
 
 __all__ = ["MineruDocument"]
