@@ -95,18 +95,6 @@ def create_app(
     app.include_router(router)
     app.include_router(dataset_router)
 
-    # OpenAPI security scheme for Bearer token auth.
-    app.openapi_components = {  # type: ignore[attr-defined]
-        "securitySchemes": {
-            "ApiKeyAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "description": "Bearer token matching TOOLBOX_API_KEY.",
-            }
-        }
-    }
-    app.openapi_security = [{"ApiKeyAuth": []}]  # type: ignore[attr-defined]
-
     if not auth.TOOLBOX_API_KEY:
         LOG.warning(
             "%s=1 and no TOOLBOX_API_KEY: all REST endpoints are unauthenticated. "
