@@ -86,6 +86,19 @@ class _TableParser(HTMLParser):
         self.cell: dict[str, Any] | None = None
         self.text: list[str] = []
 
+    def _close_cell(self) -> None:
+        if self.cell is not None and self.row is not None:
+            self.cell["text"] = "".join(self.text).strip()
+            self.row["cells"].append(self.cell)
+        self.cell = None
+        self.text = []
+
+    def _close_row(self) -> None:
+        self._close_cell()
+        if self.row is not None and self.row["cells"]:
+            self.rows.append(self.row)
+        self.row = None
+
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "table":
             self.depth += 1
@@ -93,10 +106,13 @@ class _TableParser(HTMLParser):
             return
         values = dict(attrs)
         if tag in {"thead", "tbody", "tfoot"}:
+            self._close_row()
             self.section = {"thead": "header", "tbody": "body", "tfoot": "footer"}[tag]
         elif tag == "tr":
+            self._close_row()
             self.row = {"cells": [], "section": self.section}
         elif tag in {"td", "th"} and self.row is not None:
+            self._close_cell()
             self.cell = {"text": "", "header": tag == "th"}
             if values.get("scope") in {"row", "col", "rowgroup", "colgroup"}:
                 self.cell["scope"] = values["scope"]
@@ -117,16 +133,12 @@ class _TableParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if self.depth == 1:
-            if tag in {"td", "th"} and self.cell is not None and self.row is not None:
-                self.cell["text"] = "".join(self.text).strip()
-                self.row["cells"].append(self.cell)
-                self.cell = None
-            elif tag == "tr" and self.row is not None:
-                if self.row["cells"]:
-                    self.rows.append(self.row)
-                self.row = None
-            elif tag in {"thead", "tbody", "tfoot"}:
-                self.section = "body"
+            if tag in {"td", "th"}:
+                self._close_cell()
+            elif tag in {"tr", "table", "thead", "tbody", "tfoot"}:
+                self._close_row()
+                if tag in {"thead", "tbody", "tfoot"}:
+                    self.section = "body"
         if tag == "table":
             self.depth = max(0, self.depth - 1)
 
@@ -136,6 +148,8 @@ def html_table(html: str | None) -> dict[str, Any] | None:
         return None
     parser = _TableParser()
     parser.feed(html)
+    parser.close()
+    parser._close_row()
     result: dict[str, Any] = {"body": []}
     for row in parser.rows:
         section = row.pop("section")

@@ -135,13 +135,17 @@ class _ItemProxy:
         if "text" in self._block:
             return self._block["text"]
         lines = self._block.get("lines") or []
-        parts: list[str] = []
+        pieces: list[str] = []
         for line in lines:
+            parts: list[str] = []
             for span in line.get("spans", []):
-                content = span.get("content") or span.get("text")
-                if content:
+                content = span.get("content") or span.get("text") or span.get("latex")
+                if content is not None:
                     parts.append(str(content))
-        return "".join(parts) if parts else None
+            piece = "".join(parts).strip()
+            if piece:
+                pieces.append(piece)
+        return " ".join(pieces) if pieces else None
 
     @property
     def table_ast(self) -> dict[str, Any] | None:
