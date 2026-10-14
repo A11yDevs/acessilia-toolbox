@@ -103,9 +103,9 @@ docker compose -f docker-compose.staging.yml up -d
 # Basic build (API only)
 docker build -t acessilia-toolbox:local .
 
-# Build with extras (storage + cache)
+# Build with extras (storage + cache + pdf + media + math)
 docker build \
-  --build-arg TOOLBOX_EXTRAS="api,storage,cache" \
+  --build-arg TOOLBOX_EXTRAS="api,storage,cache,pdf,media,math" \
   -t acessilia-toolbox:local .
 
 # Run

@@ -569,6 +569,10 @@ pip install .                        # core: pydantic, httpx, jsonschema, PyYAML
 pip install .[api]                   # + fastapi, uvicorn, python-multipart
 pip install .[storage]               # + boto3 (MinIO/S3)
 pip install .[cache]                 # + redis (Valkey)
+pip install .[pdf]                   # + pymupdf (pdf.split, pdf.render)
+pip install .[media]                 # + Pillow (media.inspect image payloads)
+pip install .[math]                  # + latex2mathml (math.convert LaTeX → MathML)
+pip install .[music]                 # + homr (music.omr in-process)
 pip install .[dev]                   # + pytest, ruff, mypy, all extras above
 ```
 
