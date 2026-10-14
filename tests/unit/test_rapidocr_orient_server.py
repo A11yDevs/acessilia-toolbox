@@ -29,10 +29,13 @@ def _line_box(width: int, height: int) -> list[list[float]]:
     return [[0.0, 0.0], [float(width), 0.0], [float(width), float(height)], [0.0, float(height)]]
 
 
-def _crop(width: int = 200, height: int = 20) -> Any:
-    import numpy as np
+def _line_result(width: int, height: int, text: str, score: float) -> list[Any]:
+    """One line exactly as RapidOCR returns it: ``[box, text, score]``.
 
-    return np.zeros((height, width, 3), dtype=np.uint8)
+    The tuple carries no image, which is why the server has to cut each box out
+    of the page array before the classifier can vote on it.
+    """
+    return [_line_box(width, height), text, score]
 
 
 class StubClassifier:
@@ -44,9 +47,17 @@ class StubClassifier:
         self.label = label
         self.score = score
         self.calls = 0
+        self.crop_shapes: list[tuple[int, ...]] = []
 
     def __call__(self, crops: list[Any]) -> tuple[list[Any], list[list[Any]], float]:
         self.calls += 1
+        for crop in crops:
+            # The real classifier only accepts image arrays. A string (or the
+            # 0-d array numpy makes of one) means the caller sliced the wrong
+            # slot of the OCR tuple.
+            if getattr(crop, "ndim", 0) != 3:
+                raise ValueError(f"classifier received a non-image crop: {crop!r}")
+            self.crop_shapes.append(tuple(crop.shape))
         return crops, [[self.label, self.score] for _ in crops], 0.0
 
 
@@ -96,16 +107,17 @@ class StubImage:
     def __array__(self, dtype: Any = None, copy: Any = None) -> Any:
         import numpy as np
 
-        # One byte per quarter turn: enough to identify the candidate angle.
-        return np.full((2, 2, 3), self.clockwise // 90, dtype=np.uint8)
+        # One byte per quarter turn: enough to identify the candidate angle. The
+        # page is large enough that the stub line boxes land fully inside it.
+        return np.full((2048, 2048, 3), self.clockwise // 90, dtype=np.uint8)
 
 
 def _horizontal_lines(count: int = 4, score: float = 0.95) -> list[Any]:
-    return [[_line_box(200, 20), _crop(200, 20), score] for _ in range(count)]
+    return [_line_result(200, 20, f"line {index}", score) for index in range(count)]
 
 
 def _vertical_lines(count: int = 4, score: float = 0.6) -> list[Any]:
-    return [[_line_box(20, 200), _crop(20, 200), score] for _ in range(count)]
+    return [_line_result(20, 200, f"line {index}", score) for index in range(count)]
 
 
 def test_health_returns_503_until_the_engine_is_ready(server: Any) -> None:
@@ -169,6 +181,25 @@ def test_180_is_reachable_when_the_classifier_votes_upside_down(server: Any) -> 
     assert detected == 180
     assert stage == "stage1_classifier_180"
     assert classifier.calls == 1
+    # Every crop handed to the classifier must be a real image cut from the page.
+    assert len(classifier.crop_shapes) == len(_horizontal_lines())
+    assert all(shape == (20, 200, 3) for shape in classifier.crop_shapes)
+
+
+def test_classifier_receives_crops_not_ocr_text(server: Any) -> None:
+    """Regression: RapidOCR line results are ``[box, text, score]``.
+
+    The classifier must be fed pixels sliced from the page, never the text or
+    the score that share the tuple with the box.
+    """
+    classifier = StubClassifier("180", 0.99)
+    engine = StubEngine({0: _horizontal_lines()}, classifier=classifier)
+
+    server._detect_orientation(engine, StubImage())
+
+    assert classifier.crop_shapes, "classifier was never called"
+    for shape in classifier.crop_shapes:
+        assert len(shape) == 3, f"crop is not an image array: {shape}"
 
 
 def test_classifier_label_0_leaves_the_page_upright(server: Any) -> None:
