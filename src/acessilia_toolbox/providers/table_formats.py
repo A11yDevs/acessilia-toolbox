@@ -9,6 +9,14 @@ from acessilia_toolbox.core.errors import ProviderExecutionError
 
 
 def docling_table(data: Any) -> Any:
+    """Validate provider-native table fields before exposing the canonical AST."""
+    try:
+        return _docling_table(data)
+    except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+        raise ProviderExecutionError("invalid native table dimensions or coordinates") from exc
+
+
+def _docling_table(data: Any) -> Any:
     """Preserve native grid positions, header flags and merged cells."""
     if not isinstance(data, dict):
         return data
