@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 from typing import Annotated, Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
+from starlette.concurrency import run_in_threadpool
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.api.auth import require_api_key
@@ -20,7 +22,11 @@ from acessilia_toolbox.api.schemas import (
 )
 from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityRegistry
-from acessilia_toolbox.core.errors import DatasetNotFoundError, InvalidInputError
+from acessilia_toolbox.core.errors import (
+    DatasetNotFoundError,
+    InvalidInputError,
+    ProviderUnavailableError,
+)
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.pddl import (
     capability_action,
@@ -122,6 +128,7 @@ def _registered(registry: ProviderRegistry, capability_id: str) -> list[str]:
 async def execute_capability(
     capability_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
+    request: Request,
     file: Annotated[UploadFile | None, File(description="Document to process")] = None,
     artifact_id: Annotated[str | None, Form(description="Stored input")] = None,
     provider: Annotated[str | None, Form()] = None,
@@ -130,23 +137,30 @@ async def execute_capability(
     version: Annotated[int | None, Form()] = None,
     no_cache: Annotated[bool, Form(description="Skip execution cache")] = False,
 ) -> ExecutionResponse:
-    payload, filename, media_type = await _resolve_input(runner, file, artifact_id)
-    if len(payload) > MAX_UPLOAD_BYTES:
-        raise InvalidInputError(
-            f"upload exceeds {MAX_UPLOAD_BYTES} bytes", capability=capability_id
-        )
+    slots = request.app.state.execution_slots
+    if not slots.acquire(blocking=False):
+        raise ProviderUnavailableError("execution capacity exhausted; retry later")
+    try:
+        payload, filename, media_type = await _resolve_input(runner, file, artifact_id)
+        if len(payload) > MAX_UPLOAD_BYTES:
+            raise InvalidInputError(
+                f"upload exceeds {MAX_UPLOAD_BYTES} bytes", capability=capability_id
+            )
 
-    result = runner.execute(
-        capability_id,
-        payload,
-        filename=filename,
-        media_type=media_type,
-        provider_id=provider,
-        capability_version=version,
-        parameters=_parse_parameters(parameters),
-        language=language,
-        no_cache=no_cache,
-    )
+        result = await run_in_threadpool(
+            runner.execute,
+            capability_id,
+            payload,
+            filename=filename,
+            media_type=media_type,
+            provider_id=provider,
+            capability_version=version,
+            parameters=_parse_parameters(parameters),
+            language=language,
+            no_cache=no_cache,
+        )
+    finally:
+        slots.release()
 
     return ExecutionResponse(
         status=result.status,
@@ -168,12 +182,13 @@ async def store_artifact(
     runner: Annotated[CapabilityExecutor, Depends(executor)],
     file: Annotated[UploadFile, File(description="Content to store")],
 ) -> ArtifactRef:
-    payload = await file.read()
+    payload = await _read_upload(file)
     if not payload:
         raise InvalidInputError("empty payload")
     if len(payload) > MAX_UPLOAD_BYTES:
         raise InvalidInputError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
-    return runner.store_artifact(
+    return await run_in_threadpool(
+        runner.store_artifact,
         payload,
         media_type=file.content_type or "application/octet-stream",
         filename=file.filename,
@@ -188,7 +203,14 @@ def retrieve_artifact(
     payload, ref = runner.retrieve_artifact(artifact_id)
     headers = {"ETag": ref.artifact_id}
     if ref.filename:
-        headers["Content-Disposition"] = f'attachment; filename="{ref.filename}"'
+        clean = "".join(char for char in ref.filename if ord(char) >= 32 and ord(char) != 127)
+        encoded = quote(clean, safe="")
+        fallback = (
+            "".join(char for char in clean if ord(char) < 127 and char not in '"/\\') or "artifact"
+        )
+        headers["Content-Disposition"] = (
+            f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
+        )
     return Response(content=payload, media_type=ref.media_type, headers=headers)
 
 
@@ -245,6 +267,17 @@ def _parse_parameters(raw: str | None) -> dict[str, Any]:
     return parsed
 
 
+async def _read_upload(file: UploadFile) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(min(1024 * 1024, MAX_UPLOAD_BYTES + 1 - total)):
+        total += len(chunk)
+        if total > MAX_UPLOAD_BYTES:
+            raise InvalidInputError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def _resolve_input(
     runner: CapabilityExecutor,
     file: UploadFile | None,
@@ -255,12 +288,14 @@ async def _resolve_input(
         raise InvalidInputError("provide either a file or an artifact_id, not both")
     if file is not None:
         return (
-            await file.read(),
+            await _read_upload(file),
             file.filename or "upload",
             file.content_type or "application/octet-stream",
         )
     if artifact_id:
-        payload, ref = runner.retrieve_artifact(artifact_id)
+        payload, ref = await run_in_threadpool(
+            runner.retrieve_artifact, artifact_id, max_bytes=MAX_UPLOAD_BYTES
+        )
         return payload, ref.filename or "artifact", ref.media_type
     raise InvalidInputError("a file or an artifact_id is required")
 
@@ -281,9 +316,7 @@ def _resolve_dataset_provider(
     Tries each candidate and falls back to the first one on unknown datasets.
     """
 
-    candidates = [
-        d.id for d in providers.for_capability("dataset.describe")
-    ]
+    candidates = [d.id for d in providers.for_capability("dataset.describe")]
     for provider_id in candidates:
         try:
             runner.execute(
@@ -298,9 +331,7 @@ def _resolve_dataset_provider(
         except Exception as exc:
             if not isinstance(exc, DatasetNotFoundError):
                 raise
-    raise DatasetNotFoundError(
-        f"unknown dataset '{dataset_id}'", dataset=dataset_id
-    )
+    raise DatasetNotFoundError(f"unknown dataset '{dataset_id}'", dataset=dataset_id)
 
 
 @dataset_router.get("", response_model=list[dict[str, Any]])
