@@ -67,7 +67,7 @@ class SourceDocument(StrictModel):
 
 
 class ExtractorRun(StrictModel):
-    name: str = Field(min_length=1)
+    name: str = Field(default="docling", min_length=1)
     version: str = Field(min_length=1)
     started_at: datetime
     completed_at: datetime
