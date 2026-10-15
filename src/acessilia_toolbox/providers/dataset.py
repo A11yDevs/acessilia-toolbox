@@ -17,14 +17,19 @@ from __future__ import annotations
 import json
 from collections import OrderedDict
 from collections.abc import Iterator, Mapping, Sequence
+from contextlib import suppress
 from datetime import UTC, datetime
+from time import time
 from typing import Any, Protocol, runtime_checkable
+
+from pydantic import TypeAdapter, ValidationError
 
 from acessilia_toolbox.core.artifact import (
     ArtifactRef,
     ArtifactStore,
     ExecutionCache,
     NullCache,
+    shards,
 )
 from acessilia_toolbox.core.dataset import (
     DatasetInfo,
@@ -45,8 +50,23 @@ from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 # Cache key prefixes
 _META_CACHE_PREFIX = "dataset:meta:"
 _ARTIFACT_CACHE_PREFIX = "dataset:artifact:"
+_METADATA_SCHEMAS: dict[str, TypeAdapter[Any]] = {
+    "list_datasets": TypeAdapter(list[DatasetInfo]),
+    "describe": TypeAdapter(DatasetInfo),
+    "list_splits": TypeAdapter(list[SplitInfo]),
+    "list_items": TypeAdapter(list[ItemSummary]),
+}
 _META_TTL = 300  # 5 minutes for metadata
 _ARTIFACT_TTL = 86400 * 7  # 7 days for mirrored artifact references
+
+
+def _cache_is_fresh(cached: dict[str, Any], ttl: int) -> bool:
+    recorded = cached.get("cached_at")
+    return (
+        not isinstance(recorded, bool)
+        and isinstance(recorded, (int, float))
+        and 0 <= time() - recorded < ttl
+    )
 
 
 @runtime_checkable
@@ -124,7 +144,7 @@ class DatasetAdapter:
         self._cache = cache or NullCache()
         self._mirror = bool(descriptor.config.get("mirror", False))
         # A disabled execution cache must not disable artifact mirroring.
-        self._mirror_refs: OrderedDict[str, ArtifactRef] = OrderedDict()
+        self._mirror_refs: OrderedDict[str, tuple[float, ArtifactRef]] = OrderedDict()
 
     # ------------------------------------------------------------------
     # ProviderAdapter protocol
@@ -147,7 +167,9 @@ class DatasetAdapter:
         artifact_path = params.pop("artifact_path", "")
         integers: dict[str, int] = {}
         for name, default, minimum, maximum in (
-            ("limit", 100, 1, 1000), ("offset", 0, 0, None), ("n", 5, 1, 100),
+            ("limit", 100, 1, 1000),
+            ("offset", 0, 0, None),
+            ("n", 5, 1, 100),
         ):
             raw = params.pop(name, default)
             if isinstance(raw, bool) or not isinstance(raw, (int, str)):
@@ -257,10 +279,14 @@ class DatasetAdapter:
         cache_key = self._meta_cache_key(method_name, kw)
 
         # Metadata operations: try cache first.
-        if method_name in ("list_datasets", "describe", "list_splits", "list_items"):
+        cached_result = None
+        if method_name in _METADATA_SCHEMAS:
             cached = self._cache.get(cache_key)
-            if cached is not None:
-                return cached["data"]
+            if cached is not None and _cache_is_fresh(cached, _META_TTL):
+                with suppress(KeyError, ValidationError):
+                    cached_result = _METADATA_SCHEMAS[method_name].validate_python(
+                        cached["data"]
+                    )
 
         # Build the call signature from kw.
         sig = {
@@ -272,8 +298,12 @@ class DatasetAdapter:
                 kw["dataset_id"], kw.get("revision"), cache_key
             ),
             "list_items": lambda: self._list_items_cached(
-                kw["dataset_id"], kw["split"], kw.get("revision"),
-                kw["limit"], kw["offset"], cache_key
+                kw["dataset_id"],
+                kw["split"],
+                kw.get("revision"),
+                kw["limit"],
+                kw["offset"],
+                cache_key,
             ),
             "get_item": lambda: self._provider.get_item(
                 kw["dataset_id"], kw["item_id"], kw["split"], kw.get("revision")
@@ -284,12 +314,10 @@ class DatasetAdapter:
             "sample": lambda: self._provider.sample(
                 kw["dataset_id"], kw["split"], kw["n"], kw.get("revision")
             ),
-            "sync": lambda: self._sync(
-                kw["dataset_id"], kw.get("revision"), kw.get("split")
-            ),
+            "sync": lambda: self._sync(kw["dataset_id"], kw.get("revision"), kw.get("split")),
         }
 
-        result = sig[method_name]()
+        result = cached_result if cached_result is not None else sig[method_name]()
 
         # Serialise to plain dict so the executor's dict branch handles it.
         if isinstance(result, tuple) and len(result) == 2:
@@ -309,31 +337,26 @@ class DatasetAdapter:
     # ------------------------------------------------------------------
 
     def _list_datasets_cached(self, cache_key: str) -> Sequence[DatasetInfo]:
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return [DatasetInfo.model_validate(d) for d in cached["data"]]
         result = self._provider.list_datasets()
-        self._cache.put(cache_key, {"data": [d.model_dump(mode="json") for d in result]})
+        self._cache.put(
+            cache_key, {"cached_at": time(), "data": [d.model_dump(mode="json") for d in result]}
+        )
         return result
 
     def _describe_cached(
         self, dataset_id: str, revision: str | None, cache_key: str
     ) -> DatasetInfo:
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return DatasetInfo.model_validate(cached["data"])
         result = self._provider.describe(dataset_id, revision)
-        self._cache.put(cache_key, {"data": result.model_dump(mode="json")})
+        self._cache.put(cache_key, {"cached_at": time(), "data": result.model_dump(mode="json")})
         return result
 
     def _list_splits_cached(
         self, dataset_id: str, revision: str | None, cache_key: str
     ) -> Sequence[SplitInfo]:
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return [SplitInfo.model_validate(s) for s in cached["data"]]
         result = self._provider.list_splits(dataset_id, revision)
-        self._cache.put(cache_key, {"data": [s.model_dump(mode="json") for s in result]})
+        self._cache.put(
+            cache_key, {"cached_at": time(), "data": [s.model_dump(mode="json") for s in result]}
+        )
         return result
 
     def _list_items_cached(
@@ -345,14 +368,14 @@ class DatasetAdapter:
         offset: int,
         cache_key: str,
     ) -> Sequence[ItemSummary]:
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return [ItemSummary.model_validate(i) for i in cached["data"]]
         result = self._provider.list_items(dataset_id, split, revision, limit, offset)
         # Don't cache empty listings — they usually indicate a transient
         # upstream failure (e.g. HF rate limit) and would poison the cache.
         if result:
-            self._cache.put(cache_key, {"data": [i.model_dump(mode="json") for i in result]})
+            self._cache.put(
+                cache_key,
+                {"cached_at": time(), "data": [i.model_dump(mode="json") for i in result]},
+            )
         return result
 
     # ------------------------------------------------------------------
@@ -373,10 +396,23 @@ class DatasetAdapter:
 
         store_key = self._store_key(dataset_id, artifact_path, revision)
         cached = None if refresh else self._cache.get(_ARTIFACT_CACHE_PREFIX + store_key)
-        if not refresh and cached is None and store_key in self._mirror_refs:
-            cached = self._mirror_refs[store_key].model_dump(mode="json")
-        if cached is not None:
-            ref = ArtifactRef.model_validate(cached)
+        ref = None
+        if cached is not None and _cache_is_fresh(cached, _ARTIFACT_TTL):
+            try:
+                candidate = ArtifactRef.model_validate(cached["ref"])
+                shards(candidate.artifact_id)
+                ref = candidate
+            except (KeyError, ValidationError, InvalidInputError):
+                pass
+        if not refresh and ref is None:
+            local = self._mirror_refs.get(store_key)
+            if local is not None:
+                recorded, local_ref = local
+                if 0 <= time() - recorded < _ARTIFACT_TTL:
+                    ref = local_ref
+                else:
+                    self._mirror_refs.pop(store_key, None)
+        if ref is not None:
             try:
                 return self._store.get(ref.artifact_id), ref.media_type
             except ArtifactNotFoundError:
@@ -390,13 +426,14 @@ class DatasetAdapter:
             media_type=media_type,
             filename=artifact_path.rsplit("/", 1)[-1],
         )
-        self._mirror_refs[store_key] = ref
+        recorded = time()
+        self._mirror_refs[store_key] = (recorded, ref)
         self._mirror_refs.move_to_end(store_key)
         while len(self._mirror_refs) > 256:
             self._mirror_refs.popitem(last=False)
         self._cache.put(
             _ARTIFACT_CACHE_PREFIX + store_key,
-            ref.model_dump(mode="json"),
+            {"cached_at": recorded, "ref": ref.model_dump(mode="json")},
         )
 
         return payload, media_type
