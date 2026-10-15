@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from collections import OrderedDict
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
@@ -349,14 +349,16 @@ class DatasetAdapter:
         dataset_id: str,
         artifact_path: str,
         revision: str | None = None,
+        *,
+        refresh: bool = False,
     ) -> tuple[bytes, str]:
-        """Fetch an artifact, optionally mirroring it to the store."""
+        """Fetch an artifact, optionally bypassing mirrored content on resync."""
         if not self._mirror or self._store is None:
             return self._provider.get_artifact(dataset_id, artifact_path, revision)
 
         store_key = self._store_key(dataset_id, artifact_path, revision)
-        cached = self._cache.get(_ARTIFACT_CACHE_PREFIX + store_key)
-        if cached is None and store_key in self._mirror_refs:
+        cached = None if refresh else self._cache.get(_ARTIFACT_CACHE_PREFIX + store_key)
+        if not refresh and cached is None and store_key in self._mirror_refs:
             cached = self._mirror_refs[store_key].model_dump(mode="json")
         if cached is not None:
             ref = ArtifactRef.model_validate(cached)
@@ -399,8 +401,9 @@ class DatasetAdapter:
         )
 
         synced: list[dict[str, Any]] = []
+        refreshed: set[str] = set()
         for sp in splits:
-            items = self._provider.list_items(dataset_id, sp, revision, limit=10000, offset=0)
+            items = self._iter_sync_items(dataset_id, sp, revision)
             for summary in items:
                 try:
                     item = self._provider.get_item(dataset_id, summary.id, sp, revision)
@@ -416,7 +419,11 @@ class DatasetAdapter:
                     continue
                 for art in item.artifacts:
                     try:
-                        self._get_artifact_maybe_mirrored(dataset_id, art.path, revision)
+                        if art.path not in refreshed:
+                            self._get_artifact_maybe_mirrored(
+                                dataset_id, art.path, revision, refresh=True
+                            )
+                            refreshed.add(art.path)
                         synced.append({
                             "item": summary.id,
                             "split": sp,
@@ -433,7 +440,11 @@ class DatasetAdapter:
                         })
                 for ann in item.annotations:
                     try:
-                        self._get_artifact_maybe_mirrored(dataset_id, ann.path, revision)
+                        if ann.path not in refreshed:
+                            self._get_artifact_maybe_mirrored(
+                                dataset_id, ann.path, revision, refresh=True
+                            )
+                            refreshed.add(ann.path)
                         synced.append({
                             "item": summary.id,
                             "split": sp,
@@ -450,6 +461,27 @@ class DatasetAdapter:
                         })
 
         return synced
+
+    def _iter_sync_items(
+        self, dataset_id: str, split: str, revision: str | None
+    ) -> Iterator[ItemSummary]:
+        offset = 0
+        seen: set[str] = set()
+        while True:
+            page = self._provider.list_items(
+                dataset_id, split, revision, limit=1000, offset=offset
+            )
+            if not page:
+                return
+            for item in page:
+                if item.id in seen:
+                    raise DatasetProviderError(
+                        "dataset pagination repeated an item", dataset=dataset_id,
+                        split=split, item=item.id,
+                    )
+                seen.add(item.id)
+                yield item
+            offset += len(page)
 
     def _store_key(
         self, dataset_id: str, artifact_path: str, revision: str | None = None
