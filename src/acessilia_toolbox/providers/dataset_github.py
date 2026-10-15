@@ -279,7 +279,7 @@ class GitHubDatasetProvider:
         """Fetch and parse a CSV manifest from the GitHub repo."""
         try:
             content, _ = self.get_artifact(dataset_id, manifest_path, revision)
-        except (ItemNotFoundError, DatasetProviderError):
+        except ItemNotFoundError:
             return []
 
         text = content.decode("utf-8-sig")
