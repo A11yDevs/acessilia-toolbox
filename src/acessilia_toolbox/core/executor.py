@@ -13,7 +13,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from acessilia_toolbox.core.artifact import (
     ArtifactRef,
@@ -116,7 +116,11 @@ class CapabilityExecutor:
         if manifest.execution.cacheable and not no_cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
-                return _restore(cached, cache_key)
+                try:
+                    return _restore(cached, cache_key)
+                except ValidationError:
+                    # Cached results from an older contract must not block execution.
+                    pass
 
         execution_payload = payload
         orientation: OrientationResult | None = None
