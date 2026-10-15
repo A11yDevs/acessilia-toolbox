@@ -35,6 +35,7 @@ from acessilia_toolbox.core.dataset import (
 from acessilia_toolbox.core.errors import (
     ArtifactNotFoundError,
     DatasetProviderError,
+    InvalidInputError,
     ToolboxError,
 )
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
@@ -144,9 +145,23 @@ class DatasetAdapter:
         split = params.pop("split", "")
         item_id = params.pop("item_id", "")
         artifact_path = params.pop("artifact_path", "")
-        limit = int(params.pop("limit", 100))
-        offset = int(params.pop("offset", 0))
-        n = int(params.pop("n", 5))
+        integers: dict[str, int] = {}
+        for name, default, minimum, maximum in (
+            ("limit", 100, 1, 1000), ("offset", 0, 0, None), ("n", 5, 1, 100),
+        ):
+            raw = params.pop(name, default)
+            if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+                raise InvalidInputError(f"{name} must be an integer", capability=capability_id)
+            try:
+                value = int(raw)
+            except ValueError as exc:
+                raise InvalidInputError(
+                    f"{name} must be an integer", capability=capability_id
+                ) from exc
+            if value < minimum or (maximum is not None and value > maximum):
+                raise InvalidInputError(f"{name} is out of range", capability=capability_id)
+            integers[name] = value
+        limit, offset, n = integers["limit"], integers["offset"], integers["n"]
 
         started = datetime.now(UTC)
 

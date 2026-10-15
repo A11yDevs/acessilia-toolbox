@@ -9,6 +9,7 @@ import pytest
 from acessilia_toolbox.core.dataset import DatasetInfo, DatasetItem, ItemSummary, SplitInfo
 from acessilia_toolbox.core.errors import (
     DatasetNotFoundError,
+    InvalidInputError,
     ItemNotFoundError,
     SplitNotFoundError,
 )
@@ -221,3 +222,26 @@ class TestDatasetAdapter:
     def test_versions(self, adapter: DatasetAdapter) -> None:
         versions = adapter.versions()
         assert versions["provider"] == "1.0"
+
+
+
+@pytest.mark.parametrize("name,value", [
+    ("limit", "invalid"), ("limit", None), ("limit", True), ("limit", 1.5),
+    ("limit", 0), ("limit", 1001), ("offset", -1), ("offset", []),
+    ("n", 0), ("n", 101), ("n", False),
+])
+def test_dataset_numeric_parameters_return_input_errors(adapter, name, value):
+    with pytest.raises(InvalidInputError) as raised:
+        adapter.execute(
+            "dataset.list_items", b"{}",
+            parameters={"dataset_id": "stub-ds", "split": "input", name: value},
+        )
+    assert raised.value.http_status == 400
+
+
+def test_dataset_numeric_string_parameters_remain_supported(adapter):
+    result = adapter.execute(
+        "dataset.list_items", b"{}",
+        parameters={"dataset_id": "stub-ds", "split": "input", "limit": "2", "offset": "1"},
+    )
+    assert [item["id"] for item in result.document] == ["item_1", "item_2"]
