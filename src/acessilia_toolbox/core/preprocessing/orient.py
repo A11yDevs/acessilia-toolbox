@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -116,14 +117,33 @@ def detect_and_orient_image(
             oriented_dimensions=(0, 0),
         )
 
-    document = extraction.document if isinstance(extraction.document, dict) else {}
-    angle = _as_dimension(document.get("angle", 0)) % 360
-    confidence = float(document.get("confidence") or 0.0)
-    stage = str(document.get("stage", "provider"))
-    original = (
-        _as_dimension(document.get("original_width")),
-        _as_dimension(document.get("original_height")),
-    )
+    try:
+        document = extraction.document
+        if not isinstance(document, dict):
+            raise ValueError("orientation document must be an object")
+        raw_angle = document.get("angle", 0)
+        if type(raw_angle) is not int or raw_angle not in {0, 90, 180, 270}:
+            raise ValueError("unsupported orientation angle")
+        angle = raw_angle
+        raw_confidence = document.get("confidence", 0.0)
+        if isinstance(raw_confidence, bool):
+            raise ValueError("invalid orientation confidence")
+        confidence = float(raw_confidence)
+        if not math.isfinite(confidence) or not 0 <= confidence <= 1:
+            raise ValueError("invalid orientation confidence")
+        for name in ("original_width", "original_height", "oriented_width", "oriented_height"):
+            if document.get(name) is not None and (
+                type(document[name]) is not int or document[name] <= 0
+            ):
+                raise ValueError("invalid orientation dimensions")
+        stage = str(document.get("stage", "provider"))
+        original = (
+            _as_dimension(document.get("original_width")),
+            _as_dimension(document.get("original_height")),
+        )
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        LOG.warning("invalid orientation response; using the unrotated image")
+        return payload, OrientationResult(0, 0.0, "invalid_response", False, (0, 0), (0, 0))
 
     if angle == 0:
         LOG.info(

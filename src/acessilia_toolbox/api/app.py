@@ -5,13 +5,15 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from threading import BoundedSemaphore
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.api import auth
-from acessilia_toolbox.api.rest import dataset_router, public_router, router
+from acessilia_toolbox.api.rest import MAX_UPLOAD_BYTES, dataset_router, public_router, router
+from acessilia_toolbox.api.upload_limit import UploadLimitMiddleware
 from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import ConfigurationError, ToolboxError
@@ -60,6 +62,8 @@ def create_app(
         docs_url="/v1/docs",
     )
 
+    app.add_middleware(UploadLimitMiddleware, max_bytes=MAX_UPLOAD_BYTES + 1024 * 1024)
+
     app.state.capabilities = capabilities or CapabilityRegistry.from_directory(
         Path(os.getenv("TOOLBOX_CAPABILITIES_DIR", DEFAULT_CAPABILITIES_DIR))
     )
@@ -72,6 +76,9 @@ def create_app(
     # Inject store/cache into dataset adapters for mirroring support.
     configure_dataset_mirroring(store=app.state.store, cache=app.state.cache)
 
+    app.state.execution_slots = BoundedSemaphore(
+        max(1, int(os.getenv("TOOLBOX_MAX_CONCURRENT_EXECUTIONS", "4")))
+    )
     app.state.executor = CapabilityExecutor(
         app.state.capabilities,
         app.state.providers,
@@ -87,18 +94,6 @@ def create_app(
     app.include_router(public_router)
     app.include_router(router)
     app.include_router(dataset_router)
-
-    # OpenAPI security scheme for Bearer token auth.
-    app.openapi_components = {  # type: ignore[attr-defined]
-        "securitySchemes": {
-            "ApiKeyAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "description": "Bearer token matching TOOLBOX_API_KEY.",
-            }
-        }
-    }
-    app.openapi_security = [{"ApiKeyAuth": []}]  # type: ignore[attr-defined]
 
     if not auth.TOOLBOX_API_KEY:
         LOG.warning(
@@ -117,9 +112,7 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
 
     def first_available(descriptors: list[ProviderDescriptor]) -> ArtifactStore | None:
         for descriptor in descriptors:
-            if _is_unresolved(
-                {**descriptor.config, "endpoint": descriptor.endpoint or ""}
-            ):
+            if _is_unresolved({**descriptor.config, "endpoint": descriptor.endpoint or ""}):
                 continue
             try:
                 store = _create_store(descriptor)

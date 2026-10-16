@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
+from urllib.parse import quote, unquote
 
 from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactStore, shards
 from acessilia_toolbox.core.errors import (
@@ -25,6 +28,19 @@ from acessilia_toolbox.core.provider import ProviderDescriptor
 METADATA_SUFFIX = ".meta.json"
 LOG = logging.getLogger(__name__)
 T = TypeVar("T")
+
+
+def _atomic_write(target: Path, payload: bytes) -> None:
+    fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.")
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 class FilesystemArtifactStore:
@@ -47,9 +63,9 @@ class FilesystemArtifactStore:
         target = self._path(artifact_id)
         target.parent.mkdir(parents=True, exist_ok=True)
 
-        # Identical content yields an identical path, so a rewrite is a no-op.
-        if not target.exists():
-            target.write_bytes(payload)
+        # Repair objects left by older, interrupted non-atomic writes.
+        if not target.exists() or fingerprint_bytes(target.read_bytes()) != artifact_id:
+            _atomic_write(target, payload)
 
         ref = ArtifactRef(
             artifact_id=artifact_id,
@@ -59,17 +75,16 @@ class FilesystemArtifactStore:
             storage_backend=self.backend,
             filename=filename,
         )
-        target.with_suffix(target.suffix + METADATA_SUFFIX).write_text(
-            ref.model_dump_json(), encoding="utf-8"
+        _atomic_write(
+            target.with_suffix(target.suffix + METADATA_SUFFIX),
+            ref.model_dump_json().encode("utf-8"),
         )
         return ref
 
     def get(self, artifact_id: str) -> bytes:
         target = self._path(artifact_id)
         if not target.is_file():
-            raise ArtifactNotFoundError(
-                f"unknown artifact {artifact_id}", artifact_id=artifact_id
-            )
+            raise ArtifactNotFoundError(f"unknown artifact {artifact_id}", artifact_id=artifact_id)
         return target.read_bytes()
 
     def exists(self, artifact_id: str) -> bool:
@@ -78,9 +93,7 @@ class FilesystemArtifactStore:
     def stat(self, artifact_id: str) -> ArtifactRef:
         target = self._path(artifact_id)
         if not target.is_file():
-            raise ArtifactNotFoundError(
-                f"unknown artifact {artifact_id}", artifact_id=artifact_id
-            )
+            raise ArtifactNotFoundError(f"unknown artifact {artifact_id}", artifact_id=artifact_id)
         metadata = target.with_suffix(target.suffix + METADATA_SUFFIX)
         if metadata.is_file():
             return ArtifactRef.model_validate_json(metadata.read_text(encoding="utf-8"))
@@ -93,7 +106,10 @@ class FilesystemArtifactStore:
 
     def _path(self, artifact_id: str) -> Path:
         first, second, digest = shards(artifact_id)
-        return self.root / first / second / digest
+        target = (self.root / first / second / digest).resolve()
+        if not target.is_relative_to(self.root.resolve()):
+            raise ConfigurationError("artifact path escapes storage root")
+        return target
 
 
 class S3ArtifactStore:
@@ -107,8 +123,7 @@ class S3ArtifactStore:
             from botocore.config import Config
         except ImportError as exc:
             raise ConfigurationError(
-                "S3 storage requires the 'storage' extra: pip install "
-                "'acessilia-toolbox[storage]'",
+                "S3 storage requires the 'storage' extra: pip install 'acessilia-toolbox[storage]'",
                 provider=descriptor.id,
             ) from exc
 
@@ -139,7 +154,7 @@ class S3ArtifactStore:
     ) -> ArtifactRef:
         artifact_id = fingerprint_bytes(payload)
         key = self._key(artifact_id)
-        metadata = {"filename": filename} if filename else {}
+        metadata = {"filename-utf8": quote(filename, safe="")} if filename else {}
         try:
             self._client.put_object(
                 Bucket=self.bucket,
@@ -162,9 +177,7 @@ class S3ArtifactStore:
 
     def get(self, artifact_id: str) -> bytes:
         try:
-            response = self._client.get_object(
-                Bucket=self.bucket, Key=self._key(artifact_id)
-            )
+            response = self._client.get_object(Bucket=self.bucket, Key=self._key(artifact_id))
             body: bytes = response["Body"].read()
         except Exception as exc:
             self._raise_read_error(exc, artifact_id)
@@ -192,7 +205,11 @@ class S3ArtifactStore:
             size=int(head.get("ContentLength", 0)),
             uri=f"s3://{self.bucket}/{self._key(artifact_id)}",
             storage_backend=self.backend,
-            filename=(head.get("Metadata") or {}).get("filename"),
+            filename=(
+                unquote(head["Metadata"]["filename-utf8"])
+                if "filename-utf8" in (head.get("Metadata") or {})
+                else (head.get("Metadata") or {}).get("filename")
+            ),
         )
 
     def _key(self, artifact_id: str) -> str:
@@ -205,7 +222,9 @@ class S3ArtifactStore:
             return False
         error = response.get("Error")
         return isinstance(error, dict) and str(error.get("Code")) in {
-            "404", "NoSuchKey", "NotFound"
+            "404",
+            "NoSuchKey",
+            "NotFound",
         }
 
     @classmethod

@@ -2,7 +2,7 @@
   "document": {
     "$schema": "urn:a11y-devs:schema:processing-manifest:1.1.0",
     "artifacts": [],
-    "created_at": "2026-09-06T14:15:38.348961Z",
+    "created_at": "2026-10-13T20:27:38.871489Z",
     "elements": [
       {
         "confidence": null,
@@ -13,7 +13,38 @@
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": null,
+        "parent_ref": "#/body",
+        "provenance": [
+          {
+            "bbox": {
+              "bottom": 27.8087158203125,
+              "coord_origin": "BOTTOMLEFT",
+              "left": 46.799842834472656,
+              "right": 917.9382934570312,
+              "top": 447.0195846557617
+            },
+            "char_end": 0,
+            "char_start": 0,
+            "page_number": 1
+          }
+        ],
+        "raw_label": "picture",
+        "reading_order": 1,
+        "source_ref": "#/pictures/0",
+        "text": null,
+        "type": "picture"
+      },
+      {
+        "confidence": null,
+        "hierarchy_level": 2,
+        "id": "element-000002",
+        "metadata": {
+          "content_layer": "body",
+          "docling_class": "_ItemProxy"
+        },
+        "page_number": 1,
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -30,21 +61,21 @@
           }
         ],
         "raw_label": "caption",
-        "reading_order": 1,
+        "reading_order": 2,
         "source_ref": "#/texts/0",
         "text": "Metals: Density",
         "type": "caption"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000002",
+        "hierarchy_level": 2,
+        "id": "element-000003",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -61,21 +92,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 2,
+        "reading_order": 3,
         "source_ref": "#/texts/1",
         "text": "25.00",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000003",
+        "hierarchy_level": 2,
+        "id": "element-000004",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -92,21 +123,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 3,
+        "reading_order": 4,
         "source_ref": "#/texts/2",
         "text": "22.50",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000004",
+        "hierarchy_level": 2,
+        "id": "element-000005",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -123,21 +154,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 4,
+        "reading_order": 5,
         "source_ref": "#/texts/3",
         "text": "21.45",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000005",
+        "hierarchy_level": 2,
+        "id": "element-000006",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -154,21 +185,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 5,
+        "reading_order": 6,
         "source_ref": "#/texts/4",
         "text": "19.25",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000006",
+        "hierarchy_level": 2,
+        "id": "element-000007",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -185,21 +216,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 6,
+        "reading_order": 7,
         "source_ref": "#/texts/5",
         "text": "20.00",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000007",
+        "hierarchy_level": 2,
+        "id": "element-000008",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -216,21 +247,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 7,
+        "reading_order": 8,
         "source_ref": "#/texts/6",
         "text": "19.30",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000008",
+        "hierarchy_level": 2,
+        "id": "element-000009",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -247,21 +278,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 8,
+        "reading_order": 9,
         "source_ref": "#/texts/7",
         "text": "19.10",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000009",
+        "hierarchy_level": 2,
+        "id": "element-000010",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -278,21 +309,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 9,
+        "reading_order": 10,
         "source_ref": "#/texts/8",
         "text": "(gramicm3)",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000010",
+        "hierarchy_level": 2,
+        "id": "element-000011",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -309,21 +340,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 10,
+        "reading_order": 11,
         "source_ref": "#/texts/9",
         "text": "17.50",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000011",
+        "hierarchy_level": 2,
+        "id": "element-000012",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -340,21 +371,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 11,
+        "reading_order": 12,
         "source_ref": "#/texts/10",
         "text": "15.00",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000012",
+        "hierarchy_level": 2,
+        "id": "element-000013",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -371,21 +402,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 12,
+        "reading_order": 13,
         "source_ref": "#/texts/11",
         "text": "13.53",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000013",
+        "hierarchy_level": 2,
+        "id": "element-000014",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -402,21 +433,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 13,
+        "reading_order": 14,
         "source_ref": "#/texts/12",
         "text": "12.50",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000014",
+        "hierarchy_level": 2,
+        "id": "element-000015",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -433,21 +464,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 14,
+        "reading_order": 15,
         "source_ref": "#/texts/13",
         "text": "11.34",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000015",
+        "hierarchy_level": 2,
+        "id": "element-000016",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -464,21 +495,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 15,
+        "reading_order": 16,
         "source_ref": "#/texts/14",
         "text": "10.28",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000016",
+        "hierarchy_level": 2,
+        "id": "element-000017",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -495,21 +526,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 16,
+        "reading_order": 17,
         "source_ref": "#/texts/15",
         "text": "10.49",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000017",
+        "hierarchy_level": 2,
+        "id": "element-000018",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -526,21 +557,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 17,
+        "reading_order": 18,
         "source_ref": "#/texts/16",
         "text": "Density",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000018",
+        "hierarchy_level": 2,
+        "id": "element-000019",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -557,21 +588,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 18,
+        "reading_order": 19,
         "source_ref": "#/texts/17",
         "text": "10.00",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000019",
+        "hierarchy_level": 2,
+        "id": "element-000020",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -588,21 +619,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 19,
+        "reading_order": 20,
         "source_ref": "#/texts/18",
         "text": "8.65",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000020",
+        "hierarchy_level": 2,
+        "id": "element-000021",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -619,21 +650,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 20,
+        "reading_order": 21,
         "source_ref": "#/texts/19",
         "text": "8.90 8.96",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000021",
+        "hierarchy_level": 2,
+        "id": "element-000022",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -650,21 +681,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 21,
+        "reading_order": 22,
         "source_ref": "#/texts/20",
         "text": "8.91",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000022",
+        "hierarchy_level": 2,
+        "id": "element-000023",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -681,21 +712,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 22,
+        "reading_order": 23,
         "source_ref": "#/texts/21",
         "text": "7.87",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000023",
+        "hierarchy_level": 2,
+        "id": "element-000024",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -712,21 +743,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 23,
+        "reading_order": 24,
         "source_ref": "#/texts/22",
         "text": "7.19",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000024",
+        "hierarchy_level": 2,
+        "id": "element-000025",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -743,21 +774,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 24,
+        "reading_order": 25,
         "source_ref": "#/texts/23",
         "text": "7.21",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000025",
+        "hierarchy_level": 2,
+        "id": "element-000026",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -774,21 +805,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 25,
+        "reading_order": 26,
         "source_ref": "#/texts/24",
         "text": "7.37",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000026",
+        "hierarchy_level": 2,
+        "id": "element-000027",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -805,21 +836,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 26,
+        "reading_order": 27,
         "source_ref": "#/texts/25",
         "text": "7.14",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000027",
+        "hierarchy_level": 2,
+        "id": "element-000028",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -836,21 +867,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 27,
+        "reading_order": 28,
         "source_ref": "#/texts/26",
         "text": "7.50",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000028",
+        "hierarchy_level": 2,
+        "id": "element-000029",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -867,21 +898,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 28,
+        "reading_order": 29,
         "source_ref": "#/texts/27",
         "text": "4.51",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000029",
+        "hierarchy_level": 2,
+        "id": "element-000030",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -898,21 +929,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 29,
+        "reading_order": 30,
         "source_ref": "#/texts/28",
         "text": "5.00",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000030",
+        "hierarchy_level": 2,
+        "id": "element-000031",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -929,21 +960,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 30,
+        "reading_order": 31,
         "source_ref": "#/texts/29",
         "text": "2.70",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000031",
+        "hierarchy_level": 2,
+        "id": "element-000032",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -960,21 +991,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 31,
+        "reading_order": 32,
         "source_ref": "#/texts/30",
         "text": "2.50",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000032",
+        "hierarchy_level": 2,
+        "id": "element-000033",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -991,21 +1022,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 32,
+        "reading_order": 33,
         "source_ref": "#/texts/31",
         "text": "1.74",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000033",
+        "hierarchy_level": 2,
+        "id": "element-000034",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1022,21 +1053,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 33,
+        "reading_order": 34,
         "source_ref": "#/texts/32",
         "text": "0.00",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000034",
+        "hierarchy_level": 2,
+        "id": "element-000035",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1053,21 +1084,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 34,
+        "reading_order": 35,
         "source_ref": "#/texts/33",
         "text": "Aluminum",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000035",
+        "hierarchy_level": 2,
+        "id": "element-000036",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1084,21 +1115,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 35,
+        "reading_order": 36,
         "source_ref": "#/texts/34",
         "text": "Cadmium",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000036",
+        "hierarchy_level": 2,
+        "id": "element-000037",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1115,21 +1146,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 36,
+        "reading_order": 37,
         "source_ref": "#/texts/35",
         "text": "Chromium",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000037",
+        "hierarchy_level": 2,
+        "id": "element-000038",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1146,21 +1177,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 37,
+        "reading_order": 38,
         "source_ref": "#/texts/36",
         "text": "Cobalt",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000038",
+        "hierarchy_level": 2,
+        "id": "element-000039",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1177,21 +1208,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 38,
+        "reading_order": 39,
         "source_ref": "#/texts/37",
         "text": "Copper",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000039",
+        "hierarchy_level": 2,
+        "id": "element-000040",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1208,21 +1239,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 39,
+        "reading_order": 40,
         "source_ref": "#/texts/38",
         "text": "Gold",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000040",
+        "hierarchy_level": 2,
+        "id": "element-000041",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1239,21 +1270,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 40,
+        "reading_order": 41,
         "source_ref": "#/texts/39",
         "text": "Iron",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000041",
+        "hierarchy_level": 2,
+        "id": "element-000042",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1270,21 +1301,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 41,
+        "reading_order": 42,
         "source_ref": "#/texts/40",
         "text": "Lead",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000042",
+        "hierarchy_level": 2,
+        "id": "element-000043",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1301,21 +1332,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 42,
+        "reading_order": 43,
         "source_ref": "#/texts/41",
         "text": "Magnesium",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000043",
+        "hierarchy_level": 2,
+        "id": "element-000044",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1332,21 +1363,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 43,
+        "reading_order": 44,
         "source_ref": "#/texts/42",
         "text": "Manganese",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000044",
+        "hierarchy_level": 2,
+        "id": "element-000045",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1363,21 +1394,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 44,
+        "reading_order": 45,
         "source_ref": "#/texts/43",
         "text": "Mercury",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000045",
+        "hierarchy_level": 2,
+        "id": "element-000046",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1394,21 +1425,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 45,
+        "reading_order": 46,
         "source_ref": "#/texts/44",
         "text": "Molybdenum",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000046",
+        "hierarchy_level": 2,
+        "id": "element-000047",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1425,21 +1456,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 46,
+        "reading_order": 47,
         "source_ref": "#/texts/45",
         "text": "Nickel",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000047",
+        "hierarchy_level": 2,
+        "id": "element-000048",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1456,21 +1487,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 47,
+        "reading_order": 48,
         "source_ref": "#/texts/46",
         "text": "Platinum",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000048",
+        "hierarchy_level": 2,
+        "id": "element-000049",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1487,21 +1518,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 48,
+        "reading_order": 49,
         "source_ref": "#/texts/47",
         "text": "Silver",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000049",
+        "hierarchy_level": 2,
+        "id": "element-000050",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1518,21 +1549,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 49,
+        "reading_order": 50,
         "source_ref": "#/texts/48",
         "text": "m",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000050",
+        "hierarchy_level": 2,
+        "id": "element-000051",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1549,21 +1580,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 50,
+        "reading_order": 51,
         "source_ref": "#/texts/49",
         "text": "Titanium",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000051",
+        "hierarchy_level": 2,
+        "id": "element-000052",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1580,21 +1611,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 51,
+        "reading_order": 52,
         "source_ref": "#/texts/50",
         "text": "Tungsten",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000052",
+        "hierarchy_level": 2,
+        "id": "element-000053",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1611,21 +1642,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 52,
+        "reading_order": 53,
         "source_ref": "#/texts/51",
         "text": "Uranium",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000053",
+        "hierarchy_level": 2,
+        "id": "element-000054",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1642,21 +1673,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 53,
+        "reading_order": 54,
         "source_ref": "#/texts/52",
         "text": "Zinc",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000054",
+        "hierarchy_level": 2,
+        "id": "element-000055",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
-        "parent_id": "element-000055",
+        "parent_id": "element-000001",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -1673,47 +1704,16 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 54,
+        "reading_order": 55,
         "source_ref": "#/texts/53",
         "text": "Metal",
         "type": "paragraph"
-      },
-      {
-        "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000055",
-        "metadata": {
-          "content_layer": "body",
-          "docling_class": "_ItemProxy"
-        },
-        "page_number": 1,
-        "parent_id": null,
-        "parent_ref": "#/body",
-        "provenance": [
-          {
-            "bbox": {
-              "bottom": 27.80877685546875,
-              "coord_origin": "BOTTOMLEFT",
-              "left": 46.799842834472656,
-              "right": 917.9380493164062,
-              "top": 447.01961517333984
-            },
-            "char_end": 0,
-            "char_start": 0,
-            "page_number": 1
-          }
-        ],
-        "raw_label": "picture",
-        "reading_order": 55,
-        "source_ref": "#/pictures/0",
-        "text": null,
-        "type": "picture"
       }
     ],
     "extractor": {
-      "completed_at": "2026-09-06T14:15:38.348961Z",
+      "completed_at": "2026-10-13T20:27:38.871489Z",
       "configuration": {
-        "base_url": "http://localhost:5001",
+        "base_url": "http://127.0.0.1:5001",
         "capability": "document.structure.extract",
         "component_versions": {
           "docling": "2.124.0",
@@ -1724,9 +1724,9 @@
         },
         "extractor": "docling-serve"
       },
-      "duration_ms": 6064,
+      "duration_ms": 8042,
       "name": "docling",
-      "started_at": "2026-09-06T14:15:32.284602Z",
+      "started_at": "2026-10-13T20:27:30.830094Z",
       "version": "1.32.0"
     },
     "language": "pt-BR",
@@ -1738,12 +1738,12 @@
           "page_number": 1,
           "raw_label": "picture"
         },
-        "id": "observation-describe-image-000055",
+        "id": "observation-describe-image-000001",
         "kind": "picture-requires-processing",
         "message": "The image must receive a description or be marked as decorative.",
         "severity": "warning",
         "target_ids": [
-          "element-000055"
+          "element-000001"
         ]
       }
     ],
@@ -1818,7 +1818,7 @@
       "document_id": "doc-6480e5093b894dd0",
       "filename": "008.pdf",
       "media_type": "application/pdf",
-      "path": "/private/var/folders/qj/5jwqmns93svck0ttg234mrlc0000gn/T/tmpazxfy7ic/008.pdf",
+      "path": "/tmp/tmpf32s4sv7/008.pdf",
       "sha256": "6480e5093b894dd0ed95061bf4c9e296e9b776d012242fc64cdc54464893ef33"
     },
     "status": "extracted",

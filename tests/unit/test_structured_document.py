@@ -252,3 +252,14 @@ def test_iterate_items_receives_a_document_shaped_object() -> None:
 
     assert isinstance(first, SimpleNamespace)
     assert level == 0
+
+
+
+@pytest.mark.parametrize("provider", ["docling", "mineru", "pymupdf", "custom-provider"])
+def test_extractor_names_remain_compatible_with_core(tmp_path, provider):
+    _, manifest = build(tmp_path)
+    payload = manifest.model_dump(mode="json", by_alias=True)
+    payload["extractor"]["name"] = provider
+    assert validate_manifest(payload, SCHEMA_PATH) == []
+    del payload["extractor"]["name"]
+    assert validate_manifest(payload, SCHEMA_PATH) == []

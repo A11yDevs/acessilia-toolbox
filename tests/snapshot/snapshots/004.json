@@ -2,7 +2,7 @@
   "document": {
     "$schema": "urn:a11y-devs:schema:processing-manifest:1.1.0",
     "artifacts": [],
-    "created_at": "2026-09-06T14:15:18.127390Z",
+    "created_at": "2026-10-13T20:27:30.795555Z",
     "elements": [
       {
         "confidence": null,
@@ -72,6 +72,523 @@
         "id": "element-000003",
         "metadata": {
           "content_layer": "body",
+          "docling_class": "_ItemProxy",
+          "table_ast": {
+            "body": [
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "DE:"
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "byte"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(char)"
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(byte)"
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(char)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl. Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "short"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(byte)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(short)"
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "char"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(byte)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(short)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(char)"
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "int"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(byte)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(short)"
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(char)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(int)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "long"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(byte)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(short)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(char)"
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(int)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(long)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "Impl."
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "float"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "double (byte)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(short)"
+                  },
+                  {
+                    "text": ""
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(char)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(int)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(long)"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "(float)"
+                  },
+                  {
+                    "text": ""
+                  }
+                ]
+              }
+            ],
+            "header": [
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "PARA:"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "byte"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "short"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "char"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "int"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "long"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "float"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "double"
+                  }
+                ]
+              }
+            ]
+          },
+          "table_column_count": 8,
+          "table_has_header": true,
+          "table_linearization_hint": "docling-structured",
+          "table_row_count": 9
+        },
+        "page_number": 1,
+        "parent_id": null,
+        "parent_ref": "#/body",
+        "provenance": [
+          {
+            "bbox": {
+              "bottom": 484.09308616964887,
+              "coord_origin": "BOTTOMLEFT",
+              "left": 136.25298563502778,
+              "right": 458.8339495399014,
+              "top": 613.2608622880066
+            },
+            "char_end": 0,
+            "char_start": 0,
+            "page_number": 1
+          }
+        ],
+        "raw_label": "table",
+        "reading_order": 3,
+        "source_ref": "#/tables/0",
+        "text": null,
+        "type": "table"
+      },
+      {
+        "confidence": null,
+        "hierarchy_level": 1,
+        "id": "element-000004",
+        "metadata": {
+          "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 1,
@@ -92,7 +609,7 @@
           }
         ],
         "raw_label": "section_header",
-        "reading_order": 3,
+        "reading_order": 4,
         "source_ref": "#/texts/2",
         "text": "TAMANHO\tDOS\tTIPOS",
         "type": "heading"
@@ -100,7 +617,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000004",
+        "id": "element-000005",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -123,7 +640,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 4,
+        "reading_order": 5,
         "source_ref": "#/texts/3",
         "text": "Na\ttabela\tabaixo,\testão\tos\ttamanhos\tde\tcada\ttipo\tprimitivo\tdo\tJava.",
         "type": "paragraph"
@@ -131,7 +648,210 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000005",
+        "id": "element-000006",
+        "metadata": {
+          "content_layer": "body",
+          "docling_class": "_ItemProxy",
+          "table_ast": {
+            "body": [
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "boolean"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "1 bit"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "byte"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "1 byte"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "short"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "2 bytes"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "char"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "2 bytes"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "int"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "4 bytes"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "float"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "4 bytes"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "long"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "8 bytes"
+                  }
+                ]
+              },
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "doble"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": false,
+                    "rowspan": 1,
+                    "scope": "none",
+                    "text": "8 bytes"
+                  }
+                ]
+              }
+            ],
+            "header": [
+              {
+                "cells": [
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "TIPO"
+                  },
+                  {
+                    "colspan": 1,
+                    "header": true,
+                    "rowspan": 1,
+                    "scope": "col",
+                    "text": "TAMANHO"
+                  }
+                ]
+              }
+            ]
+          },
+          "table_column_count": 2,
+          "table_has_header": true,
+          "table_linearization_hint": "docling-structured",
+          "table_row_count": 9
+        },
+        "page_number": 1,
+        "parent_id": null,
+        "parent_ref": "#/body",
+        "provenance": [
+          {
+            "bbox": {
+              "bottom": 210.40295552366626,
+              "coord_origin": "BOTTOMLEFT",
+              "left": 159.14311584472657,
+              "right": 435.74173221460126,
+              "top": 358.7498684861498
+            },
+            "char_end": 0,
+            "char_start": 0,
+            "page_number": 1
+          }
+        ],
+        "raw_label": "table",
+        "reading_order": 6,
+        "source_ref": "#/tables/1",
+        "text": null,
+        "type": "table"
+      },
+      {
+        "confidence": null,
+        "hierarchy_level": 1,
+        "id": "element-000007",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -154,7 +874,7 @@
           }
         ],
         "raw_label": "section_header",
-        "reading_order": 5,
+        "reading_order": 7,
         "source_ref": "#/texts/4",
         "text": "3.6\tO\tIF\tE\tO\tELSE",
         "type": "heading"
@@ -162,7 +882,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000006",
+        "id": "element-000008",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -185,7 +905,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 6,
+        "reading_order": 8,
         "source_ref": "#/texts/5",
         "text": "No\tJava,\ta\tsintaxe\tdo if é\ta\tseguinte:",
         "type": "paragraph"
@@ -193,7 +913,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000007",
+        "id": "element-000009",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -216,7 +936,7 @@
           }
         ],
         "raw_label": "code",
-        "reading_order": 7,
+        "reading_order": 9,
         "source_ref": "#/texts/6",
         "text": "if\t(condicaoBooleana)\t{ codigo; }",
         "type": "code"
@@ -224,7 +944,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000008",
+        "id": "element-000010",
         "metadata": {
           "content_layer": "furniture",
           "docling_class": "_ItemProxy"
@@ -247,7 +967,7 @@
           }
         ],
         "raw_label": "page_footer",
-        "reading_order": 8,
+        "reading_order": 10,
         "source_ref": "#/texts/7",
         "text": "26",
         "type": "page_footer"
@@ -255,7 +975,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000009",
+        "id": "element-000011",
         "metadata": {
           "content_layer": "furniture",
           "docling_class": "_ItemProxy"
@@ -278,78 +998,16 @@
           }
         ],
         "raw_label": "page_footer",
-        "reading_order": 9,
+        "reading_order": 11,
         "source_ref": "#/texts/8",
         "text": "3.6\tO\tIF\tE\tO\tELSE",
         "type": "page_footer"
-      },
-      {
-        "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000010",
-        "metadata": {
-          "content_layer": "body",
-          "docling_class": "_ItemProxy"
-        },
-        "page_number": 1,
-        "parent_id": null,
-        "parent_ref": "#/body",
-        "provenance": [
-          {
-            "bbox": {
-              "bottom": 484.09308616964887,
-              "coord_origin": "BOTTOMLEFT",
-              "left": 136.25298563502778,
-              "right": 458.8339495399014,
-              "top": 613.2608622880066
-            },
-            "char_end": 0,
-            "char_start": 0,
-            "page_number": 1
-          }
-        ],
-        "raw_label": "table",
-        "reading_order": 10,
-        "source_ref": "#/tables/0",
-        "text": null,
-        "type": "table"
-      },
-      {
-        "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000011",
-        "metadata": {
-          "content_layer": "body",
-          "docling_class": "_ItemProxy"
-        },
-        "page_number": 1,
-        "parent_id": null,
-        "parent_ref": "#/body",
-        "provenance": [
-          {
-            "bbox": {
-              "bottom": 210.40295552366626,
-              "coord_origin": "BOTTOMLEFT",
-              "left": 159.14311584472657,
-              "right": 435.74173221460126,
-              "top": 358.7498684861498
-            },
-            "char_end": 0,
-            "char_start": 0,
-            "page_number": 1
-          }
-        ],
-        "raw_label": "table",
-        "reading_order": 11,
-        "source_ref": "#/tables/1",
-        "text": null,
-        "type": "table"
       }
     ],
     "extractor": {
-      "completed_at": "2026-09-06T14:15:18.127390Z",
+      "completed_at": "2026-10-13T20:27:30.795555Z",
       "configuration": {
-        "base_url": "http://localhost:5001",
+        "base_url": "http://127.0.0.1:5001",
         "capability": "document.structure.extract",
         "component_versions": {
           "docling": "2.124.0",
@@ -360,9 +1018,9 @@
         },
         "extractor": "docling-serve"
       },
-      "duration_ms": 10086,
+      "duration_ms": 20039,
       "name": "docling",
-      "started_at": "2026-09-06T14:15:08.040798Z",
+      "started_at": "2026-10-13T20:27:10.756726Z",
       "version": "1.32.0"
     },
     "language": "pt-BR",
@@ -372,40 +1030,40 @@
       {
         "evidence": {
           "page_number": 1,
+          "raw_label": "table"
+        },
+        "id": "observation-linearize-table-000003",
+        "kind": "table-requires-processing",
+        "message": "The table must have headers and a verifiable reading order.",
+        "severity": "warning",
+        "target_ids": [
+          "element-000003"
+        ]
+      },
+      {
+        "evidence": {
+          "page_number": 1,
+          "raw_label": "table"
+        },
+        "id": "observation-linearize-table-000006",
+        "kind": "table-requires-processing",
+        "message": "The table must have headers and a verifiable reading order.",
+        "severity": "warning",
+        "target_ids": [
+          "element-000006"
+        ]
+      },
+      {
+        "evidence": {
+          "page_number": 1,
           "raw_label": "code"
         },
-        "id": "observation-preserve-code-semantics-000007",
+        "id": "observation-preserve-code-semantics-000009",
         "kind": "code-requires-processing",
         "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
-          "element-000007"
-        ]
-      },
-      {
-        "evidence": {
-          "page_number": 1,
-          "raw_label": "table"
-        },
-        "id": "observation-linearize-table-000010",
-        "kind": "table-requires-processing",
-        "message": "The table must have headers and a verifiable reading order.",
-        "severity": "warning",
-        "target_ids": [
-          "element-000010"
-        ]
-      },
-      {
-        "evidence": {
-          "page_number": 1,
-          "raw_label": "table"
-        },
-        "id": "observation-linearize-table-000011",
-        "kind": "table-requires-processing",
-        "message": "The table must have headers and a verifiable reading order.",
-        "severity": "warning",
-        "target_ids": [
-          "element-000011"
+          "element-000009"
         ]
       }
     ],
@@ -436,7 +1094,7 @@
       "document_id": "doc-b5dbe02e17dd536e",
       "filename": "004.pdf",
       "media_type": "application/pdf",
-      "path": "/private/var/folders/qj/5jwqmns93svck0ttg234mrlc0000gn/T/tmpahxm3q2m/004.pdf",
+      "path": "/tmp/tmp_vmr8hg9/004.pdf",
       "sha256": "b5dbe02e17dd536e085fb0f24ededab28c583a970846d2191a4b5c090d0e8899"
     },
     "status": "extracted",

@@ -212,3 +212,25 @@ def test_rejects_a_provider_that_lacks_the_capability(
 
 def test_language_reaches_the_normalized_document(executor: CapabilityExecutor) -> None:
     assert run(executor, language="en-US").document["language"] == "en-US"
+
+
+
+def test_incompatible_cached_result_is_replaced(executor, provider) -> None:
+    class StaleCache:
+        def __init__(self):
+            self.value = {"old_schema": True}
+
+        def get(self, key):
+            return self.value
+
+        def put(self, key, value):
+            self.value = value
+
+    executor._cache = StaleCache()
+    first = run(executor)
+    assert first.status == "succeeded"
+    assert first.provenance.cache_hit is False
+    assert len(provider.calls) == 1
+    second = run(executor)
+    assert second.provenance.cache_hit is True
+    assert len(provider.calls) == 1

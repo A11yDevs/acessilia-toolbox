@@ -2,7 +2,7 @@
   "document": {
     "$schema": "urn:a11y-devs:schema:processing-manifest:1.1.0",
     "artifacts": [],
-    "created_at": "2026-09-06T14:15:07.988938Z",
+    "created_at": "2026-10-13T20:27:10.725876Z",
     "elements": [
       {
         "confidence": null,
@@ -138,6 +138,24 @@
         "hierarchy_level": 1,
         "id": "element-000005",
         "metadata": {
+          "content_layer": "body",
+          "docling_class": "_ItemProxy"
+        },
+        "page_number": null,
+        "parent_id": null,
+        "parent_ref": "#/body",
+        "provenance": [],
+        "raw_label": "list",
+        "reading_order": 5,
+        "source_ref": "#/groups/0",
+        "text": "list",
+        "type": "group"
+      },
+      {
+        "confidence": null,
+        "hierarchy_level": 2,
+        "id": "element-000006",
+        "metadata": {
           "callout_id": "callout-auto-000004",
           "callout_role": "content",
           "callout_title": "Ao\tfinal\tdeste\tcapítulo,\tvocê\tserá\tcapaz\tde:",
@@ -147,7 +165,7 @@
           "enumerated": false
         },
         "page_number": 1,
-        "parent_id": "element-000038",
+        "parent_id": "element-000005",
         "parent_ref": "#/groups/0",
         "provenance": [
           {
@@ -164,15 +182,15 @@
           }
         ],
         "raw_label": "list_item",
-        "reading_order": 5,
+        "reading_order": 6,
         "source_ref": "#/texts/4",
         "text": "Dizer\to\tque\té\therança\te\tquando\tutilizá-la;",
         "type": "list_item"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000006",
+        "hierarchy_level": 2,
+        "id": "element-000007",
         "metadata": {
           "callout_id": "callout-auto-000004",
           "callout_role": "content",
@@ -183,7 +201,7 @@
           "enumerated": false
         },
         "page_number": 1,
-        "parent_id": "element-000038",
+        "parent_id": "element-000005",
         "parent_ref": "#/groups/0",
         "provenance": [
           {
@@ -200,15 +218,15 @@
           }
         ],
         "raw_label": "list_item",
-        "reading_order": 6,
+        "reading_order": 7,
         "source_ref": "#/texts/5",
         "text": "Reutilizar\tcódigo\tescrito\tanteriormente;",
         "type": "list_item"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000007",
+        "hierarchy_level": 2,
+        "id": "element-000008",
         "metadata": {
           "callout_id": "callout-auto-000004",
           "callout_role": "content",
@@ -219,7 +237,7 @@
           "enumerated": false
         },
         "page_number": 1,
-        "parent_id": "element-000038",
+        "parent_id": "element-000005",
         "parent_ref": "#/groups/0",
         "provenance": [
           {
@@ -236,15 +254,15 @@
           }
         ],
         "raw_label": "list_item",
-        "reading_order": 7,
+        "reading_order": 8,
         "source_ref": "#/texts/6",
         "text": "Criar\tclasses\tfilhas\te\treescrever\tmétodos;",
         "type": "list_item"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000008",
+        "hierarchy_level": 2,
+        "id": "element-000009",
         "metadata": {
           "callout_id": "callout-auto-000004",
           "callout_role": "content",
@@ -255,7 +273,7 @@
           "enumerated": false
         },
         "page_number": 1,
-        "parent_id": "element-000038",
+        "parent_id": "element-000005",
         "parent_ref": "#/groups/0",
         "provenance": [
           {
@@ -272,7 +290,7 @@
           }
         ],
         "raw_label": "list_item",
-        "reading_order": 8,
+        "reading_order": 9,
         "source_ref": "#/texts/7",
         "text": "Usar\ttodo\to\tpoder\tque\to\tpolimorfismo\toferece.",
         "type": "list_item"
@@ -280,7 +298,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000009",
+        "id": "element-000010",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -303,7 +321,7 @@
           }
         ],
         "raw_label": "section_header",
-        "reading_order": 9,
+        "reading_order": 10,
         "source_ref": "#/texts/8",
         "text": "9.1\tREPETINDO\tCÓDIGO?",
         "type": "heading"
@@ -311,7 +329,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000010",
+        "id": "element-000011",
         "metadata": {
           "callout_id": "callout-auto-000004",
           "callout_role": "content",
@@ -338,7 +356,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 10,
+        "reading_order": 11,
         "source_ref": "#/texts/9",
         "text": "Como\ttoda\tempresa,\tnosso\tbanco\ttem\tfuncionários.\tModelemos\ta\tclasse Funcionario :",
         "type": "paragraph"
@@ -346,7 +364,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000011",
+        "id": "element-000012",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -369,7 +387,7 @@
           }
         ],
         "raw_label": "code",
-        "reading_order": 11,
+        "reading_order": 12,
         "source_ref": "#/texts/10",
         "text": "public\tclass\tFuncionario\t{ private\tString\tnome; private\tString\tcpf; private\tdouble\tsalario; //\tmétodos\tdevem\tvir\taqui }",
         "type": "code"
@@ -377,7 +395,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000012",
+        "id": "element-000013",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -400,7 +418,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 12,
+        "reading_order": 13,
         "source_ref": "#/texts/11",
         "text": "Além\t de\t um\t funcionário\t comum,\t há\t também\t outros\t cargos,\t como\t os\t gerentes;\t estes\t guardam\t a mesma\tinformação\tque\tum\tfuncionário\tcomum,\tmas\ttambém\ttêm\toutros\tdados\te\tfuncionalidades\tum pouco\t diferentes.\t Por\t exemplo,\t um\t gerente\t no\t nosso\t banco\t tem\t uma\t senha\t numérica\t que\t permite\t o acesso\tao\tsistema\tinterno\tdo\tbanco,\talém\tdo\tnúmero\tde\tfuncionários\tos\tquais\tele\tgerencia:",
         "type": "paragraph"
@@ -408,7 +426,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000013",
+        "id": "element-000014",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -431,7 +449,7 @@
           }
         ],
         "raw_label": "code",
-        "reading_order": 13,
+        "reading_order": 14,
         "source_ref": "#/texts/12",
         "text": "public\tclass\tGerente\t{ private\tString\tnome; private\tString\tcpf; private\tdouble\tsalario; private\tint\tsenha; private\tint\tnumeroDeFuncionariosGerenciados; public\tboolean\tautentica(int\tsenha)\t{ if\t(this.senha\t==\tsenha)\t{ System.out.println(\"Acesso\tPermitido!\"); return\ttrue; }\telse\t{ System.out.println(\"Acesso\tNegado!\"); return\tfalse; }",
         "type": "code"
@@ -439,7 +457,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000014",
+        "id": "element-000015",
         "metadata": {
           "content_layer": "furniture",
           "docling_class": "_ItemProxy"
@@ -462,7 +480,7 @@
           }
         ],
         "raw_label": "page_footer",
-        "reading_order": 14,
+        "reading_order": 15,
         "source_ref": "#/texts/13",
         "text": "9\tHERANÇA,\tREESCRITA\tE\tPOLIMORFISMO",
         "type": "page_footer"
@@ -470,7 +488,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000015",
+        "id": "element-000016",
         "metadata": {
           "content_layer": "furniture",
           "docling_class": "_ItemProxy"
@@ -493,7 +511,7 @@
           }
         ],
         "raw_label": "page_footer",
-        "reading_order": 15,
+        "reading_order": 16,
         "source_ref": "#/texts/14",
         "text": "121",
         "type": "page_footer"
@@ -501,7 +519,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000016",
+        "id": "element-000017",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -524,7 +542,7 @@
           }
         ],
         "raw_label": "code",
-        "reading_order": 16,
+        "reading_order": 17,
         "source_ref": "#/texts/15",
         "text": "} //\toutros\tmétodos }",
         "type": "code"
@@ -532,9 +550,9 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000017",
+        "id": "element-000018",
         "metadata": {
-          "callout_id": "callout-auto-000017",
+          "callout_id": "callout-auto-000018",
           "callout_role": "title",
           "callout_title": "PRECISAMOS\tMESMO\tDE\tOUTRA\tCLASSE?",
           "callout_type": "note",
@@ -562,7 +580,7 @@
           }
         ],
         "raw_label": "section_header",
-        "reading_order": 17,
+        "reading_order": 18,
         "source_ref": "#/texts/16",
         "text": "PRECISAMOS\tMESMO\tDE\tOUTRA\tCLASSE?",
         "type": "paragraph"
@@ -570,9 +588,9 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000018",
+        "id": "element-000019",
         "metadata": {
-          "callout_id": "callout-auto-000017",
+          "callout_id": "callout-auto-000018",
           "callout_role": "content",
           "callout_title": "PRECISAMOS\tMESMO\tDE\tOUTRA\tCLASSE?",
           "callout_type": "note",
@@ -597,7 +615,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 18,
+        "reading_order": 19,
         "source_ref": "#/texts/17",
         "text": "Poderíamos\tter\tdeixado\ta\tclasse Funcionario mais\tgenérica,\tmantendo\tnela\ta\tsenha\tde\tacesso e\t o\t número\t de\t funcionários\t gerenciados.\t Caso\t o\t funcionário\t não\t fosse\t um\t gerente,\t deixaríamos esses\tatributos\tvazios.",
         "type": "paragraph"
@@ -605,9 +623,9 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000019",
+        "id": "element-000020",
         "metadata": {
-          "callout_id": "callout-auto-000017",
+          "callout_id": "callout-auto-000018",
           "callout_role": "content",
           "callout_title": "PRECISAMOS\tMESMO\tDE\tOUTRA\tCLASSE?",
           "callout_type": "note",
@@ -632,7 +650,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 19,
+        "reading_order": 20,
         "source_ref": "#/texts/18",
         "text": "Essa\té\tuma\tpossibilidade,\tporém,\tcom\to\ttempo,\tpodemos\tpassar\ta\tter\tmuito\tatributos\topcionais, e\t a\t classe\t ficaria\t estranha.\t E\t em\t relação\t aos\t métodos?\t A\t classe Gerente tem\t o\t método autentica ,\tque\tnão\tfaz\tsentido\texistir\tem\tum\tfuncionário\to\tqual\tnão\té\tgerente.",
         "type": "paragraph"
@@ -640,7 +658,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000020",
+        "id": "element-000021",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -663,7 +681,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 20,
+        "reading_order": 21,
         "source_ref": "#/texts/19",
         "text": "Se\t tivéssemos\t um\t outro\t tipo\t de\t funcionário\t que\t tem\t características\t diferentes\t do\t funcionário comum,\tprecisaríamos\tcriar\tuma\toutra\tclasse\te\tcopiar\to\tcódigo\tnovamente!",
         "type": "paragraph"
@@ -671,7 +689,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000021",
+        "id": "element-000022",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -694,7 +712,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 21,
+        "reading_order": 22,
         "source_ref": "#/texts/20",
         "text": "Além\t disso,\t se\t um\t dia\t precisarmos\t adicionar\t uma\t nova\t informação\t a\t todos\t os\t funcionários, precisaremos\tpassar\tpor\ttodas\tas\tclasses\tde\tfuncionário\te\tadicionar\tesse\tatributo.\tO\tproblema\tacontece novamente\tpor\tnão\tcentralizarmos\tos\tdados\tprincipais\tdo\tfuncionário\tem\tum\túnico\tlugar.",
         "type": "paragraph"
@@ -702,7 +720,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000022",
+        "id": "element-000023",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -725,7 +743,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 22,
+        "reading_order": 23,
         "source_ref": "#/texts/21",
         "text": "Existe\tum\tjeito,\tem\tJava,\tde\trelacionarmos\tuma\tclasse\tde\ttal\tmaneira\tque\tuma\tdelas herda tudo\tque a\toutra\ttem.\tIsso\té\tuma\trelação\tde\tclasse\tmãe\te\tclasse\tfilha.\tNo\tnosso\tcaso,\tgostaríamos\tde\tfazer\tcom que\to Gerente tivesse\ttudo\tque\tum Funcionario tem,\tgostaríamos\tque\tela\tfosse\tuma extensão de Funcionario .\tFazemos\tisso\tpor\tmeio\tda\tpalavra-chave extends .",
         "type": "paragraph"
@@ -733,7 +751,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000023",
+        "id": "element-000024",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -756,7 +774,7 @@
           }
         ],
         "raw_label": "code",
-        "reading_order": 23,
+        "reading_order": 24,
         "source_ref": "#/texts/22",
         "text": "public\tclass\tGerente\textends\tFuncionario\t{ private\tint\tsenha; private\tint\tnumeroDeFuncionariosGerenciados; public\tboolean\tautentica(int\tsenha)\t{ if\t(this.senha\t==\tsenha)\t{ System.out.println(\"Acesso\tPermitido!\"); return\ttrue; }\telse\t{ System.out.println(\"Acesso\tNegado!\"); return\tfalse; } } //\tsetter\tda\tsenha\tomitido }",
         "type": "code"
@@ -764,7 +782,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000024",
+        "id": "element-000025",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -787,7 +805,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 24,
+        "reading_order": 25,
         "source_ref": "#/texts/23",
         "text": "Em\t todo\t momento\t que\t criarmos\t um\t objeto\t do\t tipo Gerente ,\t este\t terá\t também\t os\t atributos definidos\tna\tclasse Funcionario ,\tpois\tum Gerente é\tum Funcionario :",
         "type": "paragraph"
@@ -795,7 +813,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000025",
+        "id": "element-000026",
         "metadata": {
           "content_layer": "furniture",
           "docling_class": "_ItemProxy"
@@ -818,7 +836,7 @@
           }
         ],
         "raw_label": "page_footer",
-        "reading_order": 25,
+        "reading_order": 26,
         "source_ref": "#/texts/24",
         "text": "122",
         "type": "page_footer"
@@ -826,7 +844,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000026",
+        "id": "element-000027",
         "metadata": {
           "content_layer": "furniture",
           "docling_class": "_ItemProxy"
@@ -849,7 +867,7 @@
           }
         ],
         "raw_label": "page_footer",
-        "reading_order": 26,
+        "reading_order": 27,
         "source_ref": "#/texts/25",
         "text": "9.1\tREPETINDO\tCÓDIGO?",
         "type": "page_footer"
@@ -857,13 +875,44 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000027",
+        "id": "element-000028",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 3,
-        "parent_id": "element-000037",
+        "parent_id": null,
+        "parent_ref": "#/body",
+        "provenance": [
+          {
+            "bbox": {
+              "bottom": 621.066658217961,
+              "coord_origin": "BOTTOMLEFT",
+              "left": 261.8083389261745,
+              "right": 332.80294474966576,
+              "top": 737.508222664994
+            },
+            "char_end": 0,
+            "char_start": 0,
+            "page_number": 3
+          }
+        ],
+        "raw_label": "picture",
+        "reading_order": 28,
+        "source_ref": "#/pictures/0",
+        "text": null,
+        "type": "picture"
+      },
+      {
+        "confidence": null,
+        "hierarchy_level": 2,
+        "id": "element-000029",
+        "metadata": {
+          "content_layer": "body",
+          "docling_class": "_ItemProxy"
+        },
+        "page_number": 3,
+        "parent_id": "element-000028",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -880,21 +929,21 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 27,
+        "reading_order": 29,
         "source_ref": "#/texts/26",
         "text": "Funcionario",
         "type": "paragraph"
       },
       {
         "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000028",
+        "hierarchy_level": 2,
+        "id": "element-000030",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
         },
         "page_number": 3,
-        "parent_id": "element-000037",
+        "parent_id": "element-000028",
         "parent_ref": "#/pictures/0",
         "provenance": [
           {
@@ -911,7 +960,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 28,
+        "reading_order": 30,
         "source_ref": "#/texts/27",
         "text": "Gerente",
         "type": "paragraph"
@@ -919,7 +968,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000029",
+        "id": "element-000031",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -942,7 +991,7 @@
           }
         ],
         "raw_label": "code",
-        "reading_order": 29,
+        "reading_order": 31,
         "source_ref": "#/texts/28",
         "text": "public\tclass\tTestaGerente\t{ public\tstatic\tvoid\tmain(String[]\targs)\t{ Gerente\tgerente\t=\tnew\tGerente(); //\tpodemos\tchamar\tmétodos\tdo\tFuncionario: gerente.setNome(\"João\tda\tSilva\"); //\te\ttambém\tmétodos\tdo\tGerente! gerente.setSenha(4231); } }",
         "type": "code"
@@ -950,7 +999,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000030",
+        "id": "element-000032",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -973,7 +1022,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 30,
+        "reading_order": 32,
         "source_ref": "#/texts/29",
         "text": "Dizemos\tque\ta\tclasse Gerente herda todos\tos\tatributos\te\tmétodos\tda\tclasse\tmãe,\tno\tnosso\tcaso,\ta Funcionario .\t Para\t ser\t mais\tpreciso,\tela\ttambém\therda\tos\tatributos\te\tmétodos\tprivados,\tporém\tnão consegue\t acessá-los\t diretamente.\t Para\t acessar\t um\t membro\t privado\t na\t filha\t indiretamente,\t seria necessário\tque\ta\tmãe\texpusesse\tum\toutro\tmétodo\tvisível\tque\tinvocasse\tesse\tatributo\tou\tmétodo\tprivado.",
         "type": "paragraph"
@@ -981,7 +1030,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000031",
+        "id": "element-000033",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -1004,7 +1053,7 @@
           }
         ],
         "raw_label": "section_header",
-        "reading_order": 31,
+        "reading_order": 33,
         "source_ref": "#/texts/30",
         "text": "SUPER\tE\tSUB\tCLASSE",
         "type": "heading"
@@ -1012,7 +1061,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000032",
+        "id": "element-000034",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -1035,7 +1084,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 32,
+        "reading_order": 34,
         "source_ref": "#/texts/31",
         "text": "A\t nomenclatura\t mais\t encontrada\t é\t que Funcionario é\t a superclasse de Gerente ,\t e Gerente é\t a subclasse de Funcionario .\t Dizemos\t também\t que\t todo Gerente é\t um Funcionario .\tOutra\tforma\té\tdizer\tque Funcionario é\ta\tclasse mãe de Gerente ,\te Gerente é a\tclasse filha de Funcionario .",
         "type": "paragraph"
@@ -1043,7 +1092,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000033",
+        "id": "element-000035",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -1066,7 +1115,7 @@
           }
         ],
         "raw_label": "text",
-        "reading_order": 33,
+        "reading_order": 35,
         "source_ref": "#/texts/32",
         "text": "E\t se\t precisamos\t acessar\t os\t atributos\t que\t herdamos?\t Não\t gostaríamos\t de\t deixar\t os\t atributos\t de Funcionario , public ,\t pois,\t dessa\t maneira,\t qualquer\t um\t poderia\t alterar\t os\t atributos\t dos\t objetos desse\ttipo.\tExiste\tum\toutro\tmodificador\tde\tacesso,\to protected ,\t o\t qual\t fica\t entre\to private e\t o public .\tUm\tatributo protected só\tpode\tser\tacessado\t(visível)\tpela\tprópria\tclasse,\tsuas\tsubclasses\te classes\tencontradas\tno\tmesmo\tpacote.",
         "type": "paragraph"
@@ -1074,7 +1123,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000034",
+        "id": "element-000036",
         "metadata": {
           "content_layer": "body",
           "docling_class": "_ItemProxy"
@@ -1097,7 +1146,7 @@
           }
         ],
         "raw_label": "code",
-        "reading_order": 34,
+        "reading_order": 36,
         "source_ref": "#/texts/33",
         "text": "public\tclass\tFuncionario\t{ protected\tString\tnome; protected\tString\tcpf; protected\tdouble\tsalario; //\tmétodos\tdevem\tvir\taqui }",
         "type": "code"
@@ -1105,7 +1154,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000035",
+        "id": "element-000037",
         "metadata": {
           "content_layer": "furniture",
           "docling_class": "_ItemProxy"
@@ -1128,7 +1177,7 @@
           }
         ],
         "raw_label": "page_footer",
-        "reading_order": 35,
+        "reading_order": 37,
         "source_ref": "#/texts/34",
         "text": "9.1\tREPETINDO\tCÓDIGO?",
         "type": "page_footer"
@@ -1136,7 +1185,7 @@
       {
         "confidence": null,
         "hierarchy_level": 1,
-        "id": "element-000036",
+        "id": "element-000038",
         "metadata": {
           "content_layer": "furniture",
           "docling_class": "_ItemProxy"
@@ -1159,65 +1208,16 @@
           }
         ],
         "raw_label": "page_footer",
-        "reading_order": 36,
+        "reading_order": 38,
         "source_ref": "#/texts/35",
         "text": "123",
         "type": "page_footer"
-      },
-      {
-        "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000037",
-        "metadata": {
-          "content_layer": "body",
-          "docling_class": "_ItemProxy"
-        },
-        "page_number": 3,
-        "parent_id": null,
-        "parent_ref": "#/body",
-        "provenance": [
-          {
-            "bbox": {
-              "bottom": 621.0666277119135,
-              "coord_origin": "BOTTOMLEFT",
-              "left": 261.8083389261745,
-              "right": 332.80294474966576,
-              "top": 737.5082531710416
-            },
-            "char_end": 0,
-            "char_start": 0,
-            "page_number": 3
-          }
-        ],
-        "raw_label": "picture",
-        "reading_order": 37,
-        "source_ref": "#/pictures/0",
-        "text": null,
-        "type": "picture"
-      },
-      {
-        "confidence": null,
-        "hierarchy_level": 1,
-        "id": "element-000038",
-        "metadata": {
-          "content_layer": "body",
-          "docling_class": "_ItemProxy"
-        },
-        "page_number": null,
-        "parent_id": null,
-        "parent_ref": "#/body",
-        "provenance": [],
-        "raw_label": "list",
-        "reading_order": 38,
-        "source_ref": "#/groups/0",
-        "text": "list",
-        "type": "group"
       }
     ],
     "extractor": {
-      "completed_at": "2026-09-06T14:15:07.988938Z",
+      "completed_at": "2026-10-13T20:27:10.725876Z",
       "configuration": {
-        "base_url": "http://localhost:5001",
+        "base_url": "http://127.0.0.1:5001",
         "capability": "document.structure.extract",
         "component_versions": {
           "docling": "2.124.0",
@@ -1228,9 +1228,9 @@
         },
         "extractor": "docling-serve"
       },
-      "duration_ms": 18051,
+      "duration_ms": 34031,
       "name": "docling",
-      "started_at": "2026-09-06T14:14:49.936769Z",
+      "started_at": "2026-10-13T20:26:36.694753Z",
       "version": "1.32.0"
     },
     "language": "pt-BR",
@@ -1242,12 +1242,12 @@
           "page_number": 1,
           "raw_label": "code"
         },
-        "id": "observation-preserve-code-semantics-000011",
+        "id": "observation-preserve-code-semantics-000012",
         "kind": "code-requires-processing",
         "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
-          "element-000011"
+          "element-000012"
         ]
       },
       {
@@ -1255,12 +1255,12 @@
           "page_number": 1,
           "raw_label": "code"
         },
-        "id": "observation-preserve-code-semantics-000013",
+        "id": "observation-preserve-code-semantics-000014",
         "kind": "code-requires-processing",
         "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
-          "element-000013"
+          "element-000014"
         ]
       },
       {
@@ -1268,12 +1268,12 @@
           "page_number": 2,
           "raw_label": "code"
         },
-        "id": "observation-preserve-code-semantics-000016",
+        "id": "observation-preserve-code-semantics-000017",
         "kind": "code-requires-processing",
         "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
-          "element-000016"
+          "element-000017"
         ]
       },
       {
@@ -1281,38 +1281,12 @@
           "page_number": 2,
           "raw_label": "code"
         },
-        "id": "observation-preserve-code-semantics-000023",
+        "id": "observation-preserve-code-semantics-000024",
         "kind": "code-requires-processing",
         "message": "The code block must preserve indentation, language, and literal reading.",
         "severity": "info",
         "target_ids": [
-          "element-000023"
-        ]
-      },
-      {
-        "evidence": {
-          "page_number": 3,
-          "raw_label": "code"
-        },
-        "id": "observation-preserve-code-semantics-000029",
-        "kind": "code-requires-processing",
-        "message": "The code block must preserve indentation, language, and literal reading.",
-        "severity": "info",
-        "target_ids": [
-          "element-000029"
-        ]
-      },
-      {
-        "evidence": {
-          "page_number": 3,
-          "raw_label": "code"
-        },
-        "id": "observation-preserve-code-semantics-000034",
-        "kind": "code-requires-processing",
-        "message": "The code block must preserve indentation, language, and literal reading.",
-        "severity": "info",
-        "target_ids": [
-          "element-000034"
+          "element-000024"
         ]
       },
       {
@@ -1320,12 +1294,38 @@
           "page_number": 3,
           "raw_label": "picture"
         },
-        "id": "observation-describe-image-000037",
+        "id": "observation-describe-image-000028",
         "kind": "picture-requires-processing",
         "message": "The image must receive a description or be marked as decorative.",
         "severity": "warning",
         "target_ids": [
-          "element-000037"
+          "element-000028"
+        ]
+      },
+      {
+        "evidence": {
+          "page_number": 3,
+          "raw_label": "code"
+        },
+        "id": "observation-preserve-code-semantics-000031",
+        "kind": "code-requires-processing",
+        "message": "The code block must preserve indentation, language, and literal reading.",
+        "severity": "info",
+        "target_ids": [
+          "element-000031"
+        ]
+      },
+      {
+        "evidence": {
+          "page_number": 3,
+          "raw_label": "code"
+        },
+        "id": "observation-preserve-code-semantics-000036",
+        "kind": "code-requires-processing",
+        "message": "The code block must preserve indentation, language, and literal reading.",
+        "severity": "info",
+        "target_ids": [
+          "element-000036"
         ]
       }
     ],
@@ -1336,7 +1336,6 @@
           "element-000002",
           "element-000003",
           "element-000004",
-          "element-000005",
           "element-000006",
           "element-000007",
           "element-000008",
@@ -1346,7 +1345,8 @@
           "element-000012",
           "element-000013",
           "element-000014",
-          "element-000015"
+          "element-000015",
+          "element-000016"
         ],
         "height": 793.7,
         "page_number": 1,
@@ -1354,7 +1354,6 @@
       },
       {
         "element_ids": [
-          "element-000016",
           "element-000017",
           "element-000018",
           "element-000019",
@@ -1364,7 +1363,8 @@
           "element-000023",
           "element-000024",
           "element-000025",
-          "element-000026"
+          "element-000026",
+          "element-000027"
         ],
         "height": 793.7,
         "page_number": 2,
@@ -1372,7 +1372,6 @@
       },
       {
         "element_ids": [
-          "element-000027",
           "element-000028",
           "element-000029",
           "element-000030",
@@ -1382,7 +1381,8 @@
           "element-000034",
           "element-000035",
           "element-000036",
-          "element-000037"
+          "element-000037",
+          "element-000038"
         ],
         "height": 793.7,
         "page_number": 3,
@@ -1396,7 +1396,7 @@
       "document_id": "doc-2ec8bda39e8d18df",
       "filename": "001.pdf",
       "media_type": "application/pdf",
-      "path": "/private/var/folders/qj/5jwqmns93svck0ttg234mrlc0000gn/T/tmp6cxj2n8a/001.pdf",
+      "path": "/tmp/tmprepbm0g1/001.pdf",
       "sha256": "2ec8bda39e8d18df3e7e01900746eaff5b5998311d443a29b233d70dcdecbf56"
     },
     "status": "extracted",

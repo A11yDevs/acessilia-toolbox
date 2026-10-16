@@ -450,3 +450,7 @@ Load Balancer
 
 External providers/storage/cache
 ```
+
+### Execution concurrency
+
+`TOOLBOX_MAX_CONCURRENT_EXECUTIONS` limits concurrent capability executions per API process (default: `4`, minimum: `1`). Excess executions receive HTTP 503; clients can retry after capacity becomes available. Size this limit for the memory and capacity of the connected providers.

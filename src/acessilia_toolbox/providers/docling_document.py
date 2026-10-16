@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from acessilia_toolbox.providers.table_formats import docling_table
+
 # Collections holding renderable items, mapped to their default nesting level.
 ITEM_COLLECTIONS = {
     "texts": 1,
@@ -30,18 +32,31 @@ class DoclingServeDocument:
         self._build_items()
 
     def _build_items(self) -> None:
+        items: dict[str, dict[str, Any]] = {}
+        fallback: list[tuple[str, dict[str, Any]]] = []
+        for collection in ITEM_COLLECTIONS:
+            for index, item in enumerate(self._payload.get(collection) or []):
+                ref = item.get("self_ref") or f"#/{collection}/{index}"
+                items[ref] = item
+                fallback.append((ref, item))
         seen: set[str] = set()
-        for collection, default_level in ITEM_COLLECTIONS.items():
-            for item in self._payload.get(collection, []):
-                ref = item.get("self_ref", "")
-                if ref and ref in seen:
-                    continue
-                if ref:
-                    seen.add(ref)
-                level = item.get("level", default_level)
-                if isinstance(level, dict):
-                    level = 1
-                self._items.append((_ItemProxy(item), level))
+
+        def visit(ref: str, depth: int) -> None:
+            if ref in seen or ref not in items:
+                return
+            seen.add(ref)
+            item = items[ref]
+            level = item.get("level", depth)
+            if not isinstance(level, int):
+                level = depth
+            self._items.append((_ItemProxy(item), level))
+            for child in item.get("children") or []:
+                visit(child.get("$ref", ""), depth + 1)
+
+        for child in (self._payload.get("body") or {}).get("children") or []:
+            visit(child.get("$ref", ""), 1)
+        for ref, _item in fallback:
+            visit(ref, 1)
 
     def iterate_items(self, **_: Any) -> Any:
         return iter(self._items)
@@ -59,8 +74,7 @@ class DoclingServeDocument:
             return {int(key): _PageProxy(value) for key, value in pages.items()}
         if isinstance(pages, list):
             return {
-                page.get("page_number", index): _PageProxy(page)
-                for index, page in enumerate(pages)
+                page.get("page_number", index): _PageProxy(page) for index, page in enumerate(pages)
             }
         return {}
 
@@ -87,11 +101,9 @@ class _ItemProxy:
         if name in ("text", "orig", "name", "marker", "enumerated", "content_layer"):
             return self._data.get(name)
         if name == "table":
-            return self._data.get("table") or self._data.get("data")
-        for candidate in ("rows", "data", "cells"):
-            value = self._data.get(candidate)
-            if value is not None:
-                return value
+            return docling_table(self._data.get("table") or self._data.get("data"))
+        if name in ("rows", "data", "cells"):
+            return self._data.get(name)
         return None
 
     def model_dump(self, **_: Any) -> dict[str, Any]:

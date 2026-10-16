@@ -14,7 +14,8 @@ output:
 execution:
   deterministic: true
   idempotent: true
-  cacheable: true
+  # DatasetAdapter owns freshness and validation of this cache.
+  cacheable: false
   timeout_hint_seconds: 30
 
 semantics:

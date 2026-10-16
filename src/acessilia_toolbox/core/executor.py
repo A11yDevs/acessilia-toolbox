@@ -13,9 +13,15 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactStore, ExecutionCache, NullCache
+from acessilia_toolbox.core.artifact import (
+    ArtifactRef,
+    ArtifactStore,
+    ExecutionCache,
+    NullCache,
+    shards,
+)
 from acessilia_toolbox.core.cache import compute_cache_key
 from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
 from acessilia_toolbox.core.errors import (
@@ -102,12 +108,19 @@ class CapabilityExecutor:
             input_fingerprints=[input_fingerprint],
             parameters=parameters,
             model_versions=versions,
+            filename=filename,
+            media_type=media_type,
+            language=language,
         )
 
         if manifest.execution.cacheable and not no_cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
-                return _restore(cached, cache_key)
+                try:
+                    return _restore(cached, cache_key)
+                except ValidationError:
+                    # Cached results from an older contract must not block execution.
+                    pass
 
         execution_payload = payload
         orientation: OrientationResult | None = None
@@ -136,19 +149,6 @@ class CapabilityExecutor:
                 # The rotated bytes are the real input, so they replace the
                 # fingerprint; otherwise the cache could serve a stale result.
                 input_fingerprint = fingerprint_bytes(execution_payload)
-                cache_key = compute_cache_key(
-                    capability_id=manifest.id,
-                    capability_version=manifest.version,
-                    provider_id=descriptor.id,
-                    provider_version=provider_version,
-                    input_fingerprints=[input_fingerprint],
-                    parameters=parameters,
-                    model_versions=versions,
-                )
-                if manifest.execution.cacheable and not no_cache:
-                    cached = self._cache.get(cache_key)
-                    if cached is not None:
-                        return _restore(cached, cache_key)
 
         extraction = adapter.execute(
             manifest.id,
@@ -188,9 +188,7 @@ class CapabilityExecutor:
                 )
             )
         else:
-            artifacts.append(
-                ArtifactRef.of(serialized, media_type="application/json")
-            )
+            artifacts.append(ArtifactRef.of(serialized, media_type="application/json"))
 
         result = CapabilityResult(
             capability=manifest.key,
@@ -221,13 +219,17 @@ class CapabilityExecutor:
     def store_artifact(
         self, payload: bytes, *, media_type: str, filename: str | None = None
     ) -> ArtifactRef:
-        return self._require_store().put(
-            payload, media_type=media_type, filename=filename
-        )
+        return self._require_store().put(payload, media_type=media_type, filename=filename)
 
-    def retrieve_artifact(self, artifact_id: str) -> tuple[bytes, ArtifactRef]:
+    def retrieve_artifact(
+        self, artifact_id: str, *, max_bytes: int | None = None
+    ) -> tuple[bytes, ArtifactRef]:
+        shards(artifact_id)
         store = self._require_store()
-        return store.get(artifact_id), store.stat(artifact_id)
+        ref = store.stat(artifact_id)
+        if max_bytes is not None and ref.size > max_bytes:
+            raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+        return store.get(artifact_id), ref
 
     def _require_store(self) -> ArtifactStore:
         if self._store is None:

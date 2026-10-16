@@ -345,13 +345,20 @@ class HuggingFaceDatasetProvider:
             headers["Authorization"] = f"Bearer {self._hf_token}"
 
         resp = self._http.get(url, headers=headers)
-        if resp.status_code != 200:
+        if resp.status_code == 404:
             return []
+        if resp.status_code != 200:
+            raise DatasetProviderError(
+                f"HF directory API returned {resp.status_code}",
+                path=path, status=resp.status_code,
+            )
 
         try:
             entries = resp.json()
-        except (json.JSONDecodeError, TypeError):
-            return []
+        except (json.JSONDecodeError, TypeError) as exc:
+            raise DatasetProviderError("HF directory API returned invalid JSON", path=path) from exc
+        if not isinstance(entries, list):
+            raise DatasetProviderError("HF directory API must return a list", path=path)
 
         names: list[str] = []
         for e in entries:
