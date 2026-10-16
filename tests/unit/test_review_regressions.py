@@ -3,14 +3,13 @@
 from types import SimpleNamespace
 
 import pytest
+from docstruct.tables.ast import (
+    linearize_table_for_text,
+)
 from tests.unit.test_audit_followup_regressions import make_dataset_adapter
 
 from acessilia_toolbox.core.artifact import NullCache
 from acessilia_toolbox.core.errors import ProviderExecutionError
-from acessilia_toolbox.core.normalization.table_ast import (
-    linearize_table_for_text,
-    rows_from_table_ast,
-)
 from acessilia_toolbox.core.preprocessing.orient import detect_and_orient_image
 from acessilia_toolbox.providers.mineru_document import FORMULA_TYPES, MineruDocument
 from acessilia_toolbox.providers.mineru_layout import _classify
@@ -39,42 +38,6 @@ def test_nullable_orientation_dimensions_still_rotate():
 def test_invalid_native_grid_is_provider_error(cell):
     with pytest.raises(ProviderExecutionError):
         docling_table({"grid": [[cell]]})
-
-
-def test_docling_rowspans_keep_column_labels():
-    cells = [
-        {
-            "text": f"H{c}",
-            "start_row_offset_idx": 0,
-            "start_col_offset_idx": c,
-            "end_row_offset_idx": 1,
-            "end_col_offset_idx": c + 1,
-            "column_header": True,
-        }
-        for c in range(3)
-    ]
-    for r, c, text, end in [
-        (1, 0, "A", 3),
-        (1, 1, "B", 2),
-        (1, 2, "C", 2),
-        (2, 1, "D", 3),
-        (2, 2, "E", 3),
-    ]:
-        cells.append(
-            {
-                "text": text,
-                "start_row_offset_idx": r,
-                "start_col_offset_idx": c,
-                "end_row_offset_idx": end,
-                "end_col_offset_idx": c + 1,
-            }
-        )
-    table = docling_table({"num_rows": 3, "num_cols": 3, "table_cells": cells})
-    assert rows_from_table_ast(table) == [["H0", "H1", "H2"], ["A", "B", "C"], ["A", "D", "E"]]
-    assert linearize_table_for_text({"table_ast": table}) == [
-        "Row 1: H0: A; H1: B; H2: C",
-        "Row 2: H0: A; H1: D; H2: E",
-    ]
 
 
 def test_fully_covered_rows_are_not_empty_rows():

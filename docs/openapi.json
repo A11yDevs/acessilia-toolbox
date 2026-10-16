@@ -34,50 +34,27 @@
                 ],
                 "summary": "List Capabilities",
                 "operationId": "list_capabilities_v1_capabilities_get",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "Successful Response",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "array",
                                     "items": {
                                         "$ref": "#/components/schemas/CapabilitySummary"
                                     },
+                                    "type": "array",
                                     "title": "Response List Capabilities V1 Capabilities Get"
                                 }
                             }
                         }
-                    },
-                    "422": {
-                        "description": "Validation Error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/HTTPValidationError"
-                                }
-                            }
-                        }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v1/capabilities/{capability_id}": {
@@ -87,6 +64,11 @@
                 ],
                 "summary": "Get Capability",
                 "operationId": "get_capability_v1_capabilities__capability_id__get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "capability_id",
@@ -111,22 +93,6 @@
                                 }
                             ],
                             "title": "Version"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
                         }
                     }
                 ],
@@ -231,6 +197,11 @@
                 ],
                 "summary": "Execute Capability",
                 "operationId": "execute_capability_v1_capabilities__capability_id__execute_post",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "capability_id",
@@ -239,22 +210,6 @@
                         "schema": {
                             "type": "string",
                             "title": "Capability Id"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
                         }
                     }
                 ],
@@ -368,33 +323,15 @@
                 ],
                 "summary": "Store Artifact",
                 "operationId": "store_artifact_v1_artifacts_post",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
-                    }
-                ],
                 "requestBody": {
-                    "required": true,
                     "content": {
                         "multipart/form-data": {
                             "schema": {
                                 "$ref": "#/components/schemas/Body_store_artifact_v1_artifacts_post"
                             }
                         }
-                    }
+                    },
+                    "required": true
                 },
                 "responses": {
                     "200": {
@@ -408,74 +345,74 @@
                         }
                     },
                     "400": {
+                        "description": "Bad Request",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        },
-                        "description": "Bad Request"
+                        }
                     },
                     "404": {
+                        "description": "Not Found",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        },
-                        "description": "Not Found"
+                        }
                     },
                     "409": {
+                        "description": "Conflict",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        },
-                        "description": "Conflict"
+                        }
                     },
                     "415": {
+                        "description": "Unsupported Media Type",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        },
-                        "description": "Unsupported Media Type"
+                        }
                     },
                     "502": {
+                        "description": "Bad Gateway",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        },
-                        "description": "Bad Gateway"
+                        }
                     },
                     "503": {
+                        "description": "Service Unavailable",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        },
-                        "description": "Service Unavailable"
+                        }
                     },
                     "504": {
+                        "description": "Gateway Timeout",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        },
-                        "description": "Gateway Timeout"
+                        }
                     },
                     "422": {
                         "description": "Validation Error",
@@ -487,7 +424,12 @@
                             }
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v1/artifacts/{artifact_id}": {
@@ -497,6 +439,11 @@
                 ],
                 "summary": "Retrieve Artifact",
                 "operationId": "retrieve_artifact_v1_artifacts__artifact_id__get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "artifact_id",
@@ -505,22 +452,6 @@
                         "schema": {
                             "type": "string",
                             "title": "Artifact Id"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
                         }
                     }
                 ],
@@ -623,6 +554,11 @@
                 ],
                 "summary": "Artifact Metadata",
                 "operationId": "artifact_metadata_v1_artifacts__artifact_id__metadata_get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "artifact_id",
@@ -631,22 +567,6 @@
                         "schema": {
                             "type": "string",
                             "title": "Artifact Id"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
                         }
                     }
                 ],
@@ -751,51 +671,28 @@
                 ],
                 "summary": "List Providers",
                 "operationId": "list_providers_v1_providers_get",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "Successful Response",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "array",
                                     "items": {
-                                        "type": "object",
-                                        "additionalProperties": true
+                                        "additionalProperties": true,
+                                        "type": "object"
                                     },
+                                    "type": "array",
                                     "title": "Response List Providers V1 Providers Get"
                                 }
                             }
                         }
-                    },
-                    "422": {
-                        "description": "Validation Error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/HTTPValidationError"
-                                }
-                            }
-                        }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v1/providers/{provider_id}": {
@@ -805,6 +702,11 @@
                 ],
                 "summary": "Get Provider",
                 "operationId": "get_provider_v1_providers__provider_id__get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "provider_id",
@@ -813,22 +715,6 @@
                         "schema": {
                             "type": "string",
                             "title": "Provider Id"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
                         }
                     }
                 ],
@@ -935,6 +821,11 @@
                 ],
                 "summary": "Provider Health",
                 "operationId": "provider_health_v1_providers__provider_id__health_get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "provider_id",
@@ -943,22 +834,6 @@
                         "schema": {
                             "type": "string",
                             "title": "Provider Id"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
                         }
                     }
                 ],
@@ -1063,24 +938,6 @@
                 ],
                 "summary": "Planning Domain",
                 "operationId": "planning_domain_v1_planning_domain_get",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "Successful Response",
@@ -1089,18 +946,13 @@
                                 "schema": {}
                             }
                         }
-                    },
-                    "422": {
-                        "description": "Validation Error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/HTTPValidationError"
-                                }
-                            }
-                        }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v1/planning/capabilities/{capability_id}": {
@@ -1110,6 +962,11 @@
                 ],
                 "summary": "Planning Capability Action",
                 "operationId": "planning_capability_action_v1_planning_capabilities__capability_id__get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "capability_id",
@@ -1134,22 +991,6 @@
                                 }
                             ],
                             "title": "Version"
-                        }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
                         }
                     }
                 ],
@@ -1182,50 +1023,27 @@
                 ],
                 "summary": "Planning Predicates",
                 "operationId": "planning_predicates_v1_planning_predicates_get",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "Successful Response",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "array",
                                     "items": {
                                         "type": "string"
                                     },
+                                    "type": "array",
                                     "title": "Response Planning Predicates V1 Planning Predicates Get"
                                 }
                             }
                         }
-                    },
-                    "422": {
-                        "description": "Validation Error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/HTTPValidationError"
-                                }
-                            }
-                        }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v1/datasets": {
@@ -1236,51 +1054,28 @@
                 "summary": "List Datasets",
                 "description": "List all datasets available through the toolbox (all providers).",
                 "operationId": "list_datasets_v1_datasets_get",
-                "parameters": [
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "Successful Response",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "array",
                                     "items": {
-                                        "type": "object",
-                                        "additionalProperties": true
+                                        "additionalProperties": true,
+                                        "type": "object"
                                     },
+                                    "type": "array",
                                     "title": "Response List Datasets V1 Datasets Get"
                                 }
                             }
                         }
-                    },
-                    "422": {
-                        "description": "Validation Error",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/HTTPValidationError"
-                                }
-                            }
-                        }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         },
         "/v1/datasets/{dataset_id}": {
@@ -1291,6 +1086,11 @@
                 "summary": "Describe Dataset",
                 "description": "Get detailed metadata about a specific dataset.",
                 "operationId": "describe_dataset_v1_datasets__dataset_id__get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -1318,22 +1118,6 @@
                             "title": "Revision"
                         },
                         "description": "Git/HF revision to pin"
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
                     }
                 ],
                 "responses": {
@@ -1370,6 +1154,11 @@
                 "summary": "List Dataset Splits",
                 "description": "List available splits for a dataset.",
                 "operationId": "list_dataset_splits_v1_datasets__dataset_id__splits_get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -1397,22 +1186,6 @@
                             "title": "Revision"
                         },
                         "description": "Git/HF revision to pin"
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
                     }
                 ],
                 "responses": {
@@ -1452,6 +1225,11 @@
                 "summary": "List Dataset Items",
                 "description": "List items in a dataset split with pagination.",
                 "operationId": "list_dataset_items_v1_datasets__dataset_id__splits__split__items_get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -1511,22 +1289,6 @@
                             "default": 0,
                             "title": "Offset"
                         }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
                     }
                 ],
                 "responses": {
@@ -1566,6 +1328,11 @@
                 "summary": "Get Dataset Item",
                 "description": "Get a full item with artifact references and annotations.",
                 "operationId": "get_dataset_item_v1_datasets__dataset_id__splits__split__items__item_id__get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -1611,22 +1378,6 @@
                             "title": "Revision"
                         },
                         "description": "Git/HF revision to pin"
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
                     }
                 ],
                 "responses": {
@@ -1663,6 +1414,11 @@
                 "summary": "Get Dataset Artifact",
                 "description": "Retrieve the raw bytes of a dataset artifact.",
                 "operationId": "get_dataset_artifact_v1_datasets__dataset_id__splits__split__items__item_id__artifacts__path__get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -1717,22 +1473,6 @@
                             "title": "Revision"
                         },
                         "description": "Git/HF revision to pin"
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
                     }
                 ],
                 "responses": {
@@ -1765,6 +1505,11 @@
                 "summary": "Sample Dataset",
                 "description": "Get a random sample of items from a dataset split.",
                 "operationId": "sample_dataset_v1_datasets__dataset_id__splits__split__sample_get",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -1813,22 +1558,6 @@
                             "default": 5,
                             "title": "N"
                         }
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
                     }
                 ],
                 "responses": {
@@ -1868,6 +1597,11 @@
                 "summary": "Sync Dataset",
                 "description": "Re-mirror all artifacts for a dataset to the local artifact store.\n\nRequires mirroring to be enabled in the provider configuration.",
                 "operationId": "sync_dataset_v1_datasets__dataset_id__sync_post",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -1913,22 +1647,6 @@
                             "title": "Split"
                         },
                         "description": "Sync only this split"
-                    },
-                    {
-                        "name": "authorization",
-                        "in": "header",
-                        "required": false,
-                        "schema": {
-                            "anyOf": [
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ],
-                            "title": "Authorization"
-                        }
                     }
                 ],
                 "responses": {
@@ -2562,6 +2280,13 @@
                     "type"
                 ],
                 "title": "ValidationError"
+            }
+        },
+        "securitySchemes": {
+            "ApiKeyAuth": {
+                "type": "http",
+                "description": "API key configured by TOOLBOX_API_KEY. Send Authorization: Bearer <token>. Without the key the server refuses to start unless TOOLBOX_ALLOW_UNAUTHENTICATED=1 (local development only).",
+                "scheme": "bearer"
             }
         }
     }

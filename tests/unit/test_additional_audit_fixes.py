@@ -6,19 +6,10 @@ from tests.integration.test_rest_api import CAPABILITY, MANIFEST, PDF
 
 from acessilia_toolbox.api.app import create_app
 from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
-from acessilia_toolbox.core.errors import ProviderExecutionError
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
-from acessilia_toolbox.core.normalization.table_ast import rows_from_table_ast
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers.docling_document import DoclingServeDocument
-
-
-@pytest.mark.parametrize("index", [100000, -1, True, "bad"])
-def test_sparse_column_is_rejected_before_legacy_projection(index):
-    table = {"body": [{"cells": [{"text": "A", "metadata": {"column_index": index}}]}]}
-    with pytest.raises(ProviderExecutionError, match="column index"):
-        rows_from_table_ast(table)
 
 
 @pytest.mark.parametrize(
@@ -32,7 +23,8 @@ def test_sparse_column_is_rejected_before_legacy_projection(index):
         },
     ],
 )
-def test_malformed_native_table_is_structured_provider_error(native):
+def test_malformed_native_table_is_structured_provider_error(native, monkeypatch):
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
     capabilities = CapabilityRegistry([CapabilityManifest.model_validate(MANIFEST)])
     descriptor = ProviderDescriptor.model_validate(
         {"id": "docling", "endpoint": "http://unused", "capabilities": [CAPABILITY]}

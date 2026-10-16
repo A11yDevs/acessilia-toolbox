@@ -38,7 +38,8 @@ bearer_scheme = HTTPBearer(
     scheme_name="ApiKeyAuth",
     description=(
         "API key configured by TOOLBOX_API_KEY. Send Authorization: Bearer <token>. "
-        "Authentication is disabled when the key is unset."
+        "Without the key the server refuses to start unless "
+        "TOOLBOX_ALLOW_UNAUTHENTICATED=1 (local development only)."
     ),
 )
 

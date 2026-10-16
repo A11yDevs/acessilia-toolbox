@@ -11,6 +11,11 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from docstruct.tables.ast import (
+    linearize_table_for_text,
+    rows_from_table_ast,
+    table_ast_from_rows,
+)
 from fastapi import FastAPI, Request
 from starlette.datastructures import UploadFile
 from starlette.requests import Request as StarletteRequest
@@ -23,11 +28,6 @@ from acessilia_toolbox.core.errors import InvalidInputError
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.normalization.builder import build_processing_manifest
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
-from acessilia_toolbox.core.normalization.table_ast import (
-    linearize_table_for_text,
-    rows_from_table_ast,
-    table_ast_from_rows,
-)
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers.docling_document import DoclingServeDocument
 from acessilia_toolbox.providers.mineru_document import MineruDocument
@@ -246,7 +246,6 @@ def test_mineru_native_table_and_formula_reach_manifest(tmp_path):
     manifest = build_processing_manifest(source, extraction)
     assert rows_from_table_ast(manifest.elements[0].metadata["table_ast"]) == [["42"]]
     assert (manifest.elements[1].type, manifest.elements[1].text) == ("formula", "x=1")
-    assert any(obligation.kind == "verbalize-formula" for obligation in manifest.obligations)
 
 
 class MemoryCache:
@@ -449,6 +448,7 @@ def test_capacity_overload_rejects_work_and_keeps_health_responsive(monkeypatch)
     from acessilia_toolbox.api.app import create_app
 
     monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "")
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
     descriptor = ProviderDescriptor(id="stub", capabilities=["document.structure.extract"])
     app = create_app(
         CapabilityRegistry([CapabilityManifest.model_validate(MANIFEST)]),

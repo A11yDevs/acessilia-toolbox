@@ -12,7 +12,6 @@ from botocore.handlers import validate_ascii_metadata
 from acessilia_toolbox.api.app import create_app
 from acessilia_toolbox.core.errors import InvalidInputError
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
-from acessilia_toolbox.core.normalization.table_ast import linearize_table_for_text
 from acessilia_toolbox.core.preprocessing.orient import detect_and_orient_image
 from acessilia_toolbox.providers.dataset import DatasetAdapter
 from acessilia_toolbox.providers.mineru_document import _ItemProxy
@@ -104,14 +103,6 @@ def test_optional_table_end_tags_and_nested_tables(markup):
         assert [c["text"] for c in table["body"][1]["cells"]] == ["C", "D"]
 
 
-def test_merged_cell_labels_cover_all_logical_columns():
-    table = {
-        "header": [{"cells": [{"text": "AB", "colspan": 2}, {"text": "C"}]}],
-        "body": [{"cells": [{"text": "A"}, {"text": "BC", "colspan": 2}]}],
-    }
-    assert linearize_table_for_text({"table_ast": table}) == ["Row 1: AB: A; AB / C: BC"]
-
-
 @pytest.mark.parametrize(
     "response",
     [
@@ -155,7 +146,8 @@ def test_pdf_invalid_parameters_are_client_errors(name, value):
         method(b"invalid PDF should never be opened", "doc.pdf", {name: value})
 
 
-def test_openapi_exposes_bearer_only_for_protected_routes():
+def test_openapi_exposes_bearer_only_for_protected_routes(monkeypatch):
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
     schema = create_app().openapi()
     assert schema["components"]["securitySchemes"]["ApiKeyAuth"]["scheme"] == "bearer"
     assert schema["paths"]["/v1/capabilities/{capability_id}:execute"]["post"]["security"] == [
