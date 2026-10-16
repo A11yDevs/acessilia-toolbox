@@ -13,6 +13,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from docstruct.tables.ast import normalize_table_ast, rows_from_table_ast
+
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.normalization.models import (
     BoundingBox,
@@ -25,10 +27,6 @@ from acessilia_toolbox.core.normalization.models import (
     ProcessingManifest,
     Provenance,
     SourceDocument,
-)
-from acessilia_toolbox.core.normalization.table_ast import (
-    normalize_table_ast,
-    rows_from_table_ast,
 )
 
 LABEL_TO_TYPE = {

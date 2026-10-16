@@ -8,10 +8,21 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "acessilia-docstruct"
+version = "0.1.0"
+source = { url = "https://github.com/A11yDevs/acessilia/archive/56d95adcb3834725004caa3ff2a4cc9b850d4650.tar.gz", subdirectory = "libs/docstruct" }
+sdist = { hash = "sha256:4245835556f402088e1a13096db3cfa79b26d47b5cebcf54d978f65abf7404d6" }
+
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" }]
+provides-extras = ["dev"]
+
+[[package]]
 name = "acessilia-toolbox"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "acessilia-docstruct" },
     { name = "httpx" },
     { name = "jsonschema" },
     { name = "pydantic" },
@@ -62,6 +73,7 @@ storage = [
 
 [package.metadata]
 requires-dist = [
+    { name = "acessilia-docstruct", url = "https://github.com/A11yDevs/acessilia/archive/56d95adcb3834725004caa3ff2a4cc9b850d4650.tar.gz", subdirectory = "libs/docstruct" },
     { name = "acessilia-toolbox", extras = ["api", "storage", "cache", "pdf", "media", "math", "music"], marker = "extra == 'dev'" },
     { name = "boto3", marker = "extra == 'storage'", specifier = ">=1.34" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
