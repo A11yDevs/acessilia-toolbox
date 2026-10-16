@@ -88,6 +88,10 @@ git add .
 git commit -m "feat(api): add export endpoint"
 ```
 
+A change to the REST routes or schemas also changes `docs/openapi.json`, which a
+test keeps in step with the application. Regenerate it with
+`UPDATE_OPENAPI=1 pytest -k committed_openapi` and commit the result.
+
 ### 3. Stay synchronized
 
 Always rebase with `develop` to avoid large conflicts:

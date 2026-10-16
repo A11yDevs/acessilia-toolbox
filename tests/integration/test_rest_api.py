@@ -6,8 +6,11 @@ Docker; provider conformance itself lives in the contract suite.
 
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -256,6 +259,30 @@ def test_openapi_document_is_published(client: TestClient) -> None:
     paths = response.json()["paths"]
     assert "/v1/capabilities/{capability_id}:execute" in paths
     assert "/v1/providers/{provider_id}/health" in paths
+
+
+COMMITTED_OPENAPI = Path(__file__).resolve().parents[2] / "docs" / "openapi.json"
+
+
+def test_committed_openapi_document_matches_the_app() -> None:
+    """docs/openapi.json is what the application publishes, so it cannot drift.
+
+    Regenerate it with: UPDATE_OPENAPI=1 pytest -k committed_openapi
+    """
+    generated = (
+        json.dumps(
+            create_app(CapabilityRegistry([]), ProviderRegistry([])).openapi(),
+            indent=4,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+    if os.getenv("UPDATE_OPENAPI") == "1":
+        COMMITTED_OPENAPI.write_text(generated, encoding="utf-8")
+    assert COMMITTED_OPENAPI.read_text(encoding="utf-8") == generated, (
+        "docs/openapi.json is stale; regenerate it with "
+        "UPDATE_OPENAPI=1 pytest -k committed_openapi"
+    )
 
 
 # ── Authentication tests ──────────────────────────────────────────
