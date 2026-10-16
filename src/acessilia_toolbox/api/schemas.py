@@ -31,7 +31,10 @@ class CapabilitySummary(BaseModel):
     media_types: list[str]
     deterministic: bool
     cacheable: bool
-    #: Providers registered in this deployment that implement the capability.
+    #: Providers registered in this deployment that implement the capability:
+    #: what a client can execute. The executor resolves any registered provider
+    #: that implements the capability, so this may include providers the
+    #: manifest does not bind; it is not a subset of ``declared_providers``.
     providers: list[str]
     #: Providers the manifest binds, including opt-in ones not registered here.
     declared_providers: list[str]

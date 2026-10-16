@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -164,3 +165,35 @@ def test_providers_resource_redacts_credentials() -> None:
 
     assert "SUPERSECRET" not in content
     assert "***" in content
+
+
+def _mcp_with_opt_in_provider() -> ToolboxMCPServer:
+    """docling is registered and bound; teleocr is bound but not registered
+    (opt-in); mineru is registered and implements the capability unbound."""
+    manifest = {**MANIFEST, "providers": [{"id": "docling"}, {"id": "teleocr"}]}
+    caps = CapabilityRegistry([CapabilityManifest.model_validate(manifest)])
+    providers = ProviderRegistry(
+        [
+            ProviderDescriptor.model_validate({"id": pid, "capabilities": [CAPABILITY]})
+            for pid in ("docling", "mineru")
+        ]
+    )
+    executor = CapabilityExecutor(caps, providers, lambda d: StubProvider(d))
+    return create_mcp_app(caps, providers, executor)
+
+
+def test_tool_offers_only_registered_providers() -> None:
+    """An opt-in provider that is not registered cannot execute, so the tool
+    does not offer it (the same rule as GET /v1/capabilities)."""
+    [tool] = _mcp_with_opt_in_provider().list_tools()
+
+    description = tool["inputSchema"]["properties"]["provider"]["description"]
+    assert description == "Provider ID: docling, mineru"
+
+
+def test_capabilities_resource_separates_registered_and_declared_providers() -> None:
+    content = _mcp_with_opt_in_provider().read_resource("acessilia://capabilities")
+
+    [entry] = json.loads(content)
+    assert entry["providers"] == ["docling", "mineru"]
+    assert entry["declared_providers"] == ["docling", "teleocr"]

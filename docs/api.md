@@ -29,6 +29,37 @@ GET  /v1/planning/domain
 GET  /v1/planning/capabilities/{capability_id}
 ```
 
+### Capability catalogue: `providers` and `declared_providers`
+
+`GET /v1/capabilities` and `GET /v1/capabilities/{capability_id}` return two
+provider lists per capability:
+
+| Field | Content |
+|---|---|
+| `providers` | Providers **registered in this deployment** that implement the capability: what a client can execute here. |
+| `declared_providers` | Providers the **manifest binds**, including opt-in ones this deployment does not register (e.g. `teleocr`). |
+
+``` json
+{
+  "id": "document.structure.extract",
+  "providers": ["docling", "mineru", "nougat"],
+  "declared_providers": ["docling", "mineru", "nougat", "teleocr"]
+}
+```
+
+The two lists are independent: `providers` is **not** a subset of
+`declared_providers`. The executor accepts any registered provider that
+implements the capability, bound in the manifest or not, so such a provider is
+listed in `providers` only.
+
+> **Contract change.** `providers` used to list the manifest bindings (what
+> `declared_providers` lists now). The field keeps its name and type, but its
+> content changed: a client that enumerated the bindings now sees the
+> executable providers, which can be fewer (an opt-in provider not registered)
+> or more (a registered provider the manifest does not bind). Read
+> `declared_providers` for the bindings. MCP follows the same rule (see
+> [MCP](#mcp)).
+
 Long-running operations may require an external job/queue abstraction.
 If asynchronous job state is exposed through the Toolbox, its
 authoritative state must live in an external state service rather than
@@ -124,6 +155,11 @@ acessilia://capabilities
 acessilia://providers
 acessilia://planning/domain
 ```
+
+The `acessilia://capabilities` resource returns each manifest with the same
+`providers` (registered here) and `declared_providers` (bound by the manifest)
+lists as the REST catalogue, and each tool's `provider` argument offers only
+the registered providers.
 
 MCP descriptions should remain concise and should not duplicate
 provider-specific implementation details unless needed by the caller.

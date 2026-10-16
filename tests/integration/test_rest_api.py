@@ -409,3 +409,26 @@ def test_catalogue_lists_registered_providers_and_keeps_the_declared_ones(
     detail = client.get(f"/v1/capabilities/{CAPABILITY}").json()
     assert detail["providers"] == ["docling"]
     assert detail["declared_providers"] == ["docling", "teleocr"]
+
+
+def test_catalogue_lists_a_registered_provider_the_manifest_does_not_bind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`providers` is what a client can execute. The executor resolves any
+    registered provider that implements the capability, bound or not, so such a
+    provider is listed even though it is not declared."""
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "")
+    capabilities, _ = _bare_registries()
+    providers = ProviderRegistry(
+        [
+            ProviderDescriptor.model_validate(
+                {"id": pid, "endpoint": f"http://{pid}", "capabilities": [CAPABILITY]}
+            )
+            for pid in ("docling", "mineru")
+        ]
+    )
+    client = TestClient(create_app(capabilities, providers))
+
+    [summary] = client.get("/v1/capabilities").json()
+    assert summary["providers"] == ["docling", "mineru"]
+    assert summary["declared_providers"] == ["docling"]
