@@ -367,72 +367,7 @@
     },
     "language": "pt-BR",
     "manifest_id": "manifest-b5dbe02e17dd536e-r1",
-    "obligations": [
-      {
-        "admissible_methods": [
-          "pandoc-code",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-preserve-code-semantics-000007",
-        "kind": "preserve-code-semantics",
-        "method_costs": {
-          "human-review": 100,
-          "pandoc-code": 10
-        },
-        "rationale": "The code block must preserve indentation, language, and literal reading.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000007"
-        ]
-      },
-      {
-        "admissible_methods": [
-          "docling-table",
-          "pandoc-table",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-linearize-table-000010",
-        "kind": "linearize-table",
-        "method_costs": {
-          "docling-table": 10,
-          "human-review": 100,
-          "pandoc-table": 15
-        },
-        "rationale": "The table must have headers and a verifiable reading order.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000010"
-        ]
-      },
-      {
-        "admissible_methods": [
-          "docling-table",
-          "pandoc-table",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-linearize-table-000011",
-        "kind": "linearize-table",
-        "method_costs": {
-          "docling-table": 10,
-          "human-review": 100,
-          "pandoc-table": 15
-        },
-        "rationale": "The table must have headers and a verifiable reading order.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000011"
-        ]
-      }
-    ],
+    "obligations": [],
     "observations": [
       {
         "evidence": {
@@ -514,7 +449,7 @@
         "paragraph": 3,
         "table": 2
       },
-      "obligation_count": 3,
+      "obligation_count": 0,
       "observation_count": 3,
       "page_count": 1
     },

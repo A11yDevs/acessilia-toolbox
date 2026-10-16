@@ -1731,28 +1731,7 @@
     },
     "language": "pt-BR",
     "manifest_id": "manifest-6480e5093b894dd0-r1",
-    "obligations": [
-      {
-        "admissible_methods": [
-          "vision-description",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-describe-image-000055",
-        "kind": "describe-image",
-        "method_costs": {
-          "human-review": 100,
-          "vision-description": 20
-        },
-        "rationale": "The image must receive a description or be marked as decorative.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000055"
-        ]
-      }
-    ],
+    "obligations": [],
     "observations": [
       {
         "evidence": {
@@ -1850,7 +1829,7 @@
         "paragraph": 53,
         "picture": 1
       },
-      "obligation_count": 1,
+      "obligation_count": 0,
       "observation_count": 1,
       "page_count": 1
     },

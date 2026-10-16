@@ -119,30 +119,7 @@
     },
     "language": "pt-BR",
     "manifest_id": "manifest-965a50c5055cb4f1-r1",
-    "obligations": [
-      {
-        "admissible_methods": [
-          "docling-table",
-          "pandoc-table",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-linearize-table-000003",
-        "kind": "linearize-table",
-        "method_costs": {
-          "docling-table": 10,
-          "human-review": 100,
-          "pandoc-table": 15
-        },
-        "rationale": "The table must have headers and a verifiable reading order.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000003"
-        ]
-      }
-    ],
+    "obligations": [],
     "observations": [
       {
         "evidence": {
@@ -187,7 +164,7 @@
         "heading": 2,
         "table": 1
       },
-      "obligation_count": 1,
+      "obligation_count": 0,
       "observation_count": 1,
       "page_count": 1
     },

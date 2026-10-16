@@ -1,7 +1,13 @@
 """Builds the canonical structured document from a provider extraction.
 
-Obligation rationales and observation messages are in English by default and
-internationalized via gettext (.po) files in the project locale directory.
+The document reports what was found (elements, pages) and observations about
+it; it does not decide how the document must be processed. Obligations,
+admissible methods and their costs are the agentic core's planning policy, so
+``obligations`` is always empty (the field stays in schema 1.1.0 for
+compatibility and is deprecated).
+
+Observation messages are in English by default and internationalized via
+gettext (.po) files in the project locale directory.
 """
 
 from __future__ import annotations
@@ -21,7 +27,6 @@ from acessilia_toolbox.core.normalization.models import (
     ExtractorRun,
     ManifestElement,
     ManifestSummary,
-    Obligation,
     Observation,
     PageDescriptor,
     ProcessingManifest,
@@ -52,46 +57,29 @@ LABEL_TO_TYPE = {
     "form": "form",
 }
 
-# Rationale strings are manifest content; see the module docstring.
-OBLIGATION_BY_TYPE = {
+# Observation messages are manifest content; see the module docstring.
+#: Element types that need processing: (need kind, observation message).
+PROCESSING_NEED_BY_TYPE = {
     "picture": (
         "describe-image",
         "The image must receive a description or be marked as decorative.",
-        ["vision-description", "human-review"],
     ),
     "table": (
         "linearize-table",
         "The table must have headers and a verifiable reading order.",
-        ["docling-table", "pandoc-table", "human-review"],
     ),
     "formula": (
         "verbalize-formula",
         "The formula must have an accessible mathematical representation and verbalization.",
-        ["mathml", "latex-verbalizer", "human-review"],
     ),
     "code": (
         "preserve-code-semantics",
         "The code block must preserve indentation, language, and literal reading.",
-        ["pandoc-code", "human-review"],
     ),
     "unknown": (
         "review-structure",
         "The unclassified element requires structural inspection.",
-        ["docling-retry", "pymupdf-region", "human-review"],
     ),
-}
-
-DEFAULT_METHOD_COSTS = {
-    "vision-description": 20,
-    "docling-table": 10,
-    "pandoc-table": 15,
-    "mathml": 10,
-    "latex-verbalizer": 20,
-    "pandoc-code": 10,
-    "docling-retry": 25,
-    "pymupdf-region": 30,
-    "deterministic-heading-repair": 5,
-    "human-review": 100,
 }
 
 CALL_OUT_MIN_GROUP_SIZE = 3
@@ -136,7 +124,7 @@ def build_processing_manifest(
     elements = _build_elements(extraction.document, enable_callouts=enable_callouts)
     pages = _build_pages(extraction.document, elements)
     title = _infer_title(source_path, elements)
-    observations, obligations = _derive_processing_needs(elements)
+    observations = _derive_observations(elements)
     element_types = dict(sorted(Counter(e.type for e in elements).items()))
 
     source = SourceDocument(
@@ -168,12 +156,11 @@ def build_processing_manifest(
         pages=pages,
         elements=elements,
         observations=observations,
-        obligations=obligations,
         summary=ManifestSummary(
             page_count=len(pages),
             element_count=len(elements),
             observation_count=len(observations),
-            obligation_count=len(obligations),
+            obligation_count=0,
             element_types=element_types,
         ),
     )
@@ -483,42 +470,26 @@ def _build_pages(document: Any, elements: list[ManifestElement]) -> list[PageDes
     return pages
 
 
-def _derive_processing_needs(
-    elements: list[ManifestElement],
-) -> tuple[list[Observation], list[Obligation]]:
+def _derive_observations(elements: list[ManifestElement]) -> list[Observation]:
     observations: list[Observation] = []
-    obligations: list[Obligation] = []
 
     for element in elements:
-        spec = OBLIGATION_BY_TYPE.get(element.type)
+        spec = PROCESSING_NEED_BY_TYPE.get(element.type)
         if spec is None:
             continue
-        kind, rationale, methods = spec
+        kind, message = spec
         suffix = element.id.removeprefix("element-")
         observations.append(
             Observation(
                 id=f"observation-{kind}-{suffix}",
                 kind=f"{element.type}-requires-processing",
                 severity="warning" if element.type != "code" else "info",
-                message=rationale,
+                message=message,
                 target_ids=[element.id],
                 evidence={
                     "raw_label": element.raw_label,
                     "page_number": element.page_number,
                 },
-            )
-        )
-        obligations.append(
-            Obligation(
-                id=f"obligation-{kind}-{suffix}",
-                kind=kind,
-                target_ids=[element.id],
-                admissible_methods=methods,
-                method_costs={
-                    method: DEFAULT_METHOD_COSTS.get(method, 50)
-                    for method in methods
-                },
-                rationale=rationale,
             )
         )
 
@@ -531,37 +502,21 @@ def _derive_processing_needs(
     for element_id, level in heading_levels:
         if previous and level > previous + 1:
             suffix = element_id.removeprefix("element-")
-            message = (
-                f"Heading hierarchy skips from level {previous} to level "
-                f"{level}."
-            )
             observations.append(
                 Observation(
                     id=f"observation-heading-gap-{suffix}",
                     kind="heading-hierarchy-gap",
                     severity="error",
-                    message=message,
+                    message=(
+                        f"Heading hierarchy skips from level {previous} to level "
+                        f"{level}."
+                    ),
                     target_ids=[element_id],
                     evidence={"previous_level": previous, "current_level": level},
                 )
             )
-            obligations.append(
-                Obligation(
-                    id=f"obligation-repair-heading-{suffix}",
-                    kind="repair-heading-hierarchy",
-                    target_ids=[element_id],
-                    admissible_methods=["deterministic-heading-repair", "human-review"],
-                    method_costs={
-                        "deterministic-heading-repair": DEFAULT_METHOD_COSTS[
-                            "deterministic-heading-repair"
-                        ],
-                        "human-review": DEFAULT_METHOD_COSTS["human-review"],
-                    },
-                    rationale=message,
-                )
-            )
         previous = level
-    return observations, obligations
+    return observations
 
 
 def _item_label(item: Any) -> str:

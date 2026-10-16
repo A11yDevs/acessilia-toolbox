@@ -177,6 +177,9 @@ class ProcessingManifest(StrictModel):
     pages: list[PageDescriptor]
     elements: list[ManifestElement]
     observations: list[Observation] = Field(default_factory=list)
+    #: Deprecated: always empty. Deciding what a document needs and which
+    #: methods satisfy it is the agentic core's planning policy; the field stays
+    #: so schema 1.1.0 consumers keep validating.
     obligations: list[Obligation] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
     summary: ManifestSummary
