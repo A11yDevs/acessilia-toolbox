@@ -109,7 +109,8 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 | `VALKEY_PORT` | `6379` | Valkey port |
 | `TOOLBOX_HOST` | `0.0.0.0` | uvicorn listen address |
 | `TOOLBOX_PORT` | `8002` | Toolbox HTTP port |
-| `TOOLBOX_API_KEY` | *(empty)* | Bearer token for REST API auth. Leave empty to disable. |
+| `TOOLBOX_API_KEY` | *(empty)* | Bearer token for REST API auth. Required: without it the application refuses to start. |
+| `TOOLBOX_ALLOW_UNAUTHENTICATED` | *(empty)* | `1` starts without `TOOLBOX_API_KEY`, every endpoint open. Local development only. |
 
 ### 4. Load the configuration
 

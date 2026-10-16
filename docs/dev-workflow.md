@@ -23,6 +23,9 @@ The `docker-compose.yml` at the project root starts the Toolbox **with local bui
 # 1. Configure environment variables
 cp .env.example .env
 # Edit .env with credentials (MINIO_ACCESS_KEY, MINIO_SECRET_KEY...)
+# and set TOOLBOX_API_KEY (openssl rand -hex 32). Without it the toolbox
+# container refuses to start; for a throwaway local stack you can set
+# TOOLBOX_ALLOW_UNAUTHENTICATED=1 in .env instead (every endpoint open).
 
 # 2. Build and start all services (toolbox + providers)
 docker compose --profile toolbox up --build -d
@@ -50,6 +53,7 @@ cp .env.example .env.local
 #   DOCLING_SERVE_URL=http://localhost:5001
 #   MINIO_URL=http://localhost:9000
 #   VALKEY_URL=redis://localhost:6379
+#   TOOLBOX_API_KEY=<openssl rand -hex 32>  (or TOOLBOX_ALLOW_UNAUTHENTICATED=1)
 ./scripts/run-local.sh
 ```
 

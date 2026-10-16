@@ -249,6 +249,7 @@ def test_unusable_fallback_does_not_prevent_app_startup(
         original_mkdir(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "mkdir", mkdir)
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
     providers = ProviderRegistry(
         [
             ProviderDescriptor(

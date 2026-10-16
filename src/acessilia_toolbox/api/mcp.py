@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from acessilia_toolbox import __version__
-from acessilia_toolbox.core.capability import CapabilityRegistry
+from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.pddl import domain_fragment, predicates_list
 from acessilia_toolbox.core.provider import ProviderRegistry
@@ -21,8 +21,13 @@ TOOLBOX_PREFIX = "acessilia://"
 TOOL_CAPABILITY_PREFIX = "document.structure.extract"
 
 
-def _tool_from_capability(manifest: dict[str, Any]) -> dict[str, Any]:
-    """Convert a capability manifest to an MCP tool definition."""
+def _tool_from_capability(manifest: dict[str, Any], registered: list[str]) -> dict[str, Any]:
+    """Convert a capability manifest to an MCP tool definition.
+
+    The ``provider`` argument lists the providers registered in this deployment,
+    not the ones the manifest binds: an opt-in provider that is not registered
+    (teleocr) cannot execute, so it is not offered.
+    """
     action = manifest["id"].replace(".", "_")
 
     properties: dict[str, Any] = {
@@ -38,9 +43,7 @@ def _tool_from_capability(manifest: dict[str, Any]) -> dict[str, Any]:
     if manifest["execution"].get("deterministic", True):
         properties["provider"] = {
             "type": "string",
-            "description": "Provider ID: " + ", ".join(
-                b["id"] for b in manifest.get("providers", [])
-            ),
+            "description": "Provider ID: " + ", ".join(registered),
         }
         properties["parameters"] = {
             "type": "object",
@@ -87,10 +90,24 @@ class ToolboxMCPServer:
         for manifest in self._capabilities.manifests():
             tools.append(
                 _tool_from_capability(
-                    manifest.model_dump(mode="json", by_alias=True)
+                    manifest.model_dump(mode="json", by_alias=True),
+                    self._registered(manifest.id),
                 )
             )
         return tools
+
+    def _registered(self, capability_id: str) -> list[str]:
+        """Providers registered here for a capability; what an agent can execute."""
+        return sorted(d.id for d in self._providers.for_capability(capability_id))
+
+    def _catalogue_entry(self, manifest: CapabilityManifest) -> dict[str, Any]:
+        """A manifest as the catalogue publishes it, matching GET /v1/capabilities:
+        ``providers`` lists the registered providers, ``declared_providers`` the
+        ones the manifest binds."""
+        entry = manifest.model_dump(mode="json", by_alias=True)
+        entry["providers"] = self._registered(manifest.id)
+        entry["declared_providers"] = [binding.id for binding in manifest.providers]
+        return entry
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
         """Execute a tool and return the results."""
@@ -229,7 +246,7 @@ class ToolboxMCPServer:
         """Return the content of an MCP resource."""
         if uri == f"{TOOLBOX_PREFIX}capabilities":
             return json.dumps(
-                [m.model_dump(mode="json", by_alias=True) for m in self._capabilities.manifests()],
+                [self._catalogue_entry(m) for m in self._capabilities.manifests()],
                 indent=2,
                 ensure_ascii=False,
             )

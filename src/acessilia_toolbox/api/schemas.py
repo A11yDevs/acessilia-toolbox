@@ -31,10 +31,19 @@ class CapabilitySummary(BaseModel):
     media_types: list[str]
     deterministic: bool
     cacheable: bool
+    #: Providers registered in this deployment that implement the capability:
+    #: what a client can execute. The executor resolves any registered provider
+    #: that implements the capability, so this may include providers the
+    #: manifest does not bind; it is not a subset of ``declared_providers``.
     providers: list[str]
+    #: Providers the manifest binds, including opt-in ones not registered here.
+    declared_providers: list[str]
 
     @classmethod
-    def of(cls, manifest: CapabilityManifest) -> CapabilitySummary:
+    def of(
+        cls, manifest: CapabilityManifest, registered: list[str] | None = None
+    ) -> CapabilitySummary:
+        declared = [binding.id for binding in manifest.providers]
         return cls(
             id=manifest.id,
             version=manifest.version,
@@ -44,7 +53,8 @@ class CapabilitySummary(BaseModel):
             media_types=manifest.input.media_types,
             deterministic=manifest.execution.deterministic,
             cacheable=manifest.execution.cacheable,
-            providers=[binding.id for binding in manifest.providers],
+            providers=sorted(registered) if registered is not None else declared,
+            declared_providers=declared,
         )
 
 
@@ -54,8 +64,10 @@ class CapabilityDetail(CapabilitySummary):
     timeout_hint_seconds: int
 
     @classmethod
-    def of(cls, manifest: CapabilityManifest) -> CapabilityDetail:
-        summary = CapabilitySummary.of(manifest)
+    def of(
+        cls, manifest: CapabilityManifest, registered: list[str] | None = None
+    ) -> CapabilityDetail:
+        summary = CapabilitySummary.of(manifest, registered)
         return cls(
             **summary.model_dump(),
             requires=manifest.semantics.requires,
