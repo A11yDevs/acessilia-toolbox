@@ -395,3 +395,97 @@ def test_shipped_configuration_builds_the_adapter(monkeypatch) -> None:
     assert adapter.base_url == "http://vlm:8080"
     # The key is configuration, so it is masked wherever providers are listed.
     assert registry.get("qwen3-vl-8b").public_payload()["config"]["api_key"] == "***"
+
+
+# -- table.recognize -----------------------------------------------------------
+
+# vlm_tables.py's TABLE_PROMPT, verbatim, so a drift from the experiment shows up.
+ORIGINAL_TABLE_PROMPT = """You are a precise table recognition system.
+The image is a table cropped from a document page. Two OCR systems produced these HTML hypotheses (may contain
+errors in structure or text):
+
+{cands}
+
+Reproduce the table in the image as HTML.
+- Output a single <table> using only <tr>, <td> (use <th> only for header cells), with colspan/rowspan where cells span.
+- One <tr> per visual row; every visual cell becomes one cell, empty cells as <td></td>.
+- Transcribe cell text EXACTLY as printed (numbers, punctuation, symbols, capitalisation). No styles, no markdown.
+Return ONLY the HTML table."""
+
+
+def test_table_default_reproduces_the_experiment() -> None:
+    seen: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(body_of(request))
+        return chat_response("```html\n<table><tr><td>1</td></tr></table>\n```")
+
+    adapter = provider_with(handler, table_hint_chars=4)
+    result = run(adapter, "table.recognize", {"hints": ["<table>docling", "<table>mineru"]})
+
+    expected = ORIGINAL_TABLE_PROMPT.format(
+        cands="Hypothesis A:\n<tab\n\nHypothesis B:\n<tab"
+    )
+    assert all(text_part(body) == expected for body in seen)
+    greedy, *samples = seen
+    assert greedy["temperature"] == 0 and "seed" not in greedy
+    assert [s["seed"] for s in samples] == [0, 1, 2]
+    assert all(s["temperature"] == 0.7 and s["top_p"] == 0.95 for s in samples)
+    assert all(body["max_tokens"] == 6000 for body in seen)
+
+    document = result.document
+    assert document["greedy"] == {"text": "<table><tr><td>1</td></tr></table>", "finish": "stop"}
+    assert [s["seed"] for s in document["samples"]] == [0, 1, 2]
+    assert document["use_hints"] is True and document["header_cells"] == "th"
+    jsonschema.validate(document, schema("table-candidates"))
+
+
+def test_table_variants_for_testing_the_experiment() -> None:
+    """Without hints and with <td> headers, to test anchoring and tag choices."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(text_part(body_of(request)))
+        return chat_response("<table></table>", finish="length")
+
+    adapter = provider_with(handler)
+    result = run(
+        adapter,
+        "table.recognize",
+        {"hints": ["<table>x</table>"], "use_hints": False, "header_cells": "td",
+         "samples": 1, "temperature": 1.0, "seed": 7},
+    )
+
+    assert len(seen) == 2
+    assert "hypotheses" not in seen[0] and "<table>x</table>" not in seen[0]
+    assert "<tr> and <td> (header cells too)" in seen[0]
+    assert "<th>" not in seen[0]
+    assert result.document["samples"] == [{"text": "<table></table>", "finish": "length", "seed": 7}]
+    jsonschema.validate(result.document, schema("table-candidates"))
+
+
+def test_table_greedy_only_makes_one_request() -> None:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return chat_response("<table></table>")
+
+    run(provider_with(handler), "table.recognize", {"samples": 0})
+    assert calls == [1]
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {"hints": "x"},
+        {"header_cells": "thead"},
+        {"samples": 99},
+        {"samples": -1},
+        {"temperature": "hot"},
+    ],
+)
+def test_table_rejects_bad_parameters(parameters) -> None:
+    adapter = provider_with(lambda r: pytest.fail("no request expected"))
+    with pytest.raises(InvalidInputError):
+        run(adapter, "table.recognize", parameters)

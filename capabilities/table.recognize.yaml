@@ -1,0 +1,33 @@
+id: table.recognize
+version: 1
+description: >-
+  Re-generate a table as HTML from a crop of it with a vision-language model:
+  one greedy generation plus seeded samples, optionally shown the providers'
+  tables as hints. The caller selects among the generations and the providers'
+  tables (the table specialist's self-consistency step).
+
+input:
+  schema: artifact/image@1
+  media_types:
+    - image/png
+    - image/jpeg
+
+output:
+  schema: artifact/table-candidates@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 900
+
+semantics:
+  requires:
+    - image_readable
+  produces:
+    - table_candidates_available
+
+providers:
+  - id: qwen3-vl-8b

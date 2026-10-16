@@ -6,11 +6,13 @@ vLLM, ...):
 
 - ``document.ocr.page`` — whole-page Markdown transcription;
 - ``document.adjudicate.page`` — pairwise judge between two transcriptions;
-- ``document.adjudicate.region`` — exact transcription of a cropped region.
+- ``document.adjudicate.region`` — exact transcription of a cropped region;
+- ``table.recognize`` — table re-generation from a crop (greedy plus seeded
+  samples) for the table specialist's self-consistency selection.
 
 The prompts and sampling are the ones validated in the Dr.DocBench experiments
 (``scripts/drbench/experiments`` in the core repository: ``vlm_page_ocr.py``
-prompt v1, ``vlm_page_judge.py``, ``vlm_adjudicate.py``). The adapter returns
+prompt v1, ``vlm_page_judge.py``, ``vlm_adjudicate.py``, ``vlm_tables.py``). The adapter returns
 model evidence -- transcriptions and judge probabilities. Deciding what a
 document does with it (thresholds, select/replace/drop) is the agentic core's
 job.
@@ -50,7 +52,8 @@ CHAT_PATH = "/v1/chat/completions"
 PAGE_OCR = "document.ocr.page"
 JUDGE_PAGE = "document.adjudicate.page"
 REGION = "document.adjudicate.region"
-CAPABILITIES = (PAGE_OCR, JUDGE_PAGE, REGION)
+TABLE = "table.recognize"
+CAPABILITIES = (PAGE_OCR, JUDGE_PAGE, REGION, TABLE)
 
 DEFAULTS: dict[str, Any] = {
     "max_concurrency": 4,
@@ -62,6 +65,9 @@ DEFAULTS: dict[str, Any] = {
     "region_max_chars": 1800,
     "top_logprobs": 20,
     "page_sampling": {},
+    "table_max_tokens": 6000,
+    "table_hint_chars": 6000,
+    "table_max_samples": 8,
 }
 
 # vlm_page_ocr.py, prompt v1. Prompt v2 ("do not transcribe text inside
@@ -124,6 +130,36 @@ Transcribe EXACTLY the text visible in the image.
 - If the region contains no readable text, answer exactly: <EMPTY>
 Return ONLY the transcription."""
 REGION_EMPTY = "<EMPTY>"
+
+# vlm_tables.py. The header-cell rule and the hypotheses block are switchable so
+# the experiment's choices can be tested: the original asks for <th> headers and
+# always shows the providers' tables.
+_TABLE_HEADER_RULES = {
+    "th": "- Output a single <table> using only <tr>, <td> (use <th> only for header cells), "
+    "with colspan/rowspan where cells span.",
+    "td": "- Output a single <table> using only <tr> and <td> (header cells too), "
+    "with colspan/rowspan where cells span.",
+}
+TABLE_PROMPT_HINTED = """You are a precise table recognition system.
+The image is a table cropped from a document page. Two OCR systems produced these HTML hypotheses (may contain
+errors in structure or text):
+
+{cands}
+
+Reproduce the table in the image as HTML.
+{header_rule}
+- One <tr> per visual row; every visual cell becomes one cell, empty cells as <td></td>.
+- Transcribe cell text EXACTLY as printed (numbers, punctuation, symbols, capitalisation). No styles, no markdown.
+Return ONLY the HTML table."""
+TABLE_PROMPT_BLIND = """You are a precise table recognition system.
+The image is a table cropped from a document page.
+
+Reproduce the table in the image as HTML.
+{header_rule}
+- One <tr> per visual row; every visual cell becomes one cell, empty cells as <td></td>.
+- Transcribe cell text EXACTLY as printed (numbers, punctuation, symbols, capitalisation). No styles, no markdown.
+Return ONLY the HTML table."""
+_TABLE_FENCE = re.compile(r"```[a-z]*")
 
 _PAGE_FENCE = re.compile(r"^```(?:markdown|md)?\s*\n|\n```\s*$")
 _REGION_FENCE = re.compile(r"^```[a-z]*\n?|```$")
@@ -193,6 +229,8 @@ class OpenAiCompatibleVlmProvider:
             document = self._judge_page(image, params)
         elif capability_id == REGION:
             document = self._transcribe_region(image, params)
+        elif capability_id == TABLE:
+            document = self._recognize_table(image, params)
         else:
             raise ProviderExecutionError(
                 f"{self.descriptor.id} does not implement {capability_id}",
@@ -302,6 +340,77 @@ class OpenAiCompatibleVlmProvider:
             "model": str(response.get("model") or self.config["model"]),
         }
 
+    def _recognize_table(
+        self, image: dict[str, Any], params: dict[str, Any]
+    ) -> dict[str, Any]:
+        hints = params.get("hints", [])
+        if not isinstance(hints, list) or not all(isinstance(item, str) for item in hints):
+            raise InvalidInputError("parameters.hints must be a list of strings", capability=TABLE)
+        use_hints = bool(params.get("use_hints", True))
+        header_cells = str(params.get("header_cells") or "th")
+        if header_cells not in _TABLE_HEADER_RULES:
+            raise InvalidInputError(
+                f"parameters.header_cells must be one of {sorted(_TABLE_HEADER_RULES)}",
+                capability=TABLE,
+            )
+        try:
+            samples = int(params.get("samples", 3))
+            temperature = float(params.get("temperature", 0.7))
+            top_p = float(params.get("top_p", 0.95))
+            seed = int(params.get("seed", 0))
+        except (TypeError, ValueError) as exc:
+            raise InvalidInputError(
+                "samples, temperature, top_p and seed must be numbers", capability=TABLE
+            ) from exc
+        max_samples = int(self.config["table_max_samples"])
+        if not 0 <= samples <= max_samples:
+            raise InvalidInputError(
+                f"parameters.samples must be between 0 and {max_samples}", capability=TABLE
+            )
+
+        limit = int(self.config["table_hint_chars"])
+        labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        hypotheses = "\n\n".join(
+            f"Hypothesis {labels[index % len(labels)]}:\n{text[:limit]}"
+            for index, text in enumerate(item for item in hints if item)
+        )
+        header_rule = _TABLE_HEADER_RULES[header_cells]
+        prompt = (
+            TABLE_PROMPT_HINTED.format(cands=hypotheses or "(none)", header_rule=header_rule)
+            if use_hints
+            else TABLE_PROMPT_BLIND.format(header_rule=header_rule)
+        )
+        content = [image, {"type": "text", "text": prompt}]
+        max_tokens = int(self.config["table_max_tokens"])
+        model = str(self.config["model"])
+
+        def generation(response: dict[str, Any]) -> dict[str, Any]:
+            choice = _first_choice(response, self.descriptor.id)
+            text = _TABLE_FENCE.sub("", _message_text(choice)).strip()
+            return {"text": text, "finish": choice.get("finish_reason")}
+
+        greedy_response = self._chat(content, max_tokens=max_tokens)
+        model = str(greedy_response.get("model") or model)
+        drawn = []
+        # One request per sample with its own seed: reproducible, and it works on
+        # servers that do not implement n > 1.
+        for index in range(samples):
+            response = self._chat(
+                content,
+                max_tokens=max_tokens,
+                extra={"temperature": temperature, "top_p": top_p, "seed": seed + index},
+            )
+            drawn.append({**generation(response), "seed": seed + index})
+        return {
+            "greedy": generation(greedy_response),
+            "samples": drawn,
+            "temperature": temperature,
+            "top_p": top_p,
+            "use_hints": use_hints,
+            "header_cells": header_cells,
+            "model": model,
+        }
+
     # -- transport ------------------------------------------------------------
 
     def _chat(
@@ -313,10 +422,10 @@ class OpenAiCompatibleVlmProvider:
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
+            "temperature": 0,
             **(extra or {}),
             "model": self.config["model"],
             "messages": [{"role": "user", "content": content}],
-            "temperature": 0,
             "max_tokens": max_tokens,
         }
         if logprobs:
