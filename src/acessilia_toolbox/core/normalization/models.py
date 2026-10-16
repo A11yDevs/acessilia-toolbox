@@ -179,8 +179,12 @@ class ProcessingManifest(StrictModel):
     observations: list[Observation] = Field(default_factory=list)
     #: Deprecated: always empty. Deciding what a document needs and which
     #: methods satisfy it is the agentic core's planning policy; the field stays
-    #: so schema 1.1.0 consumers keep validating.
-    obligations: list[Obligation] = Field(default_factory=list)
+    #: so schema 1.1.0 consumers keep validating. It is flagged in the published
+    #: JSON Schema only: ``Field(deprecated=True)`` would warn on every
+    #: attribute access, including this model's own validators.
+    obligations: list[Obligation] = Field(
+        default_factory=list, json_schema_extra={"deprecated": True}
+    )
     artifacts: list[Artifact] = Field(default_factory=list)
     summary: ManifestSummary
 

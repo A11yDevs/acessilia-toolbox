@@ -727,6 +727,7 @@
       "type": "array"
     },
     "obligations": {
+      "deprecated": true,
       "items": {
         "$ref": "#/$defs/Obligation"
       },
