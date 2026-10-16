@@ -30,7 +30,8 @@ dependencies = [
     # Pure structural algorithms shared with the core (no dependencies of its
     # own). Published from the core repository's libs/docstruct as a wheel on a
     # GitHub Release; the #sha256 fragment makes pip verify the download even
-    # without the lock file.
+    # without the lock file. To move to a new release, follow
+    # docs/dev-workflow.md, section 6 "Updating docstruct".
     "acessilia-docstruct @ https://github.com/A11yDevs/acessilia/releases/download/docstruct-v0.1.0/acessilia_docstruct-0.1.0-py3-none-any.whl#sha256=2f4cadc9ae119047a2c7d06eaf027476391e105893473b4fc8fce2df54fcc3e7",
 ]
 
