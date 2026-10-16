@@ -28,9 +28,10 @@ dependencies = [
     "httpx>=0.28",
     "PyYAML>=6.0",
     # Pure structural algorithms shared with the core (no dependencies of its
-    # own). It lives in the core repository under libs/docstruct, pinned to a
-    # commit; the archive URL avoids needing git in the image.
-    "acessilia-docstruct @ https://github.com/A11yDevs/acessilia/archive/56d95adcb3834725004caa3ff2a4cc9b850d4650.tar.gz#subdirectory=libs/docstruct",
+    # own). Published from the core repository's libs/docstruct as a wheel on a
+    # GitHub Release; the #sha256 fragment makes pip verify the download even
+    # without the lock file.
+    "acessilia-docstruct @ https://github.com/A11yDevs/acessilia/releases/download/docstruct-v0.1.0/acessilia_docstruct-0.1.0-py3-none-any.whl#sha256=2f4cadc9ae119047a2c7d06eaf027476391e105893473b4fc8fce2df54fcc3e7",
 ]
 
 [project.optional-dependencies]

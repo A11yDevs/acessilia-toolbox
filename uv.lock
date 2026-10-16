@@ -10,8 +10,10 @@ resolution-markers = [
 [[package]]
 name = "acessilia-docstruct"
 version = "0.1.0"
-source = { url = "https://github.com/A11yDevs/acessilia/archive/56d95adcb3834725004caa3ff2a4cc9b850d4650.tar.gz", subdirectory = "libs/docstruct" }
-sdist = { hash = "sha256:4245835556f402088e1a13096db3cfa79b26d47b5cebcf54d978f65abf7404d6" }
+source = { url = "https://github.com/A11yDevs/acessilia/releases/download/docstruct-v0.1.0/acessilia_docstruct-0.1.0-py3-none-any.whl" }
+wheels = [
+    { url = "https://github.com/A11yDevs/acessilia/releases/download/docstruct-v0.1.0/acessilia_docstruct-0.1.0-py3-none-any.whl", hash = "sha256:2f4cadc9ae119047a2c7d06eaf027476391e105893473b4fc8fce2df54fcc3e7" },
+]
 
 [package.metadata]
 requires-dist = [{ name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" }]
@@ -73,7 +75,7 @@ storage = [
 
 [package.metadata]
 requires-dist = [
-    { name = "acessilia-docstruct", url = "https://github.com/A11yDevs/acessilia/archive/56d95adcb3834725004caa3ff2a4cc9b850d4650.tar.gz", subdirectory = "libs/docstruct" },
+    { name = "acessilia-docstruct", url = "https://github.com/A11yDevs/acessilia/releases/download/docstruct-v0.1.0/acessilia_docstruct-0.1.0-py3-none-any.whl" },
     { name = "acessilia-toolbox", extras = ["api", "storage", "cache", "pdf", "media", "math", "music"], marker = "extra == 'dev'" },
     { name = "boto3", marker = "extra == 'storage'", specifier = ">=1.34" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },

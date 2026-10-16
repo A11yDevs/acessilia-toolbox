@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # uv only exports the locked dependency set; pip installs it with hashes
 # verified, so the image gets exactly what uv.lock pins (including the
-# acessilia-docstruct archive) instead of a fresh resolution.
+# acessilia-docstruct release wheel) instead of a fresh resolution.
 COPY --from=ghcr.io/astral-sh/uv:0.11.17@sha256:03bdc89bb9798628846e60c3a9ad19006c8c3c724ccd2985a33145c039a0577b /uv /usr/local/bin/uv
 
 COPY pyproject.toml README.md uv.lock ./
