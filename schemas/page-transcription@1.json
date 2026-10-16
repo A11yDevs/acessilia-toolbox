@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:page-transcription:1.0.0",
+  "title": "Page Transcription",
+  "description": "Whole-page Markdown transcription produced by a vision-language model.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["markdown", "finish", "model"],
+  "properties": {
+    "markdown": {
+      "type": "string",
+      "description": "Page text in reading order: blocks separated by a blank line, tables as HTML, formulas as LaTeX."
+    },
+    "finish": {
+      "type": ["string", "null"],
+      "description": "Why generation stopped as reported by the model server ('stop' when complete, 'length' when cut at the token limit)."
+    },
+    "model": {
+      "type": "string",
+      "description": "Model identifier the server answered with."
+    }
+  }
+}

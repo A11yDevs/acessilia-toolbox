@@ -33,6 +33,8 @@ services:
       AUDIVERIS_SERVE_URL: ${AUDIVERIS_SERVE_URL:-http://audiveris-serve:5003}
       RAPID_LATEX_OCR_URL: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
       RAPIDOCR_ORIENT_URL: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
+      VLM_SERVE_URL: ${VLM_SERVE_URL:-}
+      VLM_API_KEY: ${VLM_API_KEY:-}
     env_file:
       - .env
     volumes:

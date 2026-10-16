@@ -1,0 +1,33 @@
+id: document.adjudicate.region
+version: 1
+description: >-
+  Transcribe exactly the text visible in a region cropped from a page, using
+  the providers' OCR hypotheses as hints. Returns an empty text when the region
+  has no readable text. The caller decides whether the transcription selects,
+  replaces or drops a block.
+
+input:
+  schema: artifact/image@1
+  media_types:
+    - image/png
+    - image/jpeg
+
+output:
+  schema: artifact/region-transcription@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 120
+
+semantics:
+  requires:
+    - image_readable
+  produces:
+    - region_transcribed
+
+providers:
+  - id: qwen3-vl-8b

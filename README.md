@@ -201,6 +201,7 @@ flowchart TB
 | `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
 | `music.omr` | homr (in-process, local installs only), audiveris (sidecar) | ✅ |
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
+| `document.ocr.page`, `document.adjudicate.page`, `document.adjudicate.region`, `table.recognize` | qwen3-vl-8b (OpenAI-compatible VLM server, `VLM_SERVE_URL`) | ✅ |
 | `chem.recognize` | docling-chem (Granite Vision VLM) | ✅ |
 | `chem.convert` | pure-chem (in-process, mhchem) | ✅ |
 | `code.normalize` | pure-code (in-process) | ✅ |

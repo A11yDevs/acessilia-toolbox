@@ -1,0 +1,32 @@
+id: document.ocr.page
+version: 1
+description: >-
+  Transcribe a whole page image into Markdown with a vision-language model, in
+  natural reading order (tables as HTML, formulas as LaTeX). Used as an
+  independent source when the structural providers disagree.
+
+input:
+  schema: artifact/image@1
+  media_types:
+    - image/png
+    - image/jpeg
+
+output:
+  schema: artifact/page-transcription@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 600
+
+semantics:
+  requires:
+    - image_readable
+  produces:
+    - page_transcribed
+
+providers:
+  - id: qwen3-vl-8b

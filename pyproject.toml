@@ -102,6 +102,12 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "TID", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# The VLM prompts are kept verbatim from the Dr.DocBench experiments they were
+# validated in; reflowing them would make the two hard to compare.
+"src/acessilia_toolbox/providers/openai_vlm.py" = ["E501"]
+"tests/unit/test_openai_vlm_provider.py" = ["E501"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["acessilia_toolbox"]
 
