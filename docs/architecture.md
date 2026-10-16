@@ -51,6 +51,33 @@ services, and accessibility validators.
 
 Providers own their implementation-specific dependencies.
 
+## Shared algorithms (docstruct)
+
+The Toolbox depends on one library from the core repository:
+[`acessilia-docstruct`](https://github.com/A11yDevs/acessilia/tree/develop/libs/docstruct),
+pure document-structure algorithms (table AST, fusion, reading order) with no
+dependencies of its own. The normalization builder uses it for table ASTs.
+
+| Layer | Package | May depend on |
+|---|---|---|
+| 0 | `acessilia-docstruct` | nothing |
+| 1 | Toolbox (this repository) | docstruct |
+| 2 | `acessilia-sdk` (core repository) | the Toolbox's published contract — capability ids, versions, schemas — never this package |
+| 3 | Agentic core | SDK, docstruct |
+
+- **Dependencies point down only.** The Toolbox never imports the core
+  (`backend`) or the SDK; its clients reach it over REST/MCP.
+- **Shared algorithms live in docstruct, not here.** A copy diverges: the
+  table normalization this repository used to carry dropped empty cells
+  (shifting columns) and could not read Docling's grid format, both fixed in
+  docstruct long before.
+- **No planning policy.** docstruct holds none, and neither does the Toolbox:
+  structured documents carry observations, never obligations, methods or costs
+  (`obligations` is kept empty and deprecated in schema 1.1.0).
+- **Pinned by hash.** docstruct is installed from the wheel of a
+  `docstruct-vX.Y.Z` GitHub Release of the core, pinned by URL and `#sha256=`.
+  See [Updating docstruct](dev-workflow.md#6-updating-docstruct).
+
 ## Statelessness
 
 A Toolbox request must contain, or reference, everything needed for

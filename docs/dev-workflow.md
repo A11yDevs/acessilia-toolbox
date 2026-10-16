@@ -160,3 +160,50 @@ docker compose logs -f toolbox
 ```bash
 docker compose exec toolbox python -c "import acessilia_toolbox; print(acessilia_toolbox.__version__)"
 ```
+
+---
+
+## 6. Updating docstruct
+
+The Toolbox depends on
+[`acessilia-docstruct`](https://github.com/A11yDevs/acessilia/tree/develop/libs/docstruct),
+the pure structural-algorithm library shared with the core (see
+[architecture.md](architecture.md#shared-algorithms-docstruct)). It is published
+from the core repository as a wheel on a `docstruct-vX.Y.Z` GitHub Release and
+pinned in `pyproject.toml` by URL and `#sha256=`, so pip verifies the download.
+
+**Changing docstruct itself** happens in the core repository: a PR to
+`libs/docstruct`, a version bump, and a tag after the merge (see its
+[Releases](https://github.com/A11yDevs/acessilia/blob/develop/libs/docstruct/README.md#releases)
+section). Never patch the installed copy or copy its code into this repository.
+
+**Moving the Toolbox to a new release**, in its own PR:
+
+```bash
+# 1. Read the pin line from the release notes
+gh release view docstruct-vX.Y.Z -R A11yDevs/acessilia
+
+# 2. Replace the acessilia-docstruct line in pyproject.toml with that pin,
+#    then refresh the lock; the diff must touch only the acessilia-docstruct entry
+uv lock
+git diff uv.lock
+
+# 3. Reinstall and run the checks
+pip install -e ".[dev]"
+pytest
+ruff check src tests
+mypy src/
+```
+
+The image installs dependencies from `uv.lock` with `pip --require-hashes`, and
+`uv export --locked` fails the build when the lock does not match
+`pyproject.toml`, so a forgotten `uv lock` shows up in CI rather than in
+production.
+
+**Trying an unreleased docstruct change** locally, before it is published:
+
+```bash
+pip install -e ../acessilia/libs/docstruct   # path to a core checkout
+```
+
+Do not commit a path dependency; the PR must pin a published release.
