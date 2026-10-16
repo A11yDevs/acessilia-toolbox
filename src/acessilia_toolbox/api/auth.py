@@ -18,6 +18,10 @@ from acessilia_toolbox.core.errors import AuthorizationError
 
 LOG = logging.getLogger(__name__)
 
+# Read once at import: the key is fixed for the life of the process, and every
+# request compares against it. The opt-out flag below is read on each call
+# instead, because only create_app consults it, once per application; tests
+# set it per test with monkeypatch.setenv, and patch the key on this module.
 TOOLBOX_API_KEY = os.getenv("TOOLBOX_API_KEY", "")
 ALLOW_UNAUTHENTICATED_ENV = "TOOLBOX_ALLOW_UNAUTHENTICATED"
 
