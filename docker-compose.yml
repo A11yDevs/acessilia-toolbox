@@ -32,6 +32,9 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
       TOOLBOX_API_KEY: ${TOOLBOX_API_KEY:-}
+      # The toolbox refuses to start without TOOLBOX_API_KEY; 1 here starts it
+      # unauthenticated for local development only.
+      TOOLBOX_ALLOW_UNAUTHENTICATED: ${TOOLBOX_ALLOW_UNAUTHENTICATED:-}
     env_file:
       - .env
     volumes:
