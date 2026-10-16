@@ -36,15 +36,17 @@ process memory.
 
 ## Authentication
 
-The REST API supports optional Bearer token authentication via the
+The REST API requires Bearer token authentication with the key in the
 `TOOLBOX_API_KEY` environment variable.
 
-- **If `TOOLBOX_API_KEY` is empty or unset** (default): authentication is
-  disabled. All endpoints are accessible without credentials. This is
-  intended for development and trusted internal networks.
-- **If `TOOLBOX_API_KEY` is set**: every endpoint **except `GET /v1/health`**
-  requires an `Authorization: Bearer <token>` header matching the
-  configured key.
+- **`TOOLBOX_API_KEY` set**: every endpoint **except `GET /v1/health`**
+  requires an `Authorization: Bearer <token>` header matching the configured
+  key. Tokens are compared in constant time.
+- **`TOOLBOX_API_KEY` empty or unset**: the application **refuses to start**
+  (`ConfigurationError`). A forgotten key used to leave every endpoint open.
+- **Local development only**: set `TOOLBOX_ALLOW_UNAUTHENTICATED=1` to start
+  without a key; every endpoint is then open and a warning is logged. Never set
+  it on a shared or exposed host.
 
 ### Usage
 

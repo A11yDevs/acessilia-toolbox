@@ -327,6 +327,85 @@ def test_valid_token_grants_access(auth_client: TestClient) -> None:
 
 
 def test_auth_is_disabled_when_key_is_empty(client: TestClient) -> None:
-    """When TOOLBOX_API_KEY is empty, all endpoints work without a token."""
+    """With no key and TOOLBOX_ALLOW_UNAUTHENTICATED=1 (tests/conftest.py), all
+    endpoints work without a token."""
     response = client.get("/v1/capabilities")
     assert response.status_code == 200
+
+
+# ── Fail-closed start-up and catalogue providers ─────────────────
+
+
+def _bare_registries() -> tuple[CapabilityRegistry, ProviderRegistry]:
+    capabilities = CapabilityRegistry([CapabilityManifest.model_validate(MANIFEST)])
+    providers = ProviderRegistry(
+        [
+            ProviderDescriptor.model_validate(
+                {"id": "docling", "endpoint": "http://docling", "capabilities": [CAPABILITY]}
+            )
+        ]
+    )
+    return capabilities, providers
+
+
+def test_app_refuses_to_start_without_a_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A forgotten TOOLBOX_API_KEY must not leave every endpoint open."""
+    from acessilia_toolbox.core.errors import ConfigurationError
+
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "")
+    monkeypatch.delenv("TOOLBOX_ALLOW_UNAUTHENTICATED", raising=False)
+    with pytest.raises(ConfigurationError, match="TOOLBOX_API_KEY is not set"):
+        create_app(*_bare_registries())
+
+
+@pytest.mark.parametrize("flag", ["0", "", "false", "no"])
+def test_only_an_explicit_flag_allows_running_without_a_key(
+    monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    from acessilia_toolbox.core.errors import ConfigurationError
+
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "")
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", flag)
+    with pytest.raises(ConfigurationError):
+        create_app(*_bare_registries())
+
+
+def test_explicit_flag_starts_unauthenticated(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "")
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
+    client = TestClient(create_app(*_bare_registries()))
+    assert client.get("/v1/capabilities").status_code == 200
+
+
+def test_a_key_needs_no_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "k")
+    monkeypatch.delenv("TOOLBOX_ALLOW_UNAUTHENTICATED", raising=False)
+    client = TestClient(create_app(*_bare_registries()))
+    assert client.get("/v1/capabilities").status_code == 401
+    assert client.get("/v1/capabilities", headers={"Authorization": "Bearer k"}).status_code == 200
+
+
+@pytest.mark.parametrize("token", ["test-key-12", "test-key-1234", "TEST-KEY-123", ""])
+def test_near_miss_tokens_are_rejected(auth_client: TestClient, token: str) -> None:
+    """Prefixes, extensions and case changes of the key are all rejected."""
+    response = auth_client.get("/v1/capabilities", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_catalogue_lists_registered_providers_and_keeps_the_declared_ones(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A provider the manifest binds but this deployment does not register is not
+    executable, so it is not advertised as a provider (only as declared)."""
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "")
+    manifest = {**MANIFEST, "providers": [{"id": "docling"}, {"id": "teleocr"}]}
+    capabilities = CapabilityRegistry([CapabilityManifest.model_validate(manifest)])
+    _, providers = _bare_registries()
+    client = TestClient(create_app(capabilities, providers))
+
+    [summary] = client.get("/v1/capabilities").json()
+    assert summary["providers"] == ["docling"]
+    assert summary["declared_providers"] == ["docling", "teleocr"]
+    detail = client.get(f"/v1/capabilities/{CAPABILITY}").json()
+    assert detail["providers"] == ["docling"]
+    assert detail["declared_providers"] == ["docling", "teleocr"]

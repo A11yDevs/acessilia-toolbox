@@ -53,7 +53,8 @@ pip install -e ".[dev]"
 
 # Configure environment variables
 cp .env.example .env
-# Edit .env with the required credentials
+# Edit .env with the required credentials. The Toolbox refuses to start
+# without TOOLBOX_API_KEY; for a local-only run set TOOLBOX_ALLOW_UNAUTHENTICATED=1
 
 # Run tests to verify everything is ok
 pytest tests/unit/ -v

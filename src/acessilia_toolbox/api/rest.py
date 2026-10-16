@@ -84,8 +84,12 @@ def health() -> HealthResponse:
 @router.get("/capabilities", response_model=list[CapabilitySummary], tags=["capabilities"])
 def list_capabilities(
     registry: Annotated[CapabilityRegistry, Depends(capabilities)],
+    provider_registry: Annotated[ProviderRegistry, Depends(providers)],
 ) -> list[CapabilitySummary]:
-    return [CapabilitySummary.of(manifest) for manifest in registry.manifests()]
+    return [
+        CapabilitySummary.of(manifest, _registered(provider_registry, manifest.id))
+        for manifest in registry.manifests()
+    ]
 
 
 @router.get(
@@ -97,9 +101,16 @@ def list_capabilities(
 def get_capability(
     capability_id: str,
     registry: Annotated[CapabilityRegistry, Depends(capabilities)],
+    provider_registry: Annotated[ProviderRegistry, Depends(providers)],
     version: int | None = None,
 ) -> CapabilityDetail:
-    return CapabilityDetail.of(registry.get(capability_id, version))
+    manifest = registry.get(capability_id, version)
+    return CapabilityDetail.of(manifest, _registered(provider_registry, manifest.id))
+
+
+def _registered(registry: ProviderRegistry, capability_id: str) -> list[str]:
+    """Providers registered here for a capability; what a client can execute."""
+    return [descriptor.id for descriptor in registry.for_capability(capability_id)]
 
 
 @router.post(

@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from acessilia_toolbox import __version__
+from acessilia_toolbox.api import auth
 from acessilia_toolbox.api.rest import dataset_router, public_router, router
 from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
@@ -34,8 +35,6 @@ executes and normalizes, while goals, planning and provider choice stay with
 the agentic core.
 """.strip()
 
-TOOLBOX_API_KEY = os.getenv("TOOLBOX_API_KEY", "")
-
 
 def create_app(
     capabilities: CapabilityRegistry | None = None,
@@ -44,6 +43,15 @@ def create_app(
     cache: ExecutionCache | None = None,
     store: ArtifactStore | None = None,
 ) -> FastAPI:
+    # Fail closed: a missing key used to leave every endpoint open with only a
+    # log line, which a forgotten .env turns into an exposed service.
+    if not auth.TOOLBOX_API_KEY and not auth.unauthenticated_allowed():
+        raise ConfigurationError(
+            "TOOLBOX_API_KEY is not set. Set it, or set "
+            f"{auth.ALLOW_UNAUTHENTICATED_ENV}=1 to run without authentication "
+            "(local development only)."
+        )
+
     app = FastAPI(
         title="Acessilia Toolbox",
         version=__version__,
@@ -86,17 +94,17 @@ def create_app(
             "ApiKeyAuth": {
                 "type": "http",
                 "scheme": "bearer",
-                "description": "Bearer token matching TOOLBOX_API_KEY. "
-                "Leave empty to disable auth.",
+                "description": "Bearer token matching TOOLBOX_API_KEY.",
             }
         }
     }
     app.openapi_security = [{"ApiKeyAuth": []}]  # type: ignore[attr-defined]
 
-    if not TOOLBOX_API_KEY:
+    if not auth.TOOLBOX_API_KEY:
         LOG.warning(
-            "No TOOLBOX_API_KEY set — all REST endpoints are unauthenticated. "
-            "Set TOOLBOX_API_KEY in your environment to enable Bearer token auth."
+            "%s=1 and no TOOLBOX_API_KEY: all REST endpoints are unauthenticated. "
+            "Never use this outside local development.",
+            auth.ALLOW_UNAUTHENTICATED_ENV,
         )
 
     return app
