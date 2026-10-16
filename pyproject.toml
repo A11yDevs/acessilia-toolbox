@@ -27,6 +27,10 @@ dependencies = [
     "jsonschema>=4.21",
     "httpx>=0.28",
     "PyYAML>=6.0",
+    # Pure structural algorithms shared with the core (no dependencies of its
+    # own). It lives in the core repository under libs/docstruct, pinned to a
+    # commit; the archive URL avoids needing git in the image.
+    "acessilia-docstruct @ https://github.com/A11yDevs/acessilia/archive/56d95adcb3834725004caa3ff2a4cc9b850d4650.tar.gz#subdirectory=libs/docstruct",
 ]
 
 [project.optional-dependencies]

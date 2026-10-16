@@ -1235,148 +1235,7 @@
     },
     "language": "pt-BR",
     "manifest_id": "manifest-2ec8bda39e8d18df-r1",
-    "obligations": [
-      {
-        "admissible_methods": [
-          "pandoc-code",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-preserve-code-semantics-000011",
-        "kind": "preserve-code-semantics",
-        "method_costs": {
-          "human-review": 100,
-          "pandoc-code": 10
-        },
-        "rationale": "The code block must preserve indentation, language, and literal reading.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000011"
-        ]
-      },
-      {
-        "admissible_methods": [
-          "pandoc-code",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-preserve-code-semantics-000013",
-        "kind": "preserve-code-semantics",
-        "method_costs": {
-          "human-review": 100,
-          "pandoc-code": 10
-        },
-        "rationale": "The code block must preserve indentation, language, and literal reading.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000013"
-        ]
-      },
-      {
-        "admissible_methods": [
-          "pandoc-code",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-preserve-code-semantics-000016",
-        "kind": "preserve-code-semantics",
-        "method_costs": {
-          "human-review": 100,
-          "pandoc-code": 10
-        },
-        "rationale": "The code block must preserve indentation, language, and literal reading.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000016"
-        ]
-      },
-      {
-        "admissible_methods": [
-          "pandoc-code",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-preserve-code-semantics-000023",
-        "kind": "preserve-code-semantics",
-        "method_costs": {
-          "human-review": 100,
-          "pandoc-code": 10
-        },
-        "rationale": "The code block must preserve indentation, language, and literal reading.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000023"
-        ]
-      },
-      {
-        "admissible_methods": [
-          "pandoc-code",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-preserve-code-semantics-000029",
-        "kind": "preserve-code-semantics",
-        "method_costs": {
-          "human-review": 100,
-          "pandoc-code": 10
-        },
-        "rationale": "The code block must preserve indentation, language, and literal reading.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000029"
-        ]
-      },
-      {
-        "admissible_methods": [
-          "pandoc-code",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-preserve-code-semantics-000034",
-        "kind": "preserve-code-semantics",
-        "method_costs": {
-          "human-review": 100,
-          "pandoc-code": 10
-        },
-        "rationale": "The code block must preserve indentation, language, and literal reading.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000034"
-        ]
-      },
-      {
-        "admissible_methods": [
-          "vision-description",
-          "human-review"
-        ],
-        "attempts": [],
-        "dependencies": [],
-        "id": "obligation-describe-image-000037",
-        "kind": "describe-image",
-        "method_costs": {
-          "human-review": 100,
-          "vision-description": 20
-        },
-        "rationale": "The image must receive a description or be marked as decorative.",
-        "selected": false,
-        "status": "candidate",
-        "target_ids": [
-          "element-000037"
-        ]
-      }
-    ],
+    "obligations": [],
     "observations": [
       {
         "evidence": {
@@ -1552,7 +1411,7 @@
         "paragraph": 17,
         "picture": 1
       },
-      "obligation_count": 7,
+      "obligation_count": 0,
       "observation_count": 7,
       "page_count": 3
     },

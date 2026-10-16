@@ -39,7 +39,10 @@ def build(tmp_path: Path, document: FakeDocument | None = None):
     )
 
 
-def test_builds_valid_manifest_and_candidate_obligation(tmp_path: Path) -> None:
+def test_builds_valid_manifest_with_observations_and_no_obligations(
+    tmp_path: Path,
+) -> None:
+    """Planning policy (obligations, methods, costs) belongs to the core."""
     _, manifest = build(tmp_path)
     payload = manifest.model_dump(mode="json", by_alias=True)
 
@@ -47,14 +50,21 @@ def test_builds_valid_manifest_and_candidate_obligation(tmp_path: Path) -> None:
     assert manifest.summary.page_count == 1
     assert manifest.summary.element_count == 3
     assert manifest.elements[1].parent_id == manifest.elements[0].id
-    assert manifest.obligations[0].kind == "describe-image"
-    assert manifest.obligations[0].selected is False
+    assert manifest.observations[0].kind == "picture-requires-processing"
+    assert manifest.obligations == []
+    assert manifest.summary.obligation_count == 0
     assert validate_manifest(payload, SCHEMA_PATH) == []
 
 
 def test_schema_version_is_unchanged_by_the_migration() -> None:
     """The 1.1.0 contract is preserved so Acessilia consumers keep working."""
     assert SCHEMA_ID == "urn:a11y-devs:schema:processing-manifest:1.1.0"
+
+
+def test_obligations_are_flagged_deprecated_in_the_schema() -> None:
+    """Obligations are the core's planning policy; the field is kept empty."""
+    obligations = processing_manifest_schema()["properties"]["obligations"]
+    assert obligations["deprecated"] is True
 
 
 def test_generated_schema_matches_the_versioned_file() -> None:
@@ -69,7 +79,7 @@ def test_generated_schema_matches_the_versioned_file() -> None:
 def test_rejects_references_to_unknown_elements(tmp_path: Path) -> None:
     _, manifest = build(tmp_path)
     payload = manifest.model_dump(mode="json", by_alias=True)
-    payload["obligations"][0]["target_ids"] = ["element-missing"]
+    payload["observations"][0]["target_ids"] = ["element-missing"]
 
     errors = validate_manifest(payload)
 
@@ -131,7 +141,34 @@ def test_extracts_table_ast_metadata(tmp_path: Path) -> None:
     assert table_elements[0].metadata
 
 
-def test_table_elements_carry_a_linearization_obligation(tmp_path: Path) -> None:
+def test_table_rows_keep_empty_cells_in_their_columns(tmp_path: Path) -> None:
+    """An empty cell must not shift the following cells to the left.
+
+    The pre-docstruct table normalization dropped empty cells, so ``["", "2"]``
+    became ``["2"]`` and the value moved into the first column.
+    """
+    document = FakeDocument(
+        [
+            body_root(),
+            item(
+                "table",
+                "#/tables/0",
+                text="",
+                table=[["Name", "Value"], ["", "2"]],
+                prov=[provenance(box=bbox(50, 100, 550, 200), charspan=None)],
+            ),
+        ],
+        width=600,
+        height=800,
+    )
+    _, manifest = build(tmp_path, document)
+
+    [table] = [e for e in manifest.elements if e.type == "table"]
+    rows = table.metadata["table_ast"]["body"]
+    assert [cell["text"] for cell in rows[-1]["cells"]] == ["", "2"]
+
+
+def test_table_elements_carry_a_processing_observation(tmp_path: Path) -> None:
     document = FakeDocument(
         [
             body_root(),
@@ -146,8 +183,9 @@ def test_table_elements_carry_a_linearization_obligation(tmp_path: Path) -> None
     )
     _, manifest = build(tmp_path, document)
 
-    kinds = {obligation.kind for obligation in manifest.obligations}
-    assert "linearize-table" in kinds
+    kinds = {observation.kind for observation in manifest.observations}
+    assert "table-requires-processing" in kinds
+    assert manifest.obligations == []
 
 
 def test_source_document_records_content_digest(tmp_path: Path) -> None:
