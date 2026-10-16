@@ -59,6 +59,7 @@ def providers() -> ProviderRegistry:
             "AUDIVERIS_SERVE_URL",
             "RAPID_LATEX_OCR_URL",
             "RAPIDOCR_ORIENT_URL",
+            "VLM_SERVE_URL",
             "MINIO_URL",
             "MINIO_ACCESS_KEY",
             "MINIO_SECRET_KEY",

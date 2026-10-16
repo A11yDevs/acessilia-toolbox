@@ -92,6 +92,39 @@ providers:
       - image/tiff
       - image/webp
 
+  # Vision-language model behind an OpenAI-compatible chat server (llama.cpp
+  # llama-server on VM2 in production; vLLM works the same way). Serves the
+  # Dr.DocBench VLM capabilities; the adapter returns model evidence and the
+  # agentic core decides. The version names the served weights and is part of
+  # the cache key: bump it whenever the server loads a different model.
+  # Reach the server over the internal network; VLM_API_KEY is sent as a Bearer
+  # token when set (llama-server --api-key).
+  - id: qwen3-vl-8b
+    version: "qwen3-vl-8b-instruct-q4_k_m-f982a07"
+    transport: http
+    endpoint: ${VLM_SERVE_URL}
+    health_path: /health
+    timeout_seconds: 600
+    capabilities:
+      - document.ocr.page
+      - document.adjudicate.page
+      - document.adjudicate.region
+    media_types:
+      - image/png
+      - image/jpeg
+    config:
+      model: qwen3-vl-8b
+      api_key: ${VLM_API_KEY:-}
+      # llama-server runs 4 parallel slots of 8192 tokens each.
+      max_concurrency: 4
+      page_max_tokens: 4096
+      # Two candidates plus the page image must fit in one 8192-token slot.
+      judge_max_chars: 6000
+      # vlm_page_ocr.py used repetition_penalty 1.05 (vLLM); llama-server calls
+      # it repeat_penalty.
+      page_sampling:
+        repeat_penalty: 1.05
+
   - id: docling-ocr
     version: "1.32"
     transport: http

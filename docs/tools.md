@@ -17,6 +17,7 @@ roadmap candidates.
 | Media triage  | `media.inspect`                                         | pure-python (Pillow, in-process, optional extra) | [implemented] |
 | Music         | `music.omr`                                             | homr (in-process), Audiveris (sidecar)     | [implemented] |
 | Page layout   | `image.page.orient`                                     | RapidOCR (sidecar)                         | [implemented] |
+| Vision-language | `document.ocr.page`, `document.adjudicate.page`, `document.adjudicate.region` | OpenAI-compatible VLM server (llama.cpp, vLLM) | [implemented] |
 | Chemistry     | `chem.recognize`, `chem.convert`                        | docling-serve VLM (Granite Vision), pure-python mhchem | [implemented] |
 | Accessibility | `accessibility.mark`                                    | pure-python (in-process; veraPDF validation: roadmap) | [implemented] |
 | Code          | `code.normalize`                                        | pure-python (in-process)                   | [implemented] |
@@ -139,6 +140,54 @@ Set `parameters={"auto_rotate": true}` when extracting structure from an image t
 run this as opt-in preprocessing. The decision is recorded in
 `provenance.orientation`; if the sidecar is unavailable the extraction continues
 unrotated. See [rapidocr-orient.md](rapidocr-orient.md).
+
+## Vision-language model
+
+``` text
+document.ocr.page          : page image -> Markdown transcription, finish reason
+document.adjudicate.page   : page image + two candidate transcriptions -> p(second is more faithful)
+document.adjudicate.region : region crop + OCR hypotheses -> exact transcription ("" when unreadable)
+```
+
+One adapter, `OpenAiCompatibleVlmProvider`
+(`src/acessilia_toolbox/providers/openai_vlm.py`), serves the three
+capabilities from any server that implements `POST /v1/chat/completions` with
+image inputs: llama.cpp's `llama-server`, vLLM, and others. The provider entry
+`qwen3-vl-8b` in `providers-config.yaml` points it at the production server
+through `VLM_SERVE_URL` (use the internal network address, not a public
+hostname) and sends `VLM_API_KEY` as a Bearer token when it is set.
+
+The prompts and sampling are the ones validated in the Dr.DocBench experiments
+(`scripts/drbench/experiments` in the core repository): page prompt v1 at
+temperature 0; the judge asks both candidate orders with one output token and
+`top_logprobs`, and averages them to cancel position bias
+(`docstruct.fusion.judge`); the region prompt lists the providers' hypotheses.
+The adapter returns this **evidence only**. Thresholds and the select, replace
+or drop decisions belong to the agentic core.
+
+Provider `config` keys:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `model` | — (required) | Model id the server serves |
+| `api_key` | empty | Bearer token |
+| `max_concurrency` | 4 | Requests in flight, shared by all instances of the provider; match the server's parallel slots |
+| `page_max_tokens` | 4096 | Output limit of a page transcription |
+| `judge_max_chars` | 14000 | Each judge candidate is cut to this length; both plus the image must fit the server's context |
+| `region_max_tokens`, `region_max_chars` | 1024, 1800 | Region output limit and per-hypothesis cut |
+| `top_logprobs` | 20 | Log-probabilities requested for the judge token |
+| `page_sampling` | `{}` | Extra sampling keys for page requests, in the server's own naming (`repeat_penalty` for llama-server, `repetition_penalty` for vLLM) |
+
+The provider `version` names the served weights and is part of the cache key:
+bump it when the server loads a different model. A request larger than the
+server's context window fails with `400 invalid_input`; a server that returns no
+log-probabilities makes the judge fail instead of guessing.
+
+The experiments validated the judge and the page transcription on
+Qwen3-VL-32B (FP8); the production server runs Qwen3-VL-8B (Q4_K_M) with 8192
+tokens per slot. Results are expected to differ, so the core's thresholds must
+be re-validated on this model before the methods that use these capabilities
+are enabled.
 
 ## Chemistry
 
