@@ -168,13 +168,23 @@ the table prompt asks for one greedy and `samples` seeded generations
 The adapter returns this **evidence only**. Thresholds and the select, replace
 or drop decisions belong to the agentic core.
 
+Request `parameters`, as the core's clients send them:
+
+| Capability | Parameter | Meaning |
+|---|---|---|
+| `document.ocr.page` | — | None used; the prompt is language-agnostic, so the client's `language` is ignored |
+| `document.adjudicate.page` | `candidate_a`, `candidate_b` (required) | The two transcriptions; the output's `pB` is the debiased probability that `candidate_b` is more faithful |
+| | `prompt` | Judge prompt variant: `base` (default), `para` (adds block structure) or `err` (counts errors) |
+| `document.adjudicate.region` | `candidates` (required) | List of OCR hypotheses for the crop; empty strings are skipped |
+| `table.recognize` | see below | |
+
 Provider `config` keys:
 
 | Key | Default | Meaning |
 |---|---|---|
 | `model` | — (required) | Model id the server serves |
 | `api_key` | empty | Bearer token |
-| `max_concurrency` | 4 | Requests in flight, shared by all instances of the provider; match the server's parallel slots |
+| `max_concurrency` | 4 | Requests in flight, shared by all instances of the provider in one process; match the server's parallel slots (divide them among workers if the Toolbox runs more than one) |
 | `page_max_tokens` | 4096 | Output limit of a page transcription |
 | `judge_max_chars` | 14000 | Each judge candidate is cut to this length; both plus the image must fit the server's context |
 | `region_max_tokens`, `region_max_chars` | 1024, 1800 | Region output limit and per-hypothesis cut |
@@ -203,7 +213,8 @@ favours the model's own cluster, which is one of the hypotheses to test.
 The provider `version` names the served weights and is part of the cache key:
 bump it when the server loads a different model. A request larger than the
 server's context window fails with `400 invalid_input`; a server that returns no
-log-probabilities makes the judge fail instead of guessing.
+log-probabilities, or none for the answers `1` and `2`, makes the judge fail
+instead of guessing.
 
 The experiments validated the judge and the page transcription on
 Qwen3-VL-32B (FP8); the production server runs Qwen3-VL-8B (Q4_K_M) with 8192

@@ -11,8 +11,10 @@ vLLM, ...):
   samples) for the table specialist's self-consistency selection.
 
 The prompts and sampling are the ones validated in the Dr.DocBench experiments
-(``scripts/drbench/experiments`` in the core repository: ``vlm_page_ocr.py``
-prompt v1, ``vlm_page_judge.py``, ``vlm_adjudicate.py``, ``vlm_tables.py``). The adapter returns
+(``scripts/drbench/experiments`` in the core repository, as of commit
+``6c62466``: ``vlm_page_ocr.py`` prompt v1, ``vlm_page_judge.py``,
+``vlm_adjudicate.py``, ``vlm_tables.py``); the unit tests pin each prompt to the
+original, so a change on either side shows up. The adapter returns
 model evidence -- transcriptions and judge probabilities. Deciding what a
 document does with it (thresholds, select/replace/drop) is the agentic core's
 job.
@@ -163,15 +165,25 @@ _TABLE_FENCE = re.compile(r"```[a-z]*")
 
 _PAGE_FENCE = re.compile(r"^```(?:markdown|md)?\s*\n|\n```\s*$")
 _REGION_FENCE = re.compile(r"^```[a-z]*\n?|```$")
-# How llama-server and vLLM report a prompt larger than the context window.
-_CONTEXT_ERROR = re.compile(r"context|too long|exceed", re.IGNORECASE)
+# How llama-server ("exceeds the available context size") and vLLM ("maximum
+# context length", "maximum model length") report a prompt larger than the
+# context window. Other 400s stay execution errors.
+_CONTEXT_ERROR = re.compile(
+    r"context (?:size|length|window)|maximum model length", re.IGNORECASE
+)
 
 _SEMAPHORES: dict[str, threading.BoundedSemaphore] = {}
 _SEMAPHORES_LOCK = threading.Lock()
 
 
 def _semaphore(provider_id: str, size: int) -> threading.BoundedSemaphore:
-    """One limiter per provider, shared by every adapter instance of it."""
+    """One limiter per provider, shared by every adapter instance of it.
+
+    The limiter lives in this process. It matches the server's slots only while
+    the Toolbox runs a single worker (the Dockerfile starts one ``uvicorn``
+    worker); with N workers up to N * ``max_concurrency`` requests reach the
+    server, so ``max_concurrency`` must then be divided among them.
+    """
     with _SEMAPHORES_LOCK:
         if provider_id not in _SEMAPHORES:
             _SEMAPHORES[provider_id] = threading.BoundedSemaphore(max(1, size))
@@ -254,6 +266,8 @@ class OpenAiCompatibleVlmProvider:
     # -- capabilities ---------------------------------------------------------
 
     def _transcribe_page(self, image: dict[str, Any]) -> dict[str, Any]:
+        # The prompt is language-agnostic, as in the experiment: the client's
+        # parameters (``language`` from ToolboxPageOcrClient) are not used.
         response = self._chat(
             [image, {"type": "text", "text": PAGE_PROMPT}],
             max_tokens=int(self.config["page_max_tokens"]),
@@ -523,11 +537,20 @@ def _first_token_logprobs(response: dict[str, Any], provider: str) -> dict[str, 
         )
     first = content[0]
     candidates = first.get("top_logprobs") or [first]
-    return {
+    logprobs_by_token = {
         str(item["token"]): float(item["logprob"])
         for item in candidates
         if isinstance(item, dict) and "token" in item and "logprob" in item
     }
+    # p2_from_logprobs returns 0.5 when neither answer is among the top tokens;
+    # that would be a guess, so it fails like a response without logprobs.
+    if not {"1", "2"} & {token.strip() for token in logprobs_by_token}:
+        raise ProviderExecutionError(
+            f"{provider} answered neither '1' nor '2' among its top_logprobs "
+            f"({sorted(logprobs_by_token)[:5]}); the page judge cannot score it",
+            provider=provider,
+        )
+    return logprobs_by_token
 
 
 __all__ = ["CAPABILITIES", "OpenAiCompatibleVlmProvider"]

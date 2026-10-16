@@ -8,6 +8,7 @@ returns, validated against the published output schema.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import math
 from collections.abc import Callable
@@ -32,6 +33,7 @@ from acessilia_toolbox.providers import create_adapter, openai_vlm
 from acessilia_toolbox.providers.openai_vlm import (
     JUDGE_PROMPTS,
     PAGE_PROMPT,
+    REGION_PROMPT,
     OpenAiCompatibleVlmProvider,
 )
 
@@ -214,6 +216,22 @@ def test_judge_without_logprobs_fails_instead_of_guessing() -> None:
         run(adapter, "document.adjudicate.page", {"candidate_a": "a", "candidate_b": "b"})
 
 
+def test_judge_without_an_answer_token_fails_instead_of_guessing() -> None:
+    adapter = provider_with(
+        lambda r: chat_response("The", logprobs=[("The", -0.1), ("Candidate", -2.0)])
+    )
+    with pytest.raises(ProviderExecutionError, match="neither '1' nor '2'"):
+        run(adapter, "document.adjudicate.page", {"candidate_a": "a", "candidate_b": "b"})
+
+
+def test_judge_accepts_answer_tokens_with_spacing() -> None:
+    adapter = provider_with(lambda r: chat_response(" 2", logprobs=[(" 2", 0.0), ("x", -1.0)]))
+    document = run(
+        adapter, "document.adjudicate.page", {"candidate_a": "a", "candidate_b": "b"}
+    ).document
+    assert document["pB_ab"] == 1.0
+
+
 @pytest.mark.parametrize(
     "parameters",
     [
@@ -282,13 +300,27 @@ def test_api_key_is_sent_as_bearer_token() -> None:
     assert headers == ["Bearer secret", None, None]
 
 
-def test_context_overflow_is_reported_as_invalid_input() -> None:
+@pytest.mark.parametrize(
+    "message",
+    [
+        "the request exceeds the available context size, try increasing it",  # llama-server
+        "This model's maximum context length is 8192 tokens. However, you requested 9000",  # vLLM
+        "Prompt length of 9000 is longer than the maximum model length of 8192",  # vLLM
+    ],
+)
+def test_context_overflow_is_reported_as_invalid_input(message: str) -> None:
+    adapter = provider_with(lambda r: httpx.Response(400, json={"error": {"message": message}}))
+    with pytest.raises(InvalidInputError, match="context window"):
+        run(adapter, "document.ocr.page")
+
+
+def test_other_bad_requests_stay_execution_errors() -> None:
     adapter = provider_with(
         lambda r: httpx.Response(
-            400, json={"error": {"message": "the request exceeds the available context size"}}
+            400, json={"error": {"message": "max_tokens exceeds the allowed maximum"}}
         )
     )
-    with pytest.raises(InvalidInputError, match="context window"):
+    with pytest.raises(ProviderExecutionError, match="status 400"):
         run(adapter, "document.ocr.page")
 
 
@@ -395,6 +427,31 @@ def test_shipped_configuration_builds_the_adapter(monkeypatch) -> None:
     assert adapter.base_url == "http://vlm:8080"
     # The key is configuration, so it is masked wherever providers are listed.
     assert registry.get("qwen3-vl-8b").public_payload()["config"]["api_key"] == "***"
+
+
+# -- drift from the experiments ----------------------------------------------
+
+# SHA-256 of the prompts in the core's scripts/drbench/experiments at commit
+# 6c62466 (vlm_page_ocr.py PROMPT, vlm_page_judge.py PROMPTS,
+# vlm_adjudicate.py TRANSCRIBE_PROMPT). A mismatch means one side changed: copy
+# the new prompt here, or explain why the Toolbox diverges.
+EXPERIMENT_PROMPT_DIGESTS = {
+    "page": "f316fe74e50053a7425215f0b917d6ee8e832f9035864735f2bae76954416e7b",
+    "judge.base": "bd07ef1ceddcf57a859244f1199a2a95231fbf51c7429354f8c200f0a482f400",
+    "judge.para": "a9fa5879111ee0bbda76cd088cf34ad2ae6d79b6840ead9e13b4d7453109c09c",
+    "judge.err": "277a67fe0eb504bb6991b426f3399e68db9c3d912efafac5ede41a2eb89d4d46",
+    "region": "83ea4f22358ff6066b1262d88914038278dafdf286a7871f54b7447468007d91",
+}
+
+
+def test_prompts_are_the_experiments_verbatim() -> None:
+    prompts = {
+        "page": PAGE_PROMPT,
+        **{f"judge.{name}": prompt for name, prompt in JUDGE_PROMPTS.items()},
+        "region": REGION_PROMPT,
+    }
+    digests = {name: hashlib.sha256(text.encode()).hexdigest() for name, text in prompts.items()}
+    assert digests == EXPERIMENT_PROMPT_DIGESTS
 
 
 # -- table.recognize -----------------------------------------------------------
