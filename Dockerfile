@@ -25,13 +25,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+# uv only exports the locked dependency set; pip installs it with hashes
+# verified, so the image gets exactly what uv.lock pins (including the
+# acessilia-docstruct archive) instead of a fresh resolution.
+COPY --from=ghcr.io/astral-sh/uv:0.11.17@sha256:03bdc89bb9798628846e60c3a9ad19006c8c3c724ccd2985a33145c039a0577b /uv /usr/local/bin/uv
+
+COPY pyproject.toml README.md uv.lock ./
 COPY src/ ./src/
 
 # Core install without ML runtimes or provider client libraries.
 # API extras bring only uvicorn and FastAPI; storage (boto3) and
-# cache (redis) stay optional.
-RUN pip install --upgrade pip && pip install "." && rm -rf ~/.cache
+# cache (redis) stay optional. --locked fails the build if uv.lock is stale.
+RUN pip install --upgrade pip \
+    && uv export --locked --no-dev --no-emit-project --format requirements-txt \
+        -o /tmp/requirements.txt \
+    && pip install --require-hashes -r /tmp/requirements.txt \
+    && pip install --no-deps "." \
+    && rm -rf ~/.cache /tmp/requirements.txt
 
 # === Production image: stateless, model-free, ~200 MB ===
 FROM base AS production
@@ -42,7 +52,11 @@ FROM base AS production
 ARG TOOLBOX_EXTRAS=api
 
 RUN if [ -n "$TOOLBOX_EXTRAS" ]; then \
-        pip install --no-cache-dir ".[${TOOLBOX_EXTRAS}]"; \
+        extras=$(echo "$TOOLBOX_EXTRAS" | tr ',' '\n' | sed 's/^/--extra /' | tr '\n' ' '); \
+        uv export --locked --no-dev --no-emit-project --format requirements-txt \
+            $extras -o /tmp/requirements.txt \
+        && pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt \
+        && rm -f /tmp/requirements.txt; \
     fi
 
 COPY . .
@@ -56,6 +70,9 @@ CMD ["sh", "-c", "uvicorn acessilia_toolbox.api.app:create_app --factory --host 
 
 # === Test image ===
 FROM base AS test
-RUN pip install ".[dev]" && rm -rf ~/.cache
+RUN uv export --locked --no-dev --no-emit-project --format requirements-txt \
+        --extra dev -o /tmp/requirements.txt \
+    && pip install --require-hashes -r /tmp/requirements.txt \
+    && rm -rf ~/.cache /tmp/requirements.txt
 COPY . .
 CMD ["pytest", "tests/", "-v"]
