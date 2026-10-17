@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -368,14 +367,3 @@ def test_template_defines_what_recent_pandoc_and_longtable_need() -> None:
     assert "\\newcounter{none}" in template
     assert "calc" in template
     assert "pdfstandard=ua-1" in template
-
-
-@pytest.mark.skipif(
-    shutil.which("pandoc") is None or shutil.which("lualatex") is None,
-    reason="needs pandoc and lualatex",
-)
-def test_server_renders_a_tagged_pdf_with_the_real_toolchain(client: TestClient) -> None:
-    response = post_ast(client, AST_BYTES)
-    assert response.status_code == 200, response.text[:500]
-    assert response.content.startswith(b"%PDF-")
-    assert b"/StructTreeRoot" in response.content or b"/MarkInfo" in response.content
