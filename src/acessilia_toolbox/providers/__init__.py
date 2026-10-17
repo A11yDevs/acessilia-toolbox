@@ -20,6 +20,7 @@ from acessilia_toolbox.providers.mineru_ocr import MineruOcrProvider
 from acessilia_toolbox.providers.music_omr import AudiverisProvider, HomrProvider
 from acessilia_toolbox.providers.nougat import NougatProvider
 from acessilia_toolbox.providers.openai_vlm import OpenAiCompatibleVlmProvider
+from acessilia_toolbox.providers.pandoc_pdf_ua import PandocPdfUaProvider
 from acessilia_toolbox.providers.pure_accessibility import PureAccessibilityProvider
 from acessilia_toolbox.providers.pure_chem import PureChemProvider
 from acessilia_toolbox.providers.pure_code import PureCodeProvider
@@ -82,6 +83,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "mineru-layout": MineruLayoutProvider,
     "mineru-ocr": MineruOcrProvider,
     "nougat": NougatProvider,
+    "pandoc-pdf-ua": PandocPdfUaProvider,
     "pure-accessibility": PureAccessibilityProvider,
     "pure-chem": PureChemProvider,
     "pure-code": PureCodeProvider,
@@ -124,6 +126,7 @@ __all__ = [
     "MineruProvider",
     "NougatProvider",
     "OpenAiCompatibleVlmProvider",
+    "PandocPdfUaProvider",
     "PureAccessibilityProvider",
     "PureChemProvider",
     "PureCodeProvider",

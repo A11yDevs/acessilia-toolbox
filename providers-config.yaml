@@ -92,6 +92,20 @@ providers:
       - image/tiff
       - image/webp
 
+  # Pandoc + TeX Live sidecar for tagged PDF/UA export. The toolchain is pinned
+  # in docker/pdf-ua-render.Dockerfile; its versions and the template digest are
+  # reported by /version and therefore part of the cache key.
+  - id: pandoc-pdf-ua
+    version: "1.0"
+    transport: http
+    endpoint: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
+    health_path: /health
+    timeout_seconds: 180
+    capabilities:
+      - document.export.pdf_ua
+    media_types:
+      - application/json
+
   # Vision-language model behind an OpenAI-compatible chat server (llama.cpp
   # llama-server on VM2 in production; vLLM works the same way). Serves the
   # Dr.DocBench VLM capabilities; the adapter returns model evidence and the
