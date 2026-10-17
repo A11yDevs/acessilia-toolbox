@@ -86,6 +86,7 @@ output:
   schema: artifact/structured-document@1
   media_types:
     - application/json
+  by_reference: false    # binary stored in the artifact store, returned by id?
 
 execution:
   deterministic: true    # same input → same output?

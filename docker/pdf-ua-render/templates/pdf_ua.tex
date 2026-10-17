@@ -1,0 +1,71 @@
+\DocumentMetadata{
+  pdfversion=1.7,
+  lang=$if(lang)$$lang$$else$pt-BR$endif$,
+  pdfstandard=ua-1,
+  testphase={phase-III,firstaid}
+}
+\documentclass[$if(fontsize)$$fontsize$$else$11pt$endif$]{article}
+
+\usepackage{iftex}
+\ifPDFTeX
+  \errmessage{The PDF/UA template requires LuaLaTeX or XeLaTeX}
+\fi
+
+\usepackage{fontspec}
+\defaultfontfeatures{Ligatures=TeX}
+\setmainfont{DejaVu Sans}
+\setsansfont{DejaVu Sans}
+\setmonofont{DejaVu Sans Mono}
+
+\usepackage{tagpdf}
+\tagpdfsetup{activate-all,uncompress}
+\usepackage{latex-lab-testphase-table}
+
+\usepackage{geometry}
+\geometry{margin=2.2cm}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+\usepackage{hyperref}
+\usepackage{bookmark}
+\hypersetup{
+  hidelinks,
+  pdfcreator={Acessilia},
+  pdfdisplaydoctitle=true,
+$if(title)$
+  pdftitle={$title$}
+$else$
+  pdftitle={Accessible document}
+$endif$
+}
+
+\usepackage{longtable,booktabs,array,calc}
+% Pandoc emits \def\LTcaptype{none} for uncaptioned tables; recent longtable needs the counter.
+\newcounter{none}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\setlength{\tabcolsep}{4pt}
+\setlength{\extrarowheight}{2pt}
+\usepackage{caption}
+\captionsetup[table]{position=above}
+
+$if(title)$
+\title{$title$}
+$endif$
+$if(author)$
+\author{$for(author)$$author$$sep$\\$endfor$}
+$endif$
+$if(date)$
+\date{$date$}
+$else$
+\date{}
+$endif$
+
+\begin{document}
+$if(title)$
+\maketitle
+$endif$
+
+$body$
+
+\end{document}

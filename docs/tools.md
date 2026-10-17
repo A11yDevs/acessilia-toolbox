@@ -141,6 +141,18 @@ run this as opt-in preprocessing. The decision is recorded in
 `provenance.orientation`; if the sidecar is unavailable the extraction continues
 unrotated. See [rapidocr-orient.md](rapidocr-orient.md).
 
+## PDF/UA export
+
+``` text
+document.export.pdf_ua : Pandoc JSON AST -> tagged PDF/UA-1, stored as an artifact
+```
+
+A single provider, `pandoc-pdf-ua`, calls the `pdf-ua-render` sidecar
+(`docker/pdf-ua-render.Dockerfile`), which pins Pandoc and a frozen TeX Live
+release. Configure the endpoint with `PDF_UA_RENDER_URL`. The PDF is returned by
+reference, so the capability needs an artifact store. See
+[pdf-ua-export.md](pdf-ua-export.md).
+
 ## Vision-language model
 
 ``` text

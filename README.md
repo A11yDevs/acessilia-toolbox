@@ -201,6 +201,7 @@ flowchart TB
 | `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
 | `music.omr` | homr (in-process, local installs only), audiveris (sidecar) | ✅ |
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
+| `document.export.pdf_ua` | pandoc-pdf-ua (sidecar, optional; PDF returned as an artifact) | ✅ |
 | `document.ocr.page`, `document.adjudicate.page`, `document.adjudicate.region`, `table.recognize` | qwen3-vl-8b (OpenAI-compatible VLM server, `VLM_SERVE_URL`) | ✅ |
 | `chem.recognize` | docling-chem (Granite Vision VLM) | ✅ |
 | `chem.convert` | pure-chem (in-process, mhchem) | ✅ |
@@ -296,6 +297,7 @@ pages: 1; elements: 7; obligations: 0
 | [PDDL Integration](docs/pddl.md) | Planning semantics |
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
 | [Page Orientation](docs/rapidocr-orient.md) | Optional `image.page.orient` sidecar and auto-rotate preprocessing |
+| [PDF/UA Export](docs/pdf-ua-export.md) | `document.export.pdf_ua` sidecar with a pinned Pandoc and TeX Live |
 | [TeleOCR Adapter](docs/teleocr.md) | Optional image extraction, configuration and HTTP contract |
 | [TeleOCR Evaluation](docs/teleocr-evaluation.md) | Local gains, failure cases, coverage and remaining service validation |
 | [Constitution](docs/constitution.md) | Design principles |

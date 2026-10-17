@@ -263,7 +263,9 @@ until then:
 
 `rapidocr-orient` is built the same way
 (`docker build -f docker/rapidocr-orient.Dockerfile -t rapidocr-orient:latest .`)
-and backs `image.page.orient`.
+and backs `image.page.orient`. `pdf-ua-render`
+(`docker build -f docker/pdf-ua-render.Dockerfile -t pdf-ua-render:latest .`)
+backs `document.export.pdf_ua`; its build renders a smoke-test PDF.
 
 The Toolbox starts regardless: a provider whose endpoint does not resolve is
 reported as unhealthy and its capability answers `503`, while every other

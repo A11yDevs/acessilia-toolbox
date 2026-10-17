@@ -1,0 +1,34 @@
+id: document.export.pdf_ua
+version: 1
+description: >-
+  Render a Pandoc JSON AST into a tagged PDF/UA-1 document with a pinned
+  Pandoc and TeX Live toolchain. The PDF is stored as an artifact and the
+  result carries its reference, never the bytes.
+
+input:
+  schema: artifact/pandoc-ast@1
+  media_types:
+    - application/json
+
+output:
+  schema: artifact/pdf-export@1
+  media_types:
+    - application/pdf
+  by_reference: true
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  # Sidecar render limit (150 s) < provider timeout (180 s) <= this hint.
+  timeout_hint_seconds: 180
+
+semantics:
+  requires:
+    - document_structured
+  produces:
+    - accessible_pdf_exported
+
+providers:
+  - id: pandoc-pdf-ua
+    version: "1.0+"

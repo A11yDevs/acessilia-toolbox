@@ -27,6 +27,9 @@ class CapabilityIO(StrictModel):
     # Aliased because `schema` shadows a BaseModel attribute in Pydantic.
     schema_ref: str = Field(alias="schema", min_length=1)
     media_types: list[str] = Field(default_factory=list)
+    # Output only: the result is a binary stored in the artifact store and
+    # returned by reference, so executing requires a configured store.
+    by_reference: bool = False
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 

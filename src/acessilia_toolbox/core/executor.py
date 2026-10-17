@@ -94,6 +94,10 @@ class CapabilityExecutor:
         manifest = self._capabilities.get(capability_id, capability_version)
         _validate_input(manifest, payload, filename, media_type)
 
+        if manifest.output.by_reference:
+            # Fail before the provider runs: its output could not be kept anyway.
+            self._require_store()
+
         descriptor = self._providers.resolve(manifest.id, provider_id)
         adapter = self._adapter_factory(descriptor)
 
@@ -117,10 +121,12 @@ class CapabilityExecutor:
             cached = self._cache.get(cache_key)
             if cached is not None:
                 try:
-                    return _restore(cached, cache_key)
+                    restored = _restore(cached, cache_key)
                 except ValidationError:
                     # Cached results from an older contract must not block execution.
-                    pass
+                    restored = None
+                if restored is not None and self._outputs_available(restored):
+                    return restored
 
         execution_payload = payload
         orientation: OrientationResult | None = None
@@ -189,6 +195,14 @@ class CapabilityExecutor:
             )
         else:
             artifacts.append(ArtifactRef.of(serialized, media_type="application/json"))
+        if extraction.outputs:
+            # Binary outputs only travel by reference: the cache and the
+            # response keep the artifact id, never the bytes.
+            store = self._require_store()
+            artifacts.extend(
+                store.put(output.payload, media_type=output.media_type, filename=output.filename)
+                for output in extraction.outputs
+            )
 
         result = CapabilityResult(
             capability=manifest.key,
@@ -201,7 +215,7 @@ class CapabilityExecutor:
                 provider=descriptor.id,
                 provider_version=extraction.version,
                 input_fingerprints=[input_fingerprint],
-                output_fingerprints=[artifacts[0].artifact_id],
+                output_fingerprints=[artifact.artifact_id for artifact in artifacts],
                 parameters_hash=fingerprint_parameters(parameters),
                 model_versions=versions,
                 orientation=_orientation_payload(orientation),
@@ -230,6 +244,29 @@ class CapabilityExecutor:
         if max_bytes is not None and ref.size > max_bytes:
             raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
         return store.get(artifact_id), ref
+
+    def _outputs_available(self, result: CapabilityResult) -> bool:
+        """Whether every stored binary output of a cached result still exists.
+
+        The JSON document travels inline, but a binary output is reachable only
+        through the store; serving a cached reference to a deleted object would
+        hand the consumer an id it cannot download.
+
+        `execute` always records the inline document first, so every later
+        artifact is a binary output. This costs one `exists` per binary on each
+        cache hit, which is cheap for the local store; a slow or failing-over
+        backend would call for a short-lived cache of these checks.
+        """
+        binaries = result.artifacts[1:]
+        if not binaries:
+            return True
+        if self._store is None:
+            return False
+        try:
+            return all(self._store.exists(artifact.artifact_id) for artifact in binaries)
+        except ToolboxError as exc:
+            LOG.info("cached outputs could not be verified; executing again: %s", exc.message)
+            return False
 
     def _require_store(self) -> ArtifactStore:
         if self._store is None:
