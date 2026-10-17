@@ -102,14 +102,17 @@ jobs:
 
       - name: Smoke test API health
         run: |
-          container_id=$(docker run --detach --rm \
+          # The API refuses to start without TOOLBOX_API_KEY; /v1/health itself
+          # needs no token. No --rm, so the logs survive a failed start.
+          container_id=$(docker run --detach \
             --publish 127.0.0.1::8002 \
+            --env TOOLBOX_API_KEY=smoke-test \
             "$LOCAL_IMAGE")
           trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
           port=$(docker port "$container_id" 8002/tcp | awk -F: '{print $NF}')
           curl --fail --silent --show-error \
             --retry 20 --retry-all-errors --retry-connrefused --retry-delay 2 \
-            "http://127.0.0.1:${port}/v1/health"
+            "http://127.0.0.1:${port}/v1/health" || { docker logs "$container_id"; exit 1; }
 
       - name: Enforce local image size guardrail
         run: python scripts/check_image_size.py local "$LOCAL_IMAGE" --limit-gb 1
