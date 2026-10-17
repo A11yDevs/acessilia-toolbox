@@ -266,6 +266,9 @@ until then:
 and backs `image.page.orient`. `pdf-ua-render`
 (`docker build -f docker/pdf-ua-render.Dockerfile -t pdf-ua-render:latest .`)
 backs `document.export.pdf_ua`; its build renders a smoke-test PDF.
+`verapdf-validate`
+(`docker build -f docker/verapdf-validate.Dockerfile -t verapdf-validate:latest .`)
+backs `pdf.validate.pdf_ua`; its build validates a smoke-test PDF.
 
 The Toolbox starts regardless: a provider whose endpoint does not resolve is
 reported as unhealthy and its capability answers `503`, while every other

@@ -8,7 +8,8 @@ The `pandoc-pdf-ua` provider calls the `pdf-ua-render` sidecar
 (`docker/pdf-ua-render.Dockerfile`), which owns the whole toolchain: Pandoc, a
 TeX Live release installed from that year's frozen `tlnet-final` repository,
 DejaVu fonts and the `pdf_ua.tex` template. Configure the endpoint with
-`PDF_UA_RENDER_URL`.
+`PDF_UA_RENDER_URL`. To check the result against PDF/UA, see
+[PDF/UA validation](pdf-ua-validation.md).
 
 ## Why a sidecar
 
@@ -25,7 +26,7 @@ Send the AST as `application/json`. Images are expected to be already reduced
 to text alternatives; the renderer reads nothing but the AST.
 
 ``` bash
-curl -H "X-API-Key: $TOOLBOX_API_KEY" \
+curl -H "Authorization: Bearer $TOOLBOX_API_KEY" \
   -F file=@document.ast.json\;type=application/json \
   -F 'parameters={"lang":"pt-BR"}' \
   http://localhost:8002/v1/capabilities/document.export.pdf_ua:execute
