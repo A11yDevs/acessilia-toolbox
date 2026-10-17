@@ -96,6 +96,12 @@ input fingerprint
 Large cached results may be stored in object storage, with a fast cache
 containing only metadata or artifact references.
 
+Providers that produce files, such as `document.export.pdf_ua`, return them as
+binary outputs. The executor writes each one to the artifact store and lists its
+reference in `artifacts`; neither the response nor the cached result carries
+the bytes. Before serving such a result from the cache, the executor checks that
+the stored objects still exist and executes again when one is missing.
+
 ## Provenance
 
 Execution metadata should include:
