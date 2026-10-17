@@ -14,12 +14,14 @@ output:
   schema: artifact/pdf-export@1
   media_types:
     - application/pdf
+  by_reference: true
 
 execution:
   deterministic: true
   idempotent: true
   cacheable: true
-  timeout_hint_seconds: 120
+  # Sidecar render limit (150 s) < provider timeout (180 s) <= this hint.
+  timeout_hint_seconds: 180
 
 semantics:
   requires:

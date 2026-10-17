@@ -19,6 +19,7 @@ from acessilia_toolbox.core.errors import (
     ConfigurationError,
     InvalidInputError,
     ProviderExecutionError,
+    ProviderTimeoutError,
     ProviderUnavailableError,
 )
 from acessilia_toolbox.core.executor import CapabilityExecutor
@@ -184,6 +185,14 @@ def test_unready_sidecar_is_unavailable() -> None:
         )
 
 
+def test_sidecar_render_timeout_is_a_timeout() -> None:
+    handler, _ = sidecar(lambda _: httpx.Response(504, json={"detail": "exceeded 150s"}))
+    with pytest.raises(ProviderTimeoutError, match="exceeded 150s"):
+        provider_with(handler).execute(
+            CAPABILITY, AST_BYTES, filename="a.json", media_type="application/json"
+        )
+
+
 def test_non_pdf_body_is_an_execution_error() -> None:
     handler, _ = sidecar(lambda _: httpx.Response(200, content=b"<html>proxy</html>"))
     with pytest.raises(ProviderExecutionError, match="not a PDF"):
@@ -253,10 +262,11 @@ def test_cache_hit_with_a_deleted_pdf_renders_again(tmp_path: Path) -> None:
     assert second.document["artifact_id"] == first.document["artifact_id"]
 
 
-def test_binary_outputs_require_an_artifact_store() -> None:
-    handler, _ = sidecar()
+def test_binary_outputs_require_an_artifact_store_before_rendering() -> None:
+    handler, calls = sidecar()
     with pytest.raises(ConfigurationError, match="artifact storage"):
         export(executor_with(provider_with(handler), store=None))
+    assert not any(call.url.path == "/render" for call in calls)
 
 
 def test_toolchain_upgrade_changes_the_cache_key(tmp_path: Path) -> None:
@@ -300,17 +310,32 @@ def post_ast(client: TestClient, body: bytes, **data: str) -> httpx.Response:
     return client.post("/render", files={"file": ("ast.json", body, "application/json")}, data=data)
 
 
-def test_server_rejects_raw_tex_anywhere_in_the_ast(client: TestClient) -> None:
-    nested = dict(AST)
-    nested["blocks"] = [
-        {
-            "t": "BlockQuote",
-            "c": [{"t": "Para", "c": [{"t": "RawInline", "c": ["latex", "\\input{/etc/passwd}"]}]}],
-        }
-    ]
-    response = post_ast(client, json.dumps(nested).encode())
+RAW_LATEX = {"t": "RawInline", "c": ["latex", "\\directlua{io.open('/etc/passwd')}"]}
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        {"blocks": [{"t": "BlockQuote", "c": [{"t": "Para", "c": [RAW_LATEX]}]}]},
+        {"meta": {"title": {"t": "MetaInlines", "c": [RAW_LATEX]}}},
+        {"meta": {"author": {"t": "MetaList", "c": [{"t": "MetaInlines", "c": [RAW_LATEX]}]}}},
+        {"meta": {"date": {"t": "MetaBlocks", "c": [{"t": "RawBlock", "c": ["tex", "\\relax"]}]}}},
+    ],
+    ids=["nested-block", "meta-title", "meta-author", "meta-date"],
+)
+def test_server_rejects_raw_tex_anywhere_in_the_ast(
+    client: TestClient, location: dict[str, Any]
+) -> None:
+    response = post_ast(client, json.dumps({**AST, **location}).encode())
     assert response.status_code == 422
     assert "raw TeX" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("depth", [600, 100_000], ids=["over-limit", "past-recursion-limit"])
+def test_server_rejects_a_deeply_nested_ast(client: TestClient, depth: int) -> None:
+    body = b'{"pandoc-api-version": [1, 23, 1], "meta": {}, "blocks": ' + b"[" * depth
+    body += b"]" * depth + b"}"
+    assert post_ast(client, body).status_code == 400
 
 
 def test_server_accepts_raw_html_which_latex_ignores(server: Any) -> None:

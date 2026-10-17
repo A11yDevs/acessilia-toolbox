@@ -125,6 +125,11 @@ class PandocPdfUaProvider:
                 f"PDF/UA renderer rejected the AST: {_detail(response)}",
                 provider=self.descriptor.id,
             )
+        if response.status_code == 504:
+            raise ProviderTimeoutError(
+                f"PDF/UA rendering timed out in the renderer: {_detail(response)}",
+                provider=self.descriptor.id,
+            )
         if response.status_code == 503:
             raise ProviderUnavailableError(
                 f"PDF/UA renderer is not ready: {_detail(response)}",

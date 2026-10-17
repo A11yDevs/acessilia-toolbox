@@ -35,8 +35,10 @@ curl -H "X-API-Key: $TOOLBOX_API_KEY" \
 |---|---|---|
 | `lang` | `pt-BR` | BCP 47 tag written to the PDF document metadata |
 
-Raw TeX blocks (`RawBlock`/`RawInline` in `latex`, `tex` or `context`) are
-rejected with `400`: every string reaches LaTeX escaped by Pandoc. Shell escape
+Raw TeX nodes (`RawBlock`/`RawInline` in `latex`, `tex` or `context`) are
+rejected anywhere in the AST, metadata included: the sidecar answers `422`,
+which the API reports as `400`. Every string therefore reaches LaTeX escaped
+by Pandoc. Shell escape
 is off and TeX may only write below its working directory.
 
 ## Response

@@ -94,6 +94,10 @@ class CapabilityExecutor:
         manifest = self._capabilities.get(capability_id, capability_version)
         _validate_input(manifest, payload, filename, media_type)
 
+        if manifest.output.by_reference:
+            # Fail before the provider runs: its output could not be kept anyway.
+            self._require_store()
+
         descriptor = self._providers.resolve(manifest.id, provider_id)
         adapter = self._adapter_factory(descriptor)
 
@@ -247,12 +251,13 @@ class CapabilityExecutor:
         The JSON document travels inline, but a binary output is reachable only
         through the store; serving a cached reference to a deleted object would
         hand the consumer an id it cannot download.
+
+        `execute` always records the inline document first, so every later
+        artifact is a binary output. This costs one `exists` per binary on each
+        cache hit, which is cheap for the local store; a slow or failing-over
+        backend would call for a short-lived cache of these checks.
         """
-        binaries = [
-            artifact
-            for artifact in result.artifacts
-            if artifact.storage_backend is not None and artifact.media_type != "application/json"
-        ]
+        binaries = result.artifacts[1:]
         if not binaries:
             return True
         if self._store is None:

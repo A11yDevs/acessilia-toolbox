@@ -6,8 +6,9 @@ so every consumer gets the same LaTeX kernel, tagging packages and template.
 adapter feeds them into the execution cache key, so upgrading any of them
 invalidates cached PDFs instead of serving stale ones.
 
-The AST is untrusted input. Raw TeX blocks are rejected, so every string
-reaches LaTeX escaped by Pandoc; on top of that, shell escape is off and TeX
+The AST is untrusted input. Raw TeX nodes are rejected anywhere in it, the
+metadata included (the template prints title, author and date), so every
+string reaches LaTeX escaped by Pandoc; on top of that, shell escape is off and TeX
 may only write below its working directory.
 """
 
@@ -39,6 +40,9 @@ MAX_AST_BYTES = int(os.environ.get("PDF_UA_MAX_AST_BYTES", str(20 * 1024 * 1024)
 # full log would bloat the error response.
 STDERR_TAIL_CHARS = 2000
 RAW_TEX_FORMATS = {"latex", "tex", "context"}
+# Real documents nest a few dozen levels at most; the bound keeps a hostile AST
+# from turning the scan into an unbounded walk.
+MAX_AST_DEPTH = int(os.environ.get("PDF_UA_MAX_AST_DEPTH", "500"))
 
 LOG = logging.getLogger("pdf_ua_render")
 logging.basicConfig(level=logging.INFO)
@@ -108,17 +112,36 @@ def version() -> dict[str, str]:
     return {"version": SERVER_VERSION, **toolchain(), "capability": "document.export.pdf_ua"}
 
 
+class AstTooDeepError(ValueError):
+    pass
+
+
 def _raw_tex_nodes(node: Any) -> int:
-    """Count RawBlock/RawInline nodes carrying TeX anywhere in the AST."""
-    if isinstance(node, list):
-        return sum(_raw_tex_nodes(item) for item in node)
-    if not isinstance(node, dict):
-        return 0
-    if node.get("t") in {"RawBlock", "RawInline"}:
-        content = node.get("c")
-        if isinstance(content, list) and content and str(content[0]).lower() in RAW_TEX_FORMATS:
-            return 1
-    return sum(_raw_tex_nodes(value) for value in node.values())
+    """Count RawBlock/RawInline nodes carrying TeX anywhere in the AST.
+
+    The walk is iterative so nesting depth is bounded by MAX_AST_DEPTH, not by
+    the interpreter's recursion limit.
+    """
+    count = 0
+    stack: list[tuple[Any, int]] = [(node, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > MAX_AST_DEPTH:
+            raise AstTooDeepError(f"AST nests deeper than {MAX_AST_DEPTH} levels")
+        if isinstance(current, list):
+            stack.extend((item, depth + 1) for item in current)
+        elif isinstance(current, dict):
+            if current.get("t") in {"RawBlock", "RawInline"}:
+                content = current.get("c")
+                if (
+                    isinstance(content, list)
+                    and content
+                    and str(content[0]).lower() in RAW_TEX_FORMATS
+                ):
+                    count += 1
+                    continue
+            stack.extend((value, depth + 1) for value in current.values())
+    return count
 
 
 def _parse_ast(content: bytes) -> dict[str, Any]:
@@ -130,11 +153,19 @@ def _parse_ast(content: bytes) -> dict[str, Any]:
         ast = json.loads(content)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=400, detail=f"AST is not valid JSON: {exc}") from exc
+    except RecursionError as exc:
+        raise HTTPException(status_code=400, detail="AST nests too deeply") from exc
     if not isinstance(ast, dict) or "blocks" not in ast or "pandoc-api-version" not in ast:
         raise HTTPException(
             status_code=400, detail="payload is not a Pandoc JSON AST (blocks, pandoc-api-version)"
         )
-    if _raw_tex_nodes(ast.get("blocks")):
+    # The whole document, not only `blocks`: the template renders metadata
+    # (title, author, date) too, so raw TeX there would reach the engine.
+    try:
+        raw_nodes = _raw_tex_nodes(ast)
+    except AstTooDeepError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if raw_nodes:
         raise HTTPException(status_code=422, detail="raw TeX blocks are not accepted")
     return ast
 
