@@ -94,23 +94,44 @@ MIDDLE_JSON = {
     ],
 }
 
-PARSE_RESPONSE = {
-    "backend": "pipeline",
-    "version": "2.1.11",
-    "results": {
-        "sample": {
-            "md_content": "# Relatório Anual\n\nResultados do exercício",
-            "middle_json": MIDDLE_JSON,
-            "content_list": [],
-        }
+# MinerU 4 protocol: ordered blocks and source-page geometry.
+MIDDLE_JSON_V4 = {
+    "schema": "docvortex.middle",
+    "schema_version": "2.0",
+    "metadata": {"producer": {"name": "mineru", "version": "4.0.12"}},
+    "extensions": {
+        "mineru": {"tier": "basic", "parse_mode": "ocr"},
+        "docvortex_layout": {"pages": [
+            {"page_idx": 0, "width_pt": 595, "height_pt": 842},
+            {"page_idx": 1, "width_pt": 595, "height_pt": 842},
+        ]},
     },
+    "pages": [
+        {"page_idx": 0, "blocks": [
+            {"type": "title", "bbox": [50, 20, 545, 80],
+             "content": [{"type": "text", "content": "Relatório Anual"}]},
+            {"type": "text", "bbox": [50, 90, 545, 200],
+             "content": [{"type": "text", "content": "Resultados do exercício"}]},
+            {"type": "table", "bbox": [50, 210, 545, 400],
+             "content": [{"type": "table", "content": "<table><tr><td>2025</td></tr></table>"}]},
+            {"type": "equation", "bbox": [100, 410, 500, 460],
+             "content": [{"type": "equation", "content": r"E = mc^2"}]},
+            {"type": "image", "bbox": [50, 470, 300, 600]},
+        ]},
+        {"page_idx": 1, "blocks": []},
+    ],
+}
+
+PARSE_RESPONSE = {
+    "status": "completed",
+    "files": [{"status": "completed", "content": {"middle_json": MIDDLE_JSON_V4}}],
 }
 
 
 def descriptor(**overrides: object) -> ProviderDescriptor:
     base = {
         "id": "mineru",
-        "version": "2.1",
+        "version": "4.0.12",
         "endpoint": "http://mineru-serve:5002",
         "capabilities": ["document.structure.extract"],
         "timeout_seconds": 5.0,
@@ -137,8 +158,8 @@ def provider_with(handler, provider_id: str = "mineru") -> MineruProvider:
 
 
 def parse_handler(request: httpx.Request) -> httpx.Response:
-    if request.url.path == "/openapi.json":
-        return httpx.Response(200, json={"info": {"version": "2.1.11"}})
+    if request.url.path == "/v1/health":
+        return httpx.Response(200, json={"version": "4.0.12"})
     return httpx.Response(200, json=PARSE_RESPONSE)
 
 
@@ -209,7 +230,7 @@ def test_extraction_wraps_the_middle_json() -> None:
     extraction = extract(provider_with(parse_handler))
 
     assert extraction.backend == "mineru"
-    assert extraction.version == "2.1.11"
+    assert extraction.version == "4.0.12"
     document = extraction.document
     assert document.page_count == 2
     assert len(document.texts) == 2
@@ -219,20 +240,23 @@ def test_parse_request_carries_defaults_and_parameters() -> None:
     captured: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/openapi.json":
-            return httpx.Response(200, json={"info": {"version": "2.1.11"}})
+        if request.url.path == "/v1/health":
+            return httpx.Response(200, json={"version": "4.0.12"})
         captured["data"] = dict(request.url.params) if request.url.query else None
         captured["content_type"] = request.headers.get("content-type", "")
         return httpx.Response(200, json=PARSE_RESPONSE)
 
-    extract(provider_with(handler), lang="en", backend="vlm")
+    extract(provider_with(handler), tier="basic", ocr_mode="ocr")
 
     assert "multipart/form-data" in str(captured["content_type"])
+    assert captured["data"]["tier"] == "basic"
+    assert captured["data"]["ocr_mode"] == "ocr"
+    assert captured["data"]["output_formats"] == "middle_json"
 
 
 def test_empty_results_raise_provider_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"backend": "pipeline", "results": {}})
+        return httpx.Response(200, json={"status": "completed", "files": []})
 
     with pytest.raises(ProviderExecutionError):
         extract(provider_with(handler))
@@ -242,7 +266,7 @@ def test_missing_middle_json_raises_provider_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json={"backend": "pipeline", "results": {"sample": {"md_content": "x"}}},
+            json={"status": "completed", "files": [{"status": "completed", "content": {}}]},
         )
 
     with pytest.raises(ProviderExecutionError):
@@ -250,29 +274,17 @@ def test_missing_middle_json_raises_provider_error() -> None:
 
 
 def test_middle_json_as_serialized_string_is_accepted() -> None:
-    """Some mineru-api builds ship middle_json as a JSON-encoded string."""
-
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json={
-                "backend": "pipeline",
-                "version": "2.1.11",
-                "results": {
-                    "sample": {
-                        "md_content": "# ok",
-                        "middle_json": json.dumps(MIDDLE_JSON),
-                        "content_list": [],
-                    }
-                },
-            },
+            json={"status": "completed", "files": [
+                {"status": "completed", "content": {"middle_json": json.dumps(MIDDLE_JSON_V4)}}
+            ]},
         )
 
     extraction = extract(provider_with(handler))
-    document = extraction.document
-
-    assert document.page_count == 2
-    assert len(document.texts) == 2
+    assert extraction.document.page_count == 2
+    assert len(extraction.document.texts) == 2
 
 
 def test_http_error_maps_to_provider_execution_error() -> None:
@@ -300,10 +312,10 @@ def test_connection_error_maps_to_provider_unavailable() -> None:
         extract(provider_with(handler))
 
 
-def test_health_uses_openapi_probe() -> None:
+def test_health_uses_v1_probe() -> None:
     health = provider_with(parse_handler).health()
     assert health.healthy is True
-    assert health.version == "2.1.11"
+    assert health.version == "4.0.12"
 
 
 def test_health_reports_failure() -> None:
@@ -348,3 +360,59 @@ def test_ocr_provider_flattens_text_items() -> None:
     assert "Relatório Anual" in extraction.configuration["full_text"]
     assert extraction.configuration["language"] == "ch"
     assert extraction.configuration["backend"] == "mineru-ocr"
+
+
+def test_v4_document_preserves_geometry_reading_order_and_components() -> None:
+    from acessilia_toolbox.providers.mineru_document import MineruDocument
+
+    document = MineruDocument(MIDDLE_JSON_V4)
+    assert document.pages[1].size.width == 595
+    assert document.pages[1].size.height == 842
+    assert [item.text for item in document.texts] == [
+        "Relatório Anual", "Resultados do exercício"
+    ]
+    assert document.tables[0].html == "<table><tr><td>2025</td></tr></table>"
+    assert document.formulas[0].latex == r"E = mc^2"
+    assert document.version_name == "4.0.12"
+
+
+def test_v4_async_202_uses_task_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    import acessilia_toolbox.providers.mineru as module
+
+    monkeypatch.setattr(module, "sleep", lambda seconds: None)
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        if request.url.path == "/v1/file_parse":
+            return httpx.Response(202, json={"task_id": "job-123"})
+        return httpx.Response(200, json=PARSE_RESPONSE)
+
+    assert extract(provider_with(handler)).document.page_count == 2
+    assert requests == ["/v1/file_parse", "/v1/tasks/job-123/result"]
+
+
+def test_v4_downloads_middle_json_when_not_inlined() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/file_parse":
+            return httpx.Response(200, json={"status": "completed", "files": [
+                {"status": "completed", "output_files": {
+                    "middle_json": {"file_id": "artifact-1"}
+                }}
+            ]})
+        assert request.url.path == "/v1/files/artifact-1/content"
+        return httpx.Response(200, json=MIDDLE_JSON_V4)
+
+    assert extract(provider_with(handler)).document.page_count == 2
+
+
+def test_v4_rejects_unrecognized_schema() -> None:
+    invalid = {**MIDDLE_JSON_V4, "schema": "docvortex.model"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"status": "completed", "files": [
+            {"status": "completed", "content": {"middle_json": invalid}}
+        ]})
+
+    with pytest.raises(ProviderExecutionError):
+        extract(provider_with(handler))
