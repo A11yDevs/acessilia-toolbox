@@ -94,7 +94,7 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 | Variable | Default | Purpose |
 |---|---|---|
 | `DOCLING_SERVE_URL` | `http://localhost:5001` | docling-serve endpoint |
-| `DOCLING_SERVE_IMAGE` | `ghcr.io/docling-project/docling-serve-cpu:v1.32.0` | Docker image for the extraction provider |
+| `DOCLING_SERVE_IMAGE` | `ghcr.io/docling-project/docling-serve-cpu:v1.37.0` | Docker image for the extraction provider |
 | `DOCLING_SERVE_PORT` | `5001` | Host-mapped port |
 | `DOCLING_SERVE_ENABLE_UI` | `false` | Enable the docling web UI |
 | `TOOLBOX_PROVIDERS_CONFIG` | `providers-config.yaml` | Path to the provider manifest |
@@ -227,7 +227,7 @@ If you prefer to run providers individually instead of using Compose:
 docker run -d --name docling-serve -p 5001:5001 \
   -e DOCLING_SERVE_ARTIFACTS_PATH=/opt/app-root/src/.cache/docling/models \
   -v docling-models:/opt/app-root/src/.cache/docling \
-  ghcr.io/docling-project/docling-serve-cpu:v1.32.0
+  ghcr.io/docling-project/docling-serve-cpu:v1.37.0
 
 # MinIO
 docker run -d --name acessilia-minio -p 9000:9000 -p 9001:9001 \
@@ -282,7 +282,7 @@ provider. It uses the same `${VARIABLE}` placeholders from `.env`:
 ``` yaml
 providers:
   - id: docling
-    version: "1.32"
+    version: "1.37.0"
     transport: http
     endpoint: ${DOCLING_SERVE_URL}
     health_path: /health
