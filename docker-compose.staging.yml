@@ -51,7 +51,7 @@ services:
 
   # ── Providers ────────────────────────────────────────────────────
   docling-serve:
-    image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.32.0}
+    image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.37.0}
     container_name: docling-serve-staging
     ports:
       - "${DOCLING_SERVE_PORT:-5001}:5001"
@@ -71,22 +71,22 @@ services:
       retries: 30
       start_period: 60s
 
-  # MinerU document parsing (CPU pipeline backend). The image is built from
-  # the official repo via scripts/build-mineru-image.sh (MinerU publishes no
+  # MinerU document parsing (CPU basic tier). The image is built from
+  # the local docker/mineru-cpu.Dockerfile via scripts/build-mineru-image.sh (MinerU publishes no
   # pre-built images). On a GPU host, build with the vllm base and add
   # `deploy.resources.reservations.devices` for GPU access.
   mineru-serve:
-    image: ${MINERU_SERVE_IMAGE:-mineru:latest}
+    image: ${MINERU_SERVE_IMAGE:-mineru:4.0.12}
     container_name: mineru-serve-staging
-    entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
+    entrypoint: ["mineru-kit", "api-server", "--host", "0.0.0.0", "--port", "8000", "--tier", "basic"]
     ports:
       - "${MINERU_SERVE_PORT:-5002}:8000"
     environment:
-      MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+      MINERU_MODEL_SMALL_BACKEND: ${MINERU_MODEL_SMALL_BACKEND:-onnx}
     volumes:
-      - mineru-models:/home/mineru/.cache/modelscope
+      - mineru-models:/home/mineru/.mineru
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')"]
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/v1/health')"]
       interval: 15s
       timeout: 5s
       retries: 20
