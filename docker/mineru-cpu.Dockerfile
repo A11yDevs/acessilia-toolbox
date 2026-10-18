@@ -1,64 +1,30 @@
-# MinerU CPU-only image — lightweight alternative to the official vllm-based
-# Dockerfile (docker/global/Dockerfile in the MinerU repo).
-#
-# The official image ships vllm + CUDA for the VLM backend (~15-20 GB). This
-# variant installs only the `pipeline` backend (CPU inference), which is what
-# the Acessilia Toolbox uses for document.structure.extract / layout / OCR.
-# Result: ~4-6 GB instead of ~15-20 GB.
-#
-# Build:
-#   docker build -t mineru:latest -f docker/mineru-cpu.Dockerfile .
-#
-# Run (see scripts/run-mineru.sh):
-#   mineru-api --host 0.0.0.0 --port 8000
+# MinerU 4.x CPU-sidecar: Basic tier uses ONNX and needs no GPU/VLM.
+# Build: ./scripts/build-mineru-image.sh 4.0.12
 
 FROM python:3.12-slim
 
-# System deps: libgl/libglib for OpenCV, fonts for CJK/Latin rendering.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        fonts-noto-core \
-        fonts-noto-cjk \
-        fontconfig \
-        libgl1 \
-        libglib2.0-0 \
-        curl && \
-    fc-cache -fv && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+        fonts-noto-core fonts-noto-cjk fontconfig libgl1 libglib2.0-0 curl && \
+    fc-cache -fv && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Pin numpy<2: MinerU 2.x compiles against the NumPy 1.x ABI.
-# six is a transitive dep MinerU's pipeline misses at runtime.
-RUN pip install --no-cache-dir "numpy<2" six
+ARG MINERU_VERSION=4.0.12
+RUN pip install --no-cache-dir "mineru==${MINERU_VERSION}"
 
-# MinerU with the CPU pipeline backend only (no vllm, no CUDA, no torch CUDA).
-#
-# Pinned to the 2.x line: the provider adapter speaks the 2.x HTTP contract
-# (`POST /file_parse`). MinerU 3.x replaced it with an upload/task API
-# (`/v1/uploads`, `/v1/tasks`), so an unpinned install silently produced a
-# sidecar the toolbox could not talk to.
-#
-# The `api` extra is required separately: `pipeline` installs the parsing
-# backend but not the HTTP server, so `mineru-api` would exit with
-# "No module named 'uvicorn'".
-RUN pip install --no-cache-dir "mineru[pipeline,api]>=2.7,<3" && \
-    pip cache purge
+COPY patch-mineru-warp.py /tmp/patch-mineru-warp.py
+RUN python3 /tmp/patch-mineru-warp.py && rm /tmp/patch-mineru-warp.py
 
-# Non-root runtime user.
 RUN useradd --create-home --shell /bin/bash mineru && \
-    mkdir -p /home/mineru/.cache/modelscope && \
-    chown -R mineru:mineru /home/mineru/.cache
+    mkdir -p /home/mineru/.mineru/models && \
+    chown -R mineru:mineru /home/mineru/.mineru
 USER mineru
 WORKDIR /home/mineru
 
-# Models download on first use into this volume.
-ENV MINERU_MODEL_SOURCE=modelscope
-VOLUME /home/mineru/.cache
+ENV MINERU_HOME=/home/mineru/.mineru
+VOLUME /home/mineru/.mineru
 
 EXPOSE 8000
-
-# Health probe target (toolbox health_path is /openapi.json).
 HEALTHCHECK --interval=15s --timeout=5s --retries=20 --start-period=120s \
-    CMD curl -fsS http://localhost:8000/openapi.json || exit 1
+    CMD curl -fsS http://localhost:8000/v1/health || exit 1
 
-ENTRYPOINT ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["mineru-kit", "api-server", "--host", "0.0.0.0", "--port", "8000", "--tier", "basic"]
