@@ -1,30 +1,13 @@
-"""mineru-api provider adapter.
-
-Follows the same thin-adapter contract as the Docling provider: HTTP
-transport plus shape mapping only.  MinerU runs in its own container (or as
-a local ``mineru-api`` process), so the toolbox image carries no ML runtime.
-
-Endpoint contract (mineru 2.x, ``POST /file_parse``):
-    multipart/form-data with fields:
-        files             — the document (PDF or image)
-        backend           — "pipeline" (CPU) or "vlm-*" (GPU)
-        lang_list         — OCR language hints, e.g. ["pt"]
-        return_md         — markdown text
-        return_middle_json— structured tree (the payload we normalize)
-        return_content_list— flat ordered content list
-        start_page_id / end_page_id — page range selection
-
-Response: {"backend", "version", "results": {<name>: {md_content?,
-middle_json?, content_list?, ...}}}
-"""
+"""HTTP adapter for MinerU 4's self-hosted V1 parsing API."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -37,14 +20,12 @@ from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 from acessilia_toolbox.providers.mineru_document import MineruDocument
 
-PARSE_PATH = "/file_parse"
-
-VERSION_KEYS = ("version", "mineru_version")
-COMPONENT_KEYS = ("version", "backend")
+PARSE_PATH = "/v1/file_parse"
+HEALTH_PATH = "/v1/health"
 
 
 class MineruProvider:
-    """Calls mineru-api over REST and returns a raw extraction."""
+    """Call MinerU's isolated API; normalize its MiddleJson into the shared contract."""
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -61,55 +42,48 @@ class MineruProvider:
         parameters: Mapping[str, Any] | None = None,
     ) -> ExtractionResult:
         started_at = datetime.now(UTC)
-        started_clock = perf_counter()
-
+        clock = perf_counter()
         with self._client() as client:
-            document = self._parse(
-                client, payload, filename, media_type, parameters
-            )
-            server_version = self._server_version(client)
+            document = self._parse(client, payload, filename, media_type, parameters)
+            producer = document.get("metadata", {}).get("producer", {})
+            version = (
+                producer.get("version") if isinstance(producer, dict) else None
+            ) or self.descriptor.version
 
-        completed_at = datetime.now(UTC)
         return ExtractionResult(
             document=MineruDocument(document),
             backend="mineru",
             started_at=started_at,
-            completed_at=completed_at,
-            duration_ms=round((perf_counter() - started_clock) * 1000),
-            version=server_version or self.descriptor.version,
+            completed_at=datetime.now(UTC),
+            duration_ms=round((perf_counter() - clock) * 1000),
+            version=str(version),
             configuration={
-                "extractor": "mineru-api",
+                "extractor": "mineru-v1",
                 "base_url": self.base_url,
                 "capability": capability_id,
-                "component_versions": (
-                    {"mineru": server_version} if server_version else {}
-                ),
+                "component_versions": {"mineru": str(version)},
                 **dict(parameters or {}),
             },
         )
 
     def versions(self) -> dict[str, str]:
         with self._client(timeout=10.0) as client:
-            reported = self._server_version(client)
-        return {"provider": reported or self.descriptor.version}
+            version = self._server_version(client)
+        return {"provider": version or self.descriptor.version}
 
     def health(self) -> ProviderHealth:
         checked_at = datetime.now(UTC)
         try:
             with self._client(timeout=10.0) as client:
-                # mineru-api is a FastAPI app; /docs is always present and
-                # cheaper than parsing, so we use the OpenAPI document as a
-                # liveness check (no dedicated /health endpoint exists).
-                response = client.get("/openapi.json")
+                response = client.get(HEALTH_PATH)
                 response.raise_for_status()
-                return ProviderHealth(
-                    provider=self.descriptor.id,
-                    healthy=True,
-                    version=(
-                        self._server_version(client) or self.descriptor.version
-                    ),
-                    checked_at=checked_at,
-                )
+                version = self._server_version(client, response=response)
+            return ProviderHealth(
+                provider=self.descriptor.id,
+                healthy=True,
+                version=version or self.descriptor.version,
+                checked_at=checked_at,
+            )
         except Exception as exc:
             return ProviderHealth(
                 provider=self.descriptor.id,
@@ -132,118 +106,138 @@ class MineruProvider:
         media_type: str,
         parameters: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
-        params = {**self.config, **dict(parameters or {})}
-        # MinerU's pipeline backend accepts a fixed language set (ch,
-        # ch_server, korean, ta, te, ka, th, el, arabic, east_slavic,
-        # cyrillic, devanagari)
-        # and rejects BCP-47 codes like "pt". Latin scripts fall back to "ch",
-        # which handles them out of the box.
-        lang = str(params.get("lang", "ch"))
-        backend = str(params.get("backend", "pipeline"))
-        start_page = int(params.get("start_page_id", 0))
-        end_page = int(params.get("end_page_id", 99999))
-
-        data: dict[str, Any] = {
-            "backend": backend,
-            "lang_list": lang,
-            "return_md": "true",
-            "return_middle_json": "true",
-            "return_content_list": "true",
-            "start_page_id": str(start_page),
-            "end_page_id": str(end_page),
-            "parse_method": str(params.get("parse_method", "auto")),
-            "formula_enable": str(
-                bool(params.get("formula_enable", True))
-            ).lower(),
-            "table_enable": str(
-                bool(params.get("table_enable", True))
-            ).lower(),
+        options = {**self.config, **dict(parameters or {})}
+        query: dict[str, Any] = {
+            "tier": str(options.get("tier", "basic")),
+            "ocr_mode": str(options.get("ocr_mode", "auto")),
+            "output_formats": "middle_json",
+            "response_format": "json",
+            "wait_timeout": min(3600, max(1, int(self.descriptor.timeout_seconds))),
         }
+        if "page_range" in options:
+            query["page_range"] = str(options["page_range"])
+        elif "start_page_id" in options or "end_page_id" in options:
+            start = int(options.get("start_page_id", 0)) + 1
+            end = int(options.get("end_page_id", 99999)) + 1
+            query["page_range"] = f"{start}-{end}" if end < 99999 else f"{start}-r1"
+
         try:
             response = client.post(
                 PARSE_PATH,
+                params=query,
                 files={"files": (filename, payload, media_type)},
-                data=data,
             )
+            deadline = perf_counter() + self.descriptor.timeout_seconds
+            while response.status_code == 202:
+                task_id = response.json().get("task_id")
+                if not isinstance(task_id, str) or not task_id:
+                    raise ProviderExecutionError(
+                        "MinerU returned 202 without a task ID",
+                        provider=self.descriptor.id,
+                    )
+                if perf_counter() >= deadline:
+                    raise ProviderTimeoutError(
+                        "MinerU parse job exceeded the timeout",
+                        provider=self.descriptor.id,
+                    )
+                sleep(min(1, max(0, deadline - perf_counter())))
+                response = client.get(
+                    f"/v1/tasks/{quote(task_id, safe='')}/result",
+                    params={"response_format": "json"},
+                )
             response.raise_for_status()
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(
-                "mineru-api timed out after "
-                f"{self.descriptor.timeout_seconds}s",
+                f"MinerU timed out after {self.descriptor.timeout_seconds}s",
                 provider=self.descriptor.id,
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                "mineru-api rejected the document: "
-                f"HTTP {exc.response.status_code}",
+                f"MinerU rejected the document: HTTP {exc.response.status_code}",
                 provider=self.descriptor.id,
             ) from exc
         except httpx.HTTPError as exc:
             raise ProviderUnavailableError(
-                f"mineru-api is unreachable at {self.base_url}",
+                f"MinerU is unreachable at {self.base_url}",
                 provider=self.descriptor.id,
             ) from exc
 
-        result = response.json()
-        if not isinstance(result, dict):
+        try:
+            result = response.json()
+        except ValueError as exc:
             raise ProviderExecutionError(
-                "mineru-api returned an unexpected payload",
+                "MinerU returned invalid JSON", provider=self.descriptor.id
+            ) from exc
+        files = result.get("files") if isinstance(result, dict) else None
+        if (
+            not isinstance(result, dict)
+            or result.get("status") != "completed"
+            or not isinstance(files, list)
+            or len(files) != 1
+        ):
+            raise ProviderExecutionError(
+                "MinerU returned an incomplete or malformed parsing result",
                 provider=self.descriptor.id,
             )
-
-        results = result.get("results")
-        if not isinstance(results, dict) or not results:
+        file_result = files[0]
+        if not isinstance(file_result, dict) or file_result.get("status") != "completed":
             raise ProviderExecutionError(
-                "mineru-api returned no results",
+                "MinerU failed to parse the document",
                 provider=self.descriptor.id,
             )
+        artifacts = file_result.get("content") or {}
+        middle_json = artifacts.get("middle_json") if isinstance(artifacts, dict) else None
 
-        # results maps the uploaded file's stem to its artifacts. Take the
-        # first (and normally only) entry.
-        first = next(iter(results.values()))
-        if not isinstance(first, dict):
-            raise ProviderExecutionError(
-                "mineru-api returned malformed results",
-                provider=self.descriptor.id,
-            )
+        if middle_json is None:
+            output = file_result.get("output_files") or {}
+            artifact = output.get("middle_json") or {}
+            file_id = artifact.get("file_id") if isinstance(artifact, dict) else None
+            if not isinstance(file_id, str) or not file_id:
+                raise ProviderExecutionError(
+                    "MinerU did not return a middle_json artifact",
+                    provider=self.descriptor.id,
+                )
+            try:
+                download = client.get(
+                    f"/v1/files/{quote(file_id, safe='')}/content",
+                    follow_redirects=True,
+                )
+                download.raise_for_status()
+                middle_json = download.json()
+            except httpx.HTTPError as exc:
+                raise ProviderExecutionError(
+                    "MinerU middle_json artifact could not be downloaded",
+                    provider=self.descriptor.id,
+                ) from exc
 
-        middle_json = first.get("middle_json")
-        # mineru-api serializes middle_json as a JSON string in some builds
-        # and as a nested object in others; accept both.
         if isinstance(middle_json, str):
             try:
                 middle_json = json.loads(middle_json)
             except json.JSONDecodeError as exc:
                 raise ProviderExecutionError(
-                    "mineru-api returned malformed structured content "
-                    "(middle_json is a non-JSON string)",
+                    "MinerU returned invalid middle_json",
                     provider=self.descriptor.id,
                 ) from exc
-        if not isinstance(middle_json, dict) or not middle_json:
+        if (
+            not isinstance(middle_json, dict)
+            or middle_json.get("schema") != "docvortex.middle"
+            or not isinstance(middle_json.get("pages"), list)
+        ):
             raise ProviderExecutionError(
-                "mineru-api returned no structured content (middle_json)",
+                "MinerU returned an unsupported middle_json schema",
                 provider=self.descriptor.id,
             )
-        # Carry the markdown along for downstream consumers that want the
-        # rendered text without re-deriving it from the tree.
-        if first.get("md_content"):
-            middle_json["md_content"] = first["md_content"]
-        if first.get("content_list"):
-            middle_json["content_list"] = first["content_list"]
-        middle_json.setdefault("_backend", result.get("backend", backend))
         return middle_json
 
-    def _server_version(self, client: httpx.Client) -> str:
-        # mineru-api has no version endpoint; the parse response carries the
-        # version, and the OpenAPI document is our best cheap probe.
+    def _server_version(
+        self, client: httpx.Client, *, response: httpx.Response | None = None
+    ) -> str:
         try:
-            response = client.get("/openapi.json")
+            response = response or client.get(HEALTH_PATH)
             response.raise_for_status()
-            info = response.json().get("info", {})
-            if isinstance(info, dict):
-                return str(info.get("version", ""))
-            return ""
-        except Exception:
+            info = response.json()
+            return str(info.get("version") or "") if isinstance(info, dict) else ""
+        except (httpx.HTTPError, ValueError):
             return ""
 
 
