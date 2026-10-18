@@ -10,9 +10,10 @@
 #                   host with NVIDIA GPU and ~20 GB free disk.
 #
 # Usage:
-#   ./scripts/build-mineru-image.sh                 # CPU variant, latest
-#   ./scripts/build-mineru-image.sh 2.1.11          # CPU variant, pinned
+#   ./scripts/build-mineru-image.sh                 # CPU variant, pinned default
+#   ./scripts/build-mineru-image.sh 4.0.12          # CPU variant, pinned
 #   MINERU_REPAIR=1 ./scripts/build-mineru-image.sh # patch existing CPU image
+#   MINERU_VARIANT=gpu-basic ./scripts/build-mineru-image.sh # Basic tier on CUDA
 #   MINERU_VARIANT=gpu ./scripts/build-mineru-image.sh   # GPU variant
 #
 # Requirements: git, docker. The CPU variant builds anywhere; the GPU variant
@@ -23,7 +24,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-MINERU_VERSION="${1:-latest}"
+MINERU_VERSION="${1:-4.0.12}"
+[[ "${MINERU_VERSION}" != "latest" ]] || { echo "Pin a concrete MinerU version"; exit 1; }
 MINERU_VARIANT="${MINERU_VARIANT:-cpu}"
 MINERU_REPAIR="${MINERU_REPAIR:-0}"
 MINERU_REPO_URL="${MINERU_REPO_URL:-https://github.com/opendatalab/MinerU.git}"
@@ -64,9 +66,11 @@ if [[ "${MINERU_VARIANT}" == "cpu" ]]; then
     [[ -f "${DOCKERFILE}" ]] || { echo "❌ ${DOCKERFILE} not found"; exit 1; }
 
     echo "→ Building CPU-only image from ${DOCKERFILE}"
-    docker build -t "${IMAGE_TAG}" -f "${DOCKERFILE}" "${PROJECT_DIR}/docker"
+    docker build --build-arg "MINERU_VERSION=${MINERU_VERSION}" \
+        -t "${IMAGE_TAG}" -f "${DOCKERFILE}" "${PROJECT_DIR}/docker"
 
     echo ""
+    docker run --rm --entrypoint python3 "${IMAGE_TAG}" -c "from mineru.version import __version__; assert __version__ == '${MINERU_VERSION}', __version__"
     echo "✅ Built ${IMAGE_TAG} (CPU-only)"
     echo ""
     echo "Next steps:"
@@ -74,20 +78,32 @@ if [[ "${MINERU_VARIANT}" == "cpu" ]]; then
     exit 0
 fi
 
+# ── GPU Basic variant: Torch small models, no VLM/vLLM ───────────────
+if [[ "${MINERU_VARIANT}" == "gpu-basic" ]]; then
+    IMAGE_TAG="mineru:${MINERU_VERSION}-gpu-basic"
+    DOCKERFILE="${PROJECT_DIR}/docker/mineru-gpu-basic.Dockerfile"
+    [[ -f "${DOCKERFILE}" ]] || { echo "❌ ${DOCKERFILE} not found"; exit 1; }
+
+    echo "→ Building Basic-tier CUDA image from ${DOCKERFILE}"
+    docker build --build-arg "MINERU_VERSION=${MINERU_VERSION}" \
+        -t "${IMAGE_TAG}" -f "${DOCKERFILE}" "${PROJECT_DIR}/docker"
+    docker run --rm --gpus all --entrypoint python3 "${IMAGE_TAG}" -c \
+        "import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+    echo "✅ Built ${IMAGE_TAG} (GPU Basic/Torch variant)"
+    exit 0
+fi
+
 # ── GPU variant: clone the official repo and build its Dockerfile ────
 echo "Workdir: ${WORK_DIR}"
 if [[ -d "${WORK_DIR}/.git" ]]; then
     echo "→ Updating existing clone at ${WORK_DIR}"
-    git -C "${WORK_DIR}" fetch --tags --quiet
+    git -C "${WORK_DIR}" fetch --depth 1 origin "refs/tags/mineru-${MINERU_VERSION}-released:refs/tags/mineru-${MINERU_VERSION}-released"
+    git -C "${WORK_DIR}" checkout --detach "mineru-${MINERU_VERSION}-released"
 else
     echo "→ Cloning ${MINERU_REPO_URL}"
-    git clone --depth 1 --branch master "${MINERU_REPO_URL}" "${WORK_DIR}"
+    git clone --depth 1 --branch "mineru-${MINERU_VERSION}-released" "${MINERU_REPO_URL}" "${WORK_DIR}"
 fi
 
-if [[ "${MINERU_VERSION}" != "latest" ]]; then
-    echo "→ Checking out tag mineru-${MINERU_VERSION}-released"
-    git -C "${WORK_DIR}" checkout "mineru-${MINERU_VERSION}-released"
-fi
 
 DOCKERFILE="${WORK_DIR}/docker/global/Dockerfile"
 
@@ -95,6 +111,7 @@ echo "→ Building ${IMAGE_TAG} (downloads ~10 GB of layers; grab a coffee)"
 docker build -t "${IMAGE_TAG}" -f "${DOCKERFILE}" "${WORK_DIR}"
 
 echo ""
+docker run --rm --entrypoint python3 "${IMAGE_TAG}" -c "from mineru.version import __version__; assert __version__ == '${MINERU_VERSION}', __version__"
 echo "✅ Built ${IMAGE_TAG} (GPU/vllm variant)"
 echo ""
 echo "Next steps:"
