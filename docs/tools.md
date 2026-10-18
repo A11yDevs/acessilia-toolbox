@@ -19,7 +19,8 @@ roadmap candidates.
 | Page layout   | `image.page.orient`                                     | RapidOCR (sidecar)                         | [implemented] |
 | Vision-language | `document.ocr.page`, `document.adjudicate.page`, `document.adjudicate.region`, `table.recognize` | OpenAI-compatible VLM server (llama.cpp, vLLM) | [implemented] |
 | Chemistry     | `chem.recognize`, `chem.convert`                        | docling-serve VLM (Granite Vision), pure-python mhchem | [implemented] |
-| Accessibility | `accessibility.mark`                                    | pure-python (in-process; veraPDF validation: roadmap) | [implemented] |
+| Accessibility | `accessibility.mark`                                    | pure-python (in-process)                   | [implemented] |
+| PDF/UA        | `document.export.pdf_ua`, `pdf.validate.pdf_ua`         | Pandoc + TeX Live, veraPDF (sidecars)      | [implemented] |
 | Code          | `code.normalize`                                        | pure-python (in-process)                   | [implemented] |
 | Text          | `text.postprocess`                                      | pure-python (in-process)                   | [implemented] |
 | Datasets      | `dataset.list`, `dataset.get_item`, `dataset.sync`, ... | GitHub, HuggingFace (in-process, optional) | [implemented] |
@@ -152,6 +153,18 @@ A single provider, `pandoc-pdf-ua`, calls the `pdf-ua-render` sidecar
 release. Configure the endpoint with `PDF_UA_RENDER_URL`. The PDF is returned by
 reference, so the capability needs an artifact store. See
 [pdf-ua-export.md](pdf-ua-export.md).
+
+## PDF/UA validation
+
+``` text
+pdf.validate.pdf_ua : PDF -> PDF/UA-1 (or PDF/UA-2) validation report
+```
+
+A single provider, `verapdf`, calls the `verapdf-validate` sidecar
+(`docker/verapdf-validate.Dockerfile`), which pins the veraPDF CLI. Configure
+the endpoint with `VERAPDF_VALIDATE_URL`. A non-compliant PDF is a successful
+result whose report lists the failed rules. See
+[pdf-ua-validation.md](pdf-ua-validation.md).
 
 ## Vision-language model
 
