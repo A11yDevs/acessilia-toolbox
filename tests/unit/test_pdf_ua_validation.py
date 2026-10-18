@@ -341,6 +341,82 @@ def test_server_rejects_bad_requests(client: TestClient, body: bytes, data: dict
     assert post_pdf(client, body, **data).status_code == 400
 
 
+def fake_verapdf(
+    monkeypatch: pytest.MonkeyPatch, server: Any, report: str, *, flavour: str = "ua1"
+) -> list[list[str]]:
+    """Replace the CLI with one that returns a stored veraPDF report."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[bytes]:
+        commands.append(command)
+        assert command[1:5] == ["--format", "json", "--flavour", flavour]
+        stdout = (FIXTURES / f"{report}.json").read_bytes()
+        return subprocess.CompletedProcess(command, 1, stdout=stdout, stderr=b"")
+
+    monkeypatch.setattr(server.shutil, "which", lambda _: "/usr/bin/verapdf")
+    monkeypatch.setattr(server.subprocess, "run", fake_run)
+    return commands
+
+
+@pytest.mark.parametrize(
+    ("profile", "report", "profile_name"),
+    [
+        ("ua1", "non-compliant", "PDF/UA-1 validation profile"),
+        ("ua2", "non-compliant-ua2", "PDF/UA-2 + Tagged PDF validation profile"),
+    ],
+)
+def test_server_passes_each_profile_to_verapdf(
+    client: TestClient,
+    server: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    profile: str,
+    report: str,
+    profile_name: str,
+) -> None:
+    commands = fake_verapdf(monkeypatch, server, report, flavour=profile)
+    response = post_pdf(client, PDF_BYTES, profile=profile)
+
+    assert response.status_code == 200, response.text
+    assert len(commands) == 1
+    body = response.json()
+    assert body["profile"] == profile
+    assert body["profile_name"] == profile_name
+    assert body["compliant"] is False
+
+
+def test_server_rejects_a_report_for_another_profile(
+    client: TestClient, server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_verapdf(monkeypatch, server, "non-compliant-ua2")
+    response = post_pdf(client, PDF_BYTES, profile="ua1")
+    assert response.status_code == 500
+    assert "PDF/UA-1" in response.json()["detail"]
+
+
+def test_report_with_several_matching_results_is_a_server_error(server: Any) -> None:
+    raw = fixture("compliant")
+    results = raw["report"]["jobs"][0]["validationResult"]
+    results.append(dict(results[0], compliant=False))
+    with pytest.raises(server.ReportError, match="expected one") as excinfo:
+        server.normalize_report(raw, "ua1")
+    assert not excinfo.value.caller_error
+
+
+def test_server_streams_the_upload_and_stops_at_the_size_limit(
+    client: TestClient, server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands = fake_verapdf(monkeypatch, server, "compliant")
+    monkeypatch.setattr(server, "UPLOAD_CHUNK_BYTES", 16)
+    monkeypatch.setattr(server, "MAX_PDF_BYTES", 64)
+
+    assert post_pdf(client, PDF_BYTES + b"x" * 64).status_code == 413
+    assert not commands
+    # A body spanning several chunks is copied whole; the header check still applies.
+    assert post_pdf(client, PDF_BYTES + b"x" * 30).status_code == 200
+    assert post_pdf(client, b"x" * 20 + b"%PDF-1.7").status_code == 200
+    assert post_pdf(client, b"x" * 60).status_code == 400
+
+
 def test_server_maps_a_parse_failure_to_422(
     client: TestClient, server: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

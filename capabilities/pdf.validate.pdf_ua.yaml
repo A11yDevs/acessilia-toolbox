@@ -24,8 +24,9 @@ execution:
   timeout_hint_seconds: 300
 
 semantics:
+  # Any PDF can be validated, not only what document.export.pdf_ua produced.
   requires:
-    - accessible_pdf_exported
+    - document_available
   produces:
     - pdf_ua_validated
 

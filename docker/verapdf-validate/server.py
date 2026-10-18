@@ -32,8 +32,13 @@ MAX_PDF_BYTES = int(os.environ.get("VERAPDF_MAX_PDF_BYTES", str(200 * 1024 * 102
 # veraPDF lists every failed check of a rule; a badly tagged book has thousands.
 # The rule summary keeps the true count, the report keeps the first few contexts.
 MAX_CHECKS_PER_RULE = int(os.environ.get("VERAPDF_MAX_CHECKS_PER_RULE", "5"))
-# Flavours this capability exposes, mapped to veraPDF's --flavour values.
-PROFILES = {"ua1": "ua1", "ua2": "ua2"}
+# Profiles this capability exposes: veraPDF's --flavour value and the prefix of
+# the profileName it reports, which picks the matching result from the report.
+PROFILES = {
+    "ua1": ("ua1", "PDF/UA-1"),
+    "ua2": ("ua2", "PDF/UA-2"),
+}
+UPLOAD_CHUNK_BYTES = 1024 * 1024
 STDERR_TAIL_CHARS = 2000
 
 LOG = logging.getLogger("verapdf_validate")
@@ -124,7 +129,22 @@ def normalize_report(raw: dict[str, Any], profile: str) -> dict[str, Any]:
             caller_error=caller_error,
         )
 
-    result = results[0]
+    # 1.30 returns exactly one result per --flavour. Match it by name anyway, so
+    # a release that adds a profile can never pass another profile's numbers off
+    # as the requested one.
+    prefix = PROFILES[profile][1]
+    matching = [
+        item
+        for item in results
+        if isinstance(item, dict) and str(item.get("profileName", "")).startswith(prefix)
+    ]
+    if len(matching) != 1:
+        names = [item.get("profileName") for item in results if isinstance(item, dict)]
+        raise ReportError(
+            f"expected one {prefix} result in the veraPDF report, got {names}",
+            caller_error=False,
+        )
+    result = matching[0]
     details = result.get("details") or {}
     rules = details.get("ruleSummaries") or []
     return {
@@ -148,7 +168,7 @@ def normalize_report(raw: dict[str, Any], profile: str) -> dict[str, Any]:
 
 def run_verapdf(pdf: Path, profile: str) -> dict[str, Any]:
     """Validate one file and return the normalized report."""
-    command = [VERAPDF, "--format", "json", "--flavour", PROFILES[profile], str(pdf)]
+    command = [VERAPDF, "--format", "json", "--flavour", PROFILES[profile][0], str(pdf)]
     try:
         result = subprocess.run(
             command,
@@ -188,18 +208,28 @@ def validate(
             status_code=400,
             detail=f"unknown profile {profile!r}; expected one of {sorted(PROFILES)}",
         )
-    content = file.file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="empty PDF payload")
-    if len(content) > MAX_PDF_BYTES:
-        raise HTTPException(status_code=413, detail=f"PDF exceeds {MAX_PDF_BYTES} bytes")
-    # PDF readers accept the header anywhere in the first kilobyte.
-    if b"%PDF-" not in content[:1024]:
-        raise HTTPException(status_code=400, detail="payload is not a PDF (no %PDF- header)")
-    if shutil.which(VERAPDF) is None:
-        raise HTTPException(status_code=503, detail=f"missing: {VERAPDF}")
-
     with tempfile.TemporaryDirectory(prefix="verapdf-") as tmp:
         pdf = Path(tmp) / "document.pdf"
-        pdf.write_bytes(content)
+        _save_upload(file, pdf)
+        if shutil.which(VERAPDF) is None:
+            raise HTTPException(status_code=503, detail=f"missing: {VERAPDF}")
         return run_verapdf(pdf, profile)
+
+
+def _save_upload(file: UploadFile, destination: Path) -> None:
+    """Copy the upload to disk in chunks, so an oversized body never sits in memory."""
+    total = 0
+    head = b""
+    with destination.open("wb") as out:
+        while chunk := file.file.read(UPLOAD_CHUNK_BYTES):
+            total += len(chunk)
+            if total > MAX_PDF_BYTES:
+                raise HTTPException(status_code=413, detail=f"PDF exceeds {MAX_PDF_BYTES} bytes")
+            if len(head) < 1024:
+                head += chunk[: 1024 - len(head)]
+            out.write(chunk)
+    if total == 0:
+        raise HTTPException(status_code=400, detail="empty PDF payload")
+    # PDF readers accept the header anywhere in the first kilobyte.
+    if b"%PDF-" not in head:
+        raise HTTPException(status_code=400, detail="payload is not a PDF (no %PDF- header)")

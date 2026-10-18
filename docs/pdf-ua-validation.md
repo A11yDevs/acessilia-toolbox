@@ -26,8 +26,14 @@ curl -H "Authorization: Bearer $TOOLBOX_API_KEY" \
 |---|---|---|
 | `profile` | `ua1` | veraPDF validation profile: `ua1` (ISO 14289-1) or `ua2` (ISO 14289-2) |
 
-To validate a PDF that `document.export.pdf_ua` stored, download it first with
-`GET /v1/artifacts/{artifact_id}`.
+A PDF that `document.export.pdf_ua` stored needs no download: send its id in
+place of the file, and the Toolbox reads it from the artifact store.
+
+``` bash
+curl -H "Authorization: Bearer $TOOLBOX_API_KEY" \
+  -F artifact_id=sha256:… \
+  http://localhost:8002/v1/capabilities/pdf.validate.pdf_ua:execute
+```
 
 ## Response
 
@@ -62,7 +68,11 @@ reports as `400`.
 
 `failed_checks` is the true number of failing objects for a rule; `checks`
 lists only the first `VERAPDF_MAX_CHECKS_PER_RULE` (default 5), so a badly
-tagged book does not produce a multi-megabyte report.
+tagged book does not produce a multi-megabyte report. `failures` itself is not
+capped, since dropping failed rules would misstate the verdict: at worst it has
+one entry per rule of the profile (about 100 for PDF/UA-1, far more for
+PDF/UA-2), which keeps a badly broken file's report in the low megabytes. The
+report is returned inline and cached as is.
 
 veraPDF checks the machine-verifiable part of PDF/UA. Requirements that need
 human judgement (whether alt text is meaningful, whether the reading order
