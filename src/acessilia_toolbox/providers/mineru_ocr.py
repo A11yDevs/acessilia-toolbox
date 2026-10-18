@@ -1,6 +1,6 @@
 """MinerU-backed OCR provider.
 
-Reuses the single ``/file_parse`` call (via :class:`MineruProvider`) and
+Reuses the single ``/v1/file_parse`` call (via :class:`MineruProvider`) and
 flattens recognized text spans into the ``document.ocr`` shape, mirroring
 ``DoclingOcrProvider``.
 """
