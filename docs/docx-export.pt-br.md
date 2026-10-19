@@ -34,12 +34,15 @@ curl -H "Authorization: Bearer $TOOLBOX_API_KEY" \
 
 O renderizador não lê nada além do AST:
 
-- Nós crus de OpenXML e de TeX são recusados em qualquer ponto do AST: o
-  sidecar responde `422`, que a API reporta como `400`. Sem isso, o OpenXML cru
-  seria colado no documento sem verificação.
+- Nós crus de OpenXML são recusados em qualquer ponto do AST: o sidecar
+  responde `422`, que a API reporta como `400`. Sem isso, o OpenXML cru seria
+  colado no documento sem verificação. Os demais formatos crus (TeX, HTML,
+  Markdown, ...) são descartados pelo Pandoc sem aviso, e a requisição ainda
+  é bem-sucedida.
 - O Pandoc roda com `--sandbox`, então uma imagem ou inclusão que aponte para um
-  arquivo local ou uma URL fica de fora em vez de ser lida. Espera-se que as
-  imagens já tenham sido reduzidas a alternativas textuais.
+  arquivo local ou uma URL fica de fora em vez de ser lida. A imagem descartada
+  é substituída pelo seu texto alternativo, o que mantém o documento legível;
+  espera-se que as imagens já tenham sido reduzidas a alternativas textuais.
 
 ## Resposta
 
@@ -71,8 +74,21 @@ atualizá-los mantém os DOCX em cache. Como na PDF/UA, um acerto de cache só �
 servido enquanto o arquivo armazenado existir; por isso a capacidade exige um
 armazenamento de artefatos.
 
+O sidecar tem um único número de versão para as duas rotas, então qualquer
+release do sidecar, mesmo uma que só corrija o caminho do PDF, também invalida
+os DOCX em cache.
+
 ## Build
 
 O build do sidecar também converte um AST de teste para DOCX, então um Pandoc
 que não consiga gerar DOCX quebra o build. Veja a
 [exportação PDF/UA](pdf-ua-export.md#build).
+
+## Disponibilidade
+
+O `/health` do sidecar verifica o Pandoc, a engine TeX e o template de PDF/UA,
+embora `/render/docx` só precise do Pandoc. Uma instalação de TeX quebrada,
+portanto, marca o sidecar inteiro como indisponível e derruba
+`document.export.docx` junto. É o custo aceito de compartilhar uma imagem;
+separe a rota DOCX em um sidecar próprio se a disponibilidade dela não puder
+depender do TeX Live.

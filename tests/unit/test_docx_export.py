@@ -81,14 +81,28 @@ def provider_with(
     return adapter, calls
 
 
+class MemoryCache:
+    def __init__(self) -> None:
+        self.data: dict[str, Any] = {}
+
+    def get(self, key: str) -> Any:
+        return self.data.get(key)
+
+    def put(self, key: str, value: Any) -> None:
+        self.data[key] = value
+
+
 def executor_with(
-    adapter: PandocDocxProvider, store: FilesystemArtifactStore
+    adapter: PandocDocxProvider,
+    store: FilesystemArtifactStore,
+    cache: MemoryCache | None = None,
 ) -> CapabilityExecutor:
     return CapabilityExecutor(
         CapabilityRegistry.from_directory(PROJECT_ROOT / "capabilities"),
         ProviderRegistry([adapter.descriptor]),
         lambda _: adapter,
         store=store,
+        cache=cache,
     )
 
 
@@ -174,6 +188,38 @@ def test_a_tex_upgrade_does_not_change_the_docx_cache_key(tmp_path: Path) -> Non
     assert after.provenance.cache_key == before
 
 
+@pytest.mark.parametrize(
+    "change", [{"version": "1.2.0"}, {"pandoc": "3.10"}], ids=["sidecar", "pandoc"]
+)
+def test_a_sidecar_or_pandoc_upgrade_changes_the_docx_cache_key(
+    tmp_path: Path, change: dict[str, str]
+) -> None:
+    store = FilesystemArtifactStore(tmp_path)
+    cache = MemoryCache()
+    before = export(executor_with(provider_with()[0], store, cache)).provenance.cache_key
+
+    after = export(executor_with(provider_with(versions={**VERSIONS, **change})[0], store, cache))
+
+    assert after.provenance.cache_key != before
+    assert not after.provenance.cache_hit
+
+
+def test_cache_hit_reuses_the_stored_docx_without_rendering(tmp_path: Path) -> None:
+    adapter, calls = provider_with()
+    cache = MemoryCache()
+    executor = executor_with(adapter, FilesystemArtifactStore(tmp_path), cache)
+
+    first = export(executor)
+    second = export(executor)
+
+    assert second.provenance.cache_hit
+    assert second.document["artifact_id"] == first.document["artifact_id"]
+    assert sum(call.url.path == "/render/docx" for call in calls) == 1
+    # Neither the response document nor the cached result embeds the bytes.
+    assert "PK" not in json.dumps(second.model_dump(mode="json"))
+    assert "PK" not in json.dumps(next(iter(cache.data.values())))
+
+
 # ── Sidecar route ───────────────────────────────────────────────────────
 
 
@@ -198,19 +244,42 @@ def post_ast(client: TestClient, body: bytes, **data: str) -> httpx.Response:
     )
 
 
+def test_server_version_reports_its_capabilities(client: TestClient) -> None:
+    payload = client.get("/version").json()
+    assert payload["capability"] == "document.export.pdf_ua"
+    assert payload["capabilities"] == ["document.export.pdf_ua", "document.export.docx"]
+    assert {"version", "pandoc"} <= payload.keys()
+
+
 @pytest.mark.parametrize(
     "node",
     [
         {"t": "RawBlock", "c": ["openxml", "<w:p><w:r><w:t>injected</w:t></w:r></w:p>"]},
-        {"t": "RawInline", "c": ["latex", "\\relax"]},
+        {"t": "RawInline", "c": ["OpenXML", "<w:r><w:t>injected</w:t></w:r>"]},
     ],
-    ids=["openxml", "tex"],
+    ids=["block", "inline"],
 )
-def test_server_rejects_raw_openxml_and_tex(client: TestClient, node: dict[str, Any]) -> None:
+def test_server_rejects_raw_openxml(client: TestClient, node: dict[str, Any]) -> None:
     body = json.dumps({**AST, "blocks": [{"t": "Para", "c": [node]}]}).encode()
     response = post_ast(client, body)
     assert response.status_code == 422
-    assert "raw TeX or OpenXML" in response.json()["detail"]
+    assert response.json()["detail"] == "raw OpenXML blocks are not accepted"
+
+
+def test_server_lets_pandoc_drop_raw_tex(
+    server: Any, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The docx writer drops raw TeX, so it is no reason to refuse the AST.
+    monkeypatch.setattr(server.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    def fake_run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        Path(command[command.index("-o") + 1]).write_bytes(DOCX_BYTES)
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(server.subprocess, "run", fake_run)
+    node = {"t": "RawInline", "c": ["latex", "\\relax"]}
+    body = json.dumps({**AST, "blocks": [{"t": "Para", "c": [node]}]}).encode()
+    assert post_ast(client, body).status_code == 200
 
 
 def test_server_rejects_an_invalid_language_tag(client: TestClient) -> None:

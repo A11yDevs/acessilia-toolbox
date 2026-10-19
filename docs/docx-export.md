@@ -32,12 +32,14 @@ curl -H "Authorization: Bearer $TOOLBOX_API_KEY" \
 
 The renderer reads nothing but the AST:
 
-- Raw OpenXML and raw TeX nodes are rejected anywhere in the AST: the sidecar
-  answers `422`, which the API reports as `400`. Raw OpenXML would otherwise be
-  pasted into the document unchecked.
+- Raw OpenXML nodes are rejected anywhere in the AST: the sidecar answers
+  `422`, which the API reports as `400`. Raw OpenXML would otherwise be pasted
+  into the document unchecked. Every other raw format (TeX, HTML, Markdown, ...)
+  is dropped by Pandoc without notice, and the request still succeeds.
 - Pandoc runs with `--sandbox`, so an image or include that points to a local
-  file or URL is left out instead of read. Images are expected to be already
-  reduced to text alternatives.
+  file or URL is left out instead of read. A dropped image is replaced by its
+  alt text, which keeps the document readable; images are expected to be
+  already reduced to text alternatives.
 
 ## Response
 
@@ -69,7 +71,19 @@ DOCX, so upgrading them keeps the cached DOCX files. As with PDF/UA, a cache hit
 is served only while the stored file still exists, so the capability requires an
 artifact store.
 
+The sidecar has a single version number for both routes, so any sidecar
+release, even one that only fixes the PDF path, invalidates the cached DOCX
+files too.
+
 ## Build
 
 The sidecar build also converts a smoke-test AST to DOCX, so a Pandoc that
 cannot write DOCX fails the build. See [PDF/UA export](pdf-ua-export.md#build).
+
+## Availability
+
+The sidecar's `/health` checks Pandoc, the TeX engine and the PDF/UA template,
+although `/render/docx` needs only Pandoc. A broken TeX install therefore marks
+the whole sidecar unhealthy and takes `document.export.docx` down with it. This
+is the accepted cost of sharing one image; split the DOCX route into its own
+sidecar if its availability must not depend on TeX Live.

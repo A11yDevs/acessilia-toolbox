@@ -11,9 +11,15 @@ metadata included (the template prints title, author and date), so every
 string reaches LaTeX escaped by Pandoc; on top of that, shell escape is off and TeX
 may only write below its working directory.
 
-``/render/docx`` uses the same Pandoc without TeX. Raw TeX and raw OpenXML
-nodes are rejected there too, and Pandoc runs with ``--sandbox``, so an image
-or include in the AST cannot make it read local files.
+``/render/docx`` uses the same Pandoc without TeX. Only raw OpenXML nodes are
+rejected there: the docx writer pastes them into the document, while it drops
+every other raw format (TeX, HTML, ...) without a trace. Pandoc runs with
+``--sandbox``, so an image or include in the AST cannot make it read local
+files or URLs; a dropped image leaves its alt text behind.
+
+``/health`` checks the whole toolchain, TeX included, although ``/render/docx``
+needs only Pandoc: one health state for one image, at the cost of reporting the
+DOCX route down when only TeX is broken.
 """
 
 from __future__ import annotations
@@ -44,8 +50,9 @@ MAX_AST_BYTES = int(os.environ.get("PDF_UA_MAX_AST_BYTES", str(20 * 1024 * 1024)
 # full log would bloat the error response.
 STDERR_TAIL_CHARS = 2000
 RAW_TEX_FORMATS = {"latex", "tex", "context"}
-# Raw OpenXML would be pasted into the DOCX unchecked.
-RAW_DOCX_FORMATS = RAW_TEX_FORMATS | {"openxml"}
+# The docx writer pastes raw OpenXML into the document unchecked and drops every
+# other raw format, so OpenXML is the only one worth rejecting.
+RAW_DOCX_FORMATS = {"openxml"}
 DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 # Real documents nest a few dozen levels at most; the bound keeps a hostile AST
 # from turning the scan into an unbounded walk.
@@ -115,11 +122,14 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/version")
-def version() -> dict[str, str]:
+def version() -> dict[str, Any]:
+    # `capability` keeps the single-string field every sidecar reports;
+    # `capabilities` lists all the routes this one serves.
     return {
         "version": SERVER_VERSION,
         **toolchain(),
-        "capabilities": "document.export.pdf_ua,document.export.docx",
+        "capability": "document.export.pdf_ua",
+        "capabilities": ["document.export.pdf_ua", "document.export.docx"],
     }
 
 
@@ -263,7 +273,7 @@ def render_docx(
     lang: Annotated[str, Form(description="BCP 47 document language")] = "pt-BR",
 ) -> Response:
     content = file.file.read()
-    _parse_ast(content, RAW_DOCX_FORMATS, "TeX or OpenXML")
+    _parse_ast(content, RAW_DOCX_FORMATS, "OpenXML")
     _check_lang(lang)
     if shutil.which("pandoc") is None:
         raise HTTPException(status_code=503, detail="missing: pandoc")

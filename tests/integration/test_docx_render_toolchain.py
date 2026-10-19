@@ -25,15 +25,40 @@ pytestmark = [
 
 SERVER_PATH = Path(__file__).resolve().parents[2] / "docker" / "pdf-ua-render" / "server.py"
 SECRET = Path(__file__)
+ALT_TEXT = "Gráfico-de-vendas"
+ATTR: list = ["", [], []]
+
+
+def cell(text: str) -> list:
+    return [ATTR, {"t": "AlignDefault"}, 1, 1, [{"t": "Plain", "c": [{"t": "Str", "c": text}]}]]
+
+
+def row(*texts: str) -> list:
+    return [ATTR, [cell(text) for text in texts]]
+
+
 AST = {
     "pandoc-api-version": [1, 23, 1],
     "meta": {"title": {"t": "MetaInlines", "c": [{"t": "Str", "c": "Relatório"}]}},
     "blocks": [
+        {"t": "Header", "c": [1, ["intro", [], []], [{"t": "Str", "c": "Introdução"}]]},
         {"t": "Para", "c": [{"t": "Math", "c": [{"t": "InlineMath"}, "E=mc^2"]}]},
-        # A local file as an image source: the sandbox must keep it out.
+        {
+            "t": "Table",
+            "c": [
+                ATTR,
+                [None, []],
+                [[{"t": "AlignDefault"}, {"t": "ColWidthDefault"}]] * 2,
+                [ATTR, [row("Mês", "Total")]],
+                [[ATTR, 0, [], [row("Jan", "10")]]],
+                [ATTR, []],
+            ],
+        },
+        # A local file as an image source: the sandbox must keep it out and
+        # leave the alt text in its place.
         {
             "t": "Para",
-            "c": [{"t": "Image", "c": [["", [], []], [{"t": "Str", "c": "x"}], [str(SECRET), ""]]}],
+            "c": [{"t": "Image", "c": [ATTR, [{"t": "Str", "c": ALT_TEXT}], [str(SECRET), ""]]}],
         },
     ],
 }
@@ -49,7 +74,7 @@ def client() -> TestClient:
     return TestClient(module.app)
 
 
-def test_server_renders_a_docx_with_office_math_and_no_local_files(client: TestClient) -> None:
+def test_server_renders_an_accessible_docx_without_local_files(client: TestClient) -> None:
     response = client.post(
         "/render/docx",
         files={"file": ("ast.json", json.dumps(AST).encode(), "application/json")},
@@ -60,6 +85,11 @@ def test_server_renders_a_docx_with_office_math_and_no_local_files(client: TestC
     archive = zipfile.ZipFile(io.BytesIO(response.content))
     document = archive.read("word/document.xml").decode("utf-8")
     styles = archive.read("word/styles.xml").decode("utf-8")
+    core = archive.read("docProps/core.xml").decode("utf-8")
+    assert '<w:pStyle w:val="Heading1" />' in document
+    assert "<w:tblHeader" in document
     assert "<m:oMath>" in document
+    assert ALT_TEXT in document
     assert 'w:val="pt-BR"' in styles
+    assert "<dc:language>pt-BR</dc:language>" in core
     assert not [name for name in archive.namelist() if name.startswith("word/media/")]

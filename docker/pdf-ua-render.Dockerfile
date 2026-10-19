@@ -78,7 +78,8 @@ RUN luaotfload-tool --update && \
         | pandoc --from json --to pdf --pdf-engine=lualatex \
             --template=/app/templates/pdf_ua.tex -o /tmp/smoke.pdf && \
     printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
-        | pandoc --from json --to docx --sandbox -o /tmp/smoke.docx && \
+        | pandoc --from json --to docx --standalone --sandbox --metadata lang=pt-BR \
+            -o /tmp/smoke.docx && \
     rm /tmp/smoke.pdf /tmp/smoke.docx
 
 EXPOSE 5007
