@@ -84,7 +84,7 @@ def test_full_page_is_returned_as_a_binary_output_with_its_transformation():
 
 
 def test_max_side_bounds_the_longest_side_and_the_smaller_scale_wins():
-    document, output = render(_pdf(), dpi=600, max_side=100)
+    document, _ = render(_pdf(), dpi=600, max_side=100)
     assert (document["width_px"], document["height_px"]) == (100, 50)
     assert document["scale"] == pytest.approx(0.5)
 
@@ -159,7 +159,8 @@ def test_renders_above_the_pixel_limit_are_refused():
 def test_raster_inputs_are_their_own_single_page(filetype, media_type):
     document, output = render(_image(filetype), media_type, dpi=72)
 
-    assert (document["page_count"], document["page_width"], document["page_height"]) == (1, 200, 100)
+    assert document["page_count"] == 1
+    assert (document["page_width"], document["page_height"]) == (200, 100)
     assert document["source_media_type"] == media_type
     assert _png_size(output.payload) == (200, 100)
     with pytest.raises(InvalidInputError, match="out of range"):
