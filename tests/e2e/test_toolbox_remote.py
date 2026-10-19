@@ -4,12 +4,11 @@ Requires TOOLBOX_BASE_URL to be set (e.g. https://www.acessilia3.inf.ufg.br/tool
 Skipped automatically when the variable is absent — never blocks the local suite.
 Set TOOLBOX_API_KEY too when the server requires authentication: every request
 then carries it as a Bearer token. Both can live in .env.e2e (copy
-.env.e2e.example), which conftest.py loads; the environment takes precedence.
+.env.e2e.example), which tests/e2e/target.py reads; the environment takes precedence.
 """
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -17,10 +16,12 @@ from typing import Any
 import httpx
 import pytest
 
+from tests.e2e.target import e2e_setting
+
 pytestmark = pytest.mark.e2e
 
-TOOLBOX_BASE_URL = os.getenv("TOOLBOX_BASE_URL", "").rstrip("/")
-TOOLBOX_API_KEY = os.getenv("TOOLBOX_API_KEY", "")
+TOOLBOX_BASE_URL = e2e_setting("TOOLBOX_BASE_URL").rstrip("/")
+TOOLBOX_API_KEY = e2e_setting("TOOLBOX_API_KEY")
 DATASET_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "dataset" / "input"
 
 
