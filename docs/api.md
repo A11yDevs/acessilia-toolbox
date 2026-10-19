@@ -60,6 +60,29 @@ listed in `providers` only.
 > `declared_providers` for the bindings. MCP follows the same rule (see
 > [MCP](#mcp)).
 
+### Capability versions
+
+A capability can be published in more than one version (for example
+`pdf.render@1` and `pdf.render@2`; see [pdf-render.md](pdf-render.md)).
+
+- **Catalogue:** `GET /v1/capabilities` lists every version, in ascending
+  order. The `latest` field is `true` on the highest version of each
+  capability, the one a request without a version executes. Do not take the
+  first entry for an `id` as the default.
+- **Detail:** `GET /v1/capabilities/{capability_id}?version=N` returns version
+  `N`; without `version`, the latest.
+- **Execution:** `POST /v1/capabilities/{capability_id}:execute` takes an
+  optional `version` form field. **Without it, the latest version runs**, so
+  publishing a new version changes what unversioned clients receive: pin
+  `version` when a client depends on a contract.
+- **Planning:** `GET /v1/planning/domain` and
+  `GET /v1/planning/capabilities/{capability_id}` (which also accepts
+  `?version=`) describe the latest version unless asked otherwise.
+- **MCP** exposes one tool per capability, which runs the latest version; MCP
+  tools take no version (see [MCP](#mcp)).
+- **CLI:** `acessilia-toolbox execute` takes `--capability-version N`. Binary
+  outputs of by-reference capabilities are written next to the JSON document.
+
 Long-running operations may require an external job/queue abstraction.
 If asynchronous job state is exposed through the Toolbox, its
 authoritative state must live in an external state service rather than
@@ -158,8 +181,12 @@ acessilia://planning/domain
 
 The `acessilia://capabilities` resource returns each manifest with the same
 `providers` (registered here) and `declared_providers` (bound by the manifest)
-lists as the REST catalogue, and each tool's `provider` argument offers only
-the registered providers.
+lists as the REST catalogue, plus the same `latest` flag, and each tool's
+`provider` argument offers only the registered providers.
+
+A capability published in several versions is a single tool that executes the
+latest version; older versions are reachable through REST and the CLI only.
+The planning resources likewise describe the latest version.
 
 MCP descriptions should remain concise and should not duplicate
 provider-specific implementation details unless needed by the caller.

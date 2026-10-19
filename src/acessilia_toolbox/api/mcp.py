@@ -87,7 +87,8 @@ class ToolboxMCPServer:
 
     def list_tools(self) -> list[dict[str, Any]]:
         tools = []
-        for manifest in self._capabilities.manifests():
+        # One tool per capability: call_tool executes the latest version.
+        for manifest in self._capabilities.latest():
             tools.append(
                 _tool_from_capability(
                     manifest.model_dump(mode="json", by_alias=True),
@@ -103,10 +104,12 @@ class ToolboxMCPServer:
     def _catalogue_entry(self, manifest: CapabilityManifest) -> dict[str, Any]:
         """A manifest as the catalogue publishes it, matching GET /v1/capabilities:
         ``providers`` lists the registered providers, ``declared_providers`` the
-        ones the manifest binds."""
+        ones the manifest binds, and ``latest`` whether a request without a
+        version executes this one."""
         entry = manifest.model_dump(mode="json", by_alias=True)
         entry["providers"] = self._registered(manifest.id)
         entry["declared_providers"] = [binding.id for binding in manifest.providers]
+        entry["latest"] = manifest.version == self._capabilities.get(manifest.id).version
         return entry
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
@@ -220,7 +223,7 @@ class ToolboxMCPServer:
             },
         ]
 
-        for manifest in self._capabilities.manifests():
+        for manifest in self._capabilities.latest():
             resources.append(
                 {
                     "uri": f"{TOOLBOX_PREFIX}planning/capabilities/{manifest.id}",
@@ -259,7 +262,7 @@ class ToolboxMCPServer:
             )
 
         if uri == f"{TOOLBOX_PREFIX}planning/domain":
-            return domain_fragment(self._capabilities.manifests())
+            return domain_fragment(self._capabilities.latest())
 
         if uri == f"{TOOLBOX_PREFIX}planning/predicates":
             return json.dumps(

@@ -459,3 +459,23 @@ def test_catalogue_lists_a_registered_provider_the_manifest_does_not_bind(
     [summary] = client.get("/v1/capabilities").json()
     assert summary["providers"] == ["docling", "mineru"]
     assert summary["declared_providers"] == ["docling"]
+
+
+def test_catalogue_flags_the_latest_version_and_planning_lists_it_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every version is published; the one a request without a version runs is
+    flagged, and the PDDL domain holds a single action per capability."""
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "")
+    capabilities = CapabilityRegistry(
+        [CapabilityManifest.model_validate(m) for m in (MANIFEST, {**MANIFEST, "version": 2})]
+    )
+    _, providers = _bare_registries()
+    client = TestClient(create_app(capabilities, providers))
+
+    summaries = client.get("/v1/capabilities").json()
+    assert [(s["version"], s["latest"]) for s in summaries] == [(1, False), (2, True)]
+    assert client.get(f"/v1/capabilities/{CAPABILITY}").json()["latest"] is True
+    assert client.get(f"/v1/capabilities/{CAPABILITY}?version=1").json()["latest"] is False
+    domain = client.get("/v1/planning/domain").text
+    assert domain.count("(:action document-structure-extract") == 1

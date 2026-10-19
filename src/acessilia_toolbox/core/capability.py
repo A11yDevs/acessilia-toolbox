@@ -130,7 +130,22 @@ class CapabilityRegistry:
         return max(candidates, key=lambda manifest: manifest.version)
 
     def manifests(self) -> list[CapabilityManifest]:
+        """Every registered version of every capability (the published catalogue)."""
         return sorted(self._by_key.values(), key=lambda m: (m.id, m.version))
+
+    def latest(self) -> list[CapabilityManifest]:
+        """The highest version of each capability.
+
+        Interfaces that name a capability without a version, such as MCP tools
+        and PDDL actions, expose this one; older versions stay executable by
+        explicit version while clients migrate.
+        """
+        latest: dict[str, CapabilityManifest] = {}
+        for manifest in self._by_key.values():
+            current = latest.get(manifest.id)
+            if current is None or manifest.version > current.version:
+                latest[manifest.id] = manifest
+        return sorted(latest.values(), key=lambda m: m.id)
 
     def ids(self) -> list[str]:
         return sorted({manifest.id for manifest in self._by_key.values()})

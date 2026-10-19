@@ -299,7 +299,7 @@ class TestPdfSplit:
 
 
 class TestPdfRender:
-    """POST /v1/capabilities/pdf.render:execute"""
+    """POST /v1/capabilities/pdf.render:execute with version=1 (legacy contract)"""
 
     def test_render_returns_png_image(self) -> None:
         base = _skip_if_no_url()
@@ -308,7 +308,7 @@ class TestPdfRender:
             resp = httpx.post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 1}'},
+                data={"version": "1", "parameters": '{"page_number": 1}'},
                 timeout=120,
             )
         assert resp.status_code == 200
@@ -328,7 +328,7 @@ class TestPdfRender:
             resp = httpx.post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 2}'},
+                data={"version": "1", "parameters": '{"page_number": 2}'},
                 timeout=120,
             )
         assert resp.status_code == 200
@@ -342,7 +342,7 @@ class TestPdfRender:
             resp = httpx.post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 999}'},
+                data={"version": "1", "parameters": '{"page_number": 999}'},
                 timeout=120,
             )
         assert resp.status_code != 200
@@ -354,14 +354,14 @@ class TestPdfRender:
             low_resp = httpx.post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 1, "dpi": 72}'},
+                data={"version": "1", "parameters": '{"page_number": 1, "dpi": 72}'},
                 timeout=120,
             )
         with open(pdf_path, "rb") as f:
             high_resp = httpx.post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 1, "dpi": 300}'},
+                data={"version": "1", "parameters": '{"page_number": 1, "dpi": 300}'},
                 timeout=120,
             )
         low_size = low_resp.json()["document"]["size_bytes"]
@@ -375,13 +375,59 @@ class TestPdfRender:
             resp = httpx.post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 1}'},
+                data={"version": "1", "parameters": '{"page_number": 1}'},
                 timeout=120,
             )
         data = resp.json()
         prov = data.get("provenance", {})
         assert "duration_ms" in prov
         assert "provider_version" in prov
+
+
+class TestPdfRenderV2:
+    """POST /v1/capabilities/pdf.render:execute without a version (pdf.render@2)
+
+    The PNG is stored by reference, so these need the artifact store.
+    """
+
+    def _render(self, base: str, parameters: str) -> dict:
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = httpx.post(
+                f"{base}/v1/capabilities/pdf.render:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": parameters},
+                timeout=120,
+            )
+        if resp.status_code == 500 and "no artifact storage provider" in resp.text:
+            pytest.skip("artifact store not configured on this server")
+        assert resp.status_code == 200, resp.text
+        return dict(resp.json())
+
+    def test_default_version_stores_the_png_by_reference(self) -> None:
+        base = _skip_if_no_url()
+        data = self._render(base, '{"page_number": 1, "dpi": 72}')
+
+        assert data["provenance"]["capability_version"] == 2
+        doc = data["document"]
+        assert "image_bytes_base64" not in doc
+        assert doc["width_px"] > 0 and doc["height_px"] > 0
+        assert doc["artifact_id"] in [a["artifact_id"] for a in data["artifacts"]]
+        png = httpx.get(f"{base}/v1/artifacts/{doc['artifact_id']}", timeout=30)
+        assert png.status_code == 200
+        assert png.content[:4] == b"\x89PNG"
+
+    def test_clip_and_max_side_are_reported(self) -> None:
+        base = _skip_if_no_url()
+        data = self._render(
+            base,
+            '{"page_number": 1, "max_side": 64,'
+            ' "clip": {"left": 0, "top": 0, "right": 100, "bottom": 50}}',
+        )
+
+        doc = data["document"]
+        assert doc["clip"] == {"left": 0, "top": 0, "right": 100, "bottom": 50}
+        assert max(doc["width_px"], doc["height_px"]) == 64
 
 
 class TestNewCapabilitiesInListing:

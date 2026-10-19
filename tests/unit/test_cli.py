@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import fitz
 import pytest
 from tests.fixtures.documents import FakeDocument
 
@@ -199,3 +200,38 @@ def test_media_type_is_derived_from_the_extension(workspace: Path) -> None:
     assert cli._media_type(Path("a.pdf")) == "application/pdf"
     assert cli._media_type(Path("a.png")) == "image/png"
     assert cli._media_type(Path("a.unknown")) == "application/octet-stream"
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_by_reference_outputs_are_saved_next_to_the_document(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """pdf.render@2 is the default and stores its PNG by reference: the CLI
+    needs no artifact storage and writes the PNG beside the JSON document."""
+    doc = fitz.open()
+    doc.new_page(width=200, height=100)
+    (tmp_path / "sample.pdf").write_bytes(doc.tobytes())
+    doc.close()
+
+    code = cli.main(
+        [
+            "--capabilities-dir",
+            str(PROJECT_ROOT / "capabilities"),
+            "--providers-config",
+            str(PROJECT_ROOT / "providers-config.yaml"),
+            "execute",
+            "pdf.render",
+            str(tmp_path / "sample.pdf"),
+            "--parameters",
+            '{"dpi": 72}',
+        ]
+    )
+
+    assert code == cli.EXIT_OK
+    document = json.loads((tmp_path / "sample.structured-document.json").read_text("utf-8"))
+    png = tmp_path / "sample.page-1.png"
+    assert png.read_bytes().startswith(b"\x89PNG")
+    assert (document["width_px"], document["height_px"]) == (200, 100)
+    assert str(png) in capsys.readouterr().out

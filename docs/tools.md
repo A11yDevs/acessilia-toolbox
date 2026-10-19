@@ -10,7 +10,7 @@ roadmap candidates.
 |---------------|---------------------------------------------------------|--------------------------------------------|---------------|
 | Document AI   | `document.structure.extract`, `document.layout.analyze` | docling-serve, MinerU                      | [implemented] |
 | OCR           | `document.ocr`                                          | docling-serve, MinerU (PaddleOCR, Surya: roadmap) | [implemented] |
-| PDF           | `pdf.split`, `pdf.render`                               | PyMuPDF                                    | [implemented] |
+| PDF           | `pdf.split`, `pdf.render` (v2: clip, `max_side`, PNG/JPEG; [pdf-render.md](pdf-render.md)) | PyMuPDF                                    | [implemented] |
 | Tables        | table extraction inside `document.structure.extract`    | Docling (TableFormer), MinerU              | [implemented] |
 | Conversion    | `document.convert`                                      | Pandoc                                     | roadmap       |
 | Mathematics   | `math.recognize`, `math.convert`, `math.verbalize`      | docling-serve, pure-python (latex2mathml)  | [implemented] |
