@@ -22,7 +22,7 @@ pip install -e ".[dev]"
 docker run -d --name docling-serve -p 5001:5001 \
   -e DOCLING_SERVE_ARTIFACTS_PATH=/opt/app-root/src/.cache/docling/models \
   -v docling-models:/opt/app-root/src/.cache/docling \
-  ghcr.io/docling-project/docling-serve-cpu:v1.32.0
+  ghcr.io/docling-project/docling-serve-cpu:v1.37.0
 
 # 3. Configure
 export DOCLING_SERVE_URL=http://localhost:5001

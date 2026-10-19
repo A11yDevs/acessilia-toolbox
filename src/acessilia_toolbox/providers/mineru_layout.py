@@ -1,6 +1,6 @@
 """MinerU-backed layout analysis provider.
 
-Reuses the single ``/file_parse`` call (via :class:`MineruProvider`) and
+Reuses the single ``/v1/file_parse`` call (via :class:`MineruProvider`) and
 classifies the returned blocks into the semantic region categories used by
 ``document.layout.analyze``, mirroring ``DoclingLayoutProvider``.
 """
@@ -16,8 +16,8 @@ from acessilia_toolbox.providers.mineru_document import FORMULA_TYPES, MineruDoc
 
 # Canonical region categories (same vocabulary as DoclingLayoutProvider).
 _REGION_TYPES = {
-    "text": {"text", "index"},
-    "title": {"title"},
+    "text": {"text", "index", "paragraph", "code"},
+    "title": {"title", "chapter", "heading"},
     "list_block": {"list"},
     "table": {"table"},
     "embedded_image": {"image"},

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the MinerU API container locally (outside Docker Compose).
 #
-# Starts mineru-api on port 5002 (the port the toolbox expects via
+# Starts mineru-kit api-server on port 5002 (the port the toolbox expects via
 # MINERU_SERVE_URL) with a persistent model cache volume.
 #
 # Usage:
@@ -24,7 +24,7 @@ if [[ -f "${PROJECT_DIR}/.env.local" ]]; then
     done < <(grep -v '^\s*#' "${PROJECT_DIR}/.env.local" | grep -v '^\s*$')
 fi
 
-IMAGE="${MINERU_SERVE_IMAGE:-mineru:latest}"
+IMAGE="${MINERU_SERVE_IMAGE:-mineru:4.0.12}"
 CONTAINER="mineru-serve"
 PORT="${MINERU_SERVE_PORT:-5002}"
 API_PORT=8000   # mineru-api listens here inside the container
@@ -41,7 +41,7 @@ case "${1:-start}" in
         exit 0
         ;;
     status)
-        if curl -fsS "http://localhost:${PORT}/openapi.json" >/dev/null 2>&1; then
+        if curl -fsS "http://localhost:${PORT}/v1/health" >/dev/null 2>&1; then
             echo "✅ ${CONTAINER} healthy at http://localhost:${PORT}"
         else
             echo "❌ ${CONTAINER} not responding at http://localhost:${PORT}"
@@ -67,23 +67,23 @@ docker volume create "${VOLUME}" >/dev/null
 docker run --rm \
     --user root \
     --entrypoint sh \
-    -v "${VOLUME}:/home/mineru/.cache/modelscope" \
+    -v "${VOLUME}:/home/mineru/.mineru" \
     "${IMAGE}" \
-    -c "mkdir -p /home/mineru/.cache/modelscope && chown -R mineru:mineru /home/mineru/.cache/modelscope"
+    -c "mkdir -p /home/mineru/.mineru/models && chown -R mineru:mineru /home/mineru/.mineru"
 
 echo "→ Starting ${CONTAINER} (image=${IMAGE}, port=${PORT})"
 docker run -d \
     --name "${CONTAINER}" \
     --shm-size 8g \
     -p "${PORT}:${API_PORT}" \
-    -v "${VOLUME}:/home/mineru/.cache/modelscope" \
+    -v "${VOLUME}:/home/mineru/.mineru" \
     --restart unless-stopped \
     "${IMAGE}"
 
 echo ""
 echo "→ Waiting for the API to come up (first start downloads models, may take minutes)..."
 for i in $(seq 1 60); do
-    if curl -fsS "http://localhost:${PORT}/openapi.json" >/dev/null 2>&1; then
+    if curl -fsS "http://localhost:${PORT}/v1/health" >/dev/null 2>&1; then
         echo ""
         echo "✅ MinerU API ready at http://localhost:${PORT}"
         echo "   Toolbox env: MINERU_SERVE_URL=http://localhost:${PORT}"

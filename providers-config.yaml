@@ -1,6 +1,6 @@
 providers:
   - id: docling
-    version: "1.32"
+    version: "1.37.0"
     transport: http
     endpoint: ${DOCLING_SERVE_URL}
     health_path: /health
@@ -19,7 +19,7 @@ providers:
       table_mode: accurate
 
   - id: docling-layout
-    version: "1.32"
+    version: "1.37.0"
     transport: http
     endpoint: ${DOCLING_SERVE_URL}
     health_path: /health
@@ -57,7 +57,7 @@ providers:
       - application/pdf
 
   - id: docling-math
-    version: "1.32"
+    version: "1.37.0"
     transport: http
     endpoint: ${DOCLING_SERVE_URL}
     health_path: /health
@@ -175,7 +175,7 @@ providers:
       table_hint_chars: 3000
 
   - id: docling-ocr
-    version: "1.32"
+    version: "1.37.0"
     transport: http
     endpoint: ${DOCLING_SERVE_URL}
     health_path: /health
@@ -189,10 +189,10 @@ providers:
       - application/pdf
 
   - id: mineru
-    version: "2.1"
+    version: "4.0.12"
     transport: http
     endpoint: ${MINERU_SERVE_URL}
-    health_path: /openapi.json
+    health_path: /v1/health
     timeout_seconds: 600
     capabilities:
       - document.structure.extract
@@ -203,10 +203,10 @@ providers:
       - image/tiff
 
   - id: mineru-layout
-    version: "2.1"
+    version: "4.0.12"
     transport: http
     endpoint: ${MINERU_SERVE_URL}
-    health_path: /openapi.json
+    health_path: /v1/health
     timeout_seconds: 600
     capabilities:
       - document.layout.analyze
@@ -217,10 +217,10 @@ providers:
       - image/tiff
 
   - id: mineru-ocr
-    version: "2.1"
+    version: "4.0.12"
     transport: http
     endpoint: ${MINERU_SERVE_URL}
-    health_path: /openapi.json
+    health_path: /v1/health
     timeout_seconds: 600
     capabilities:
       - document.ocr
@@ -287,7 +287,7 @@ providers:
       - text/plain
 
   - id: docling-chem
-    version: "1.32"
+    version: "1.37.0"
     transport: http
     endpoint: ${DOCLING_SERVE_URL}
     health_path: /health

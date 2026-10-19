@@ -1,4 +1,4 @@
-"""Facade over the MinerU pipeline middle_json payload.
+"""Facade over MinerU MiddleJson (DocVortex 2.0) and legacy payloads.
 
 MinerU returns ``middle_json`` — a page-oriented tree where each page holds
 ``preproc_blocks`` (and ``discarded_blocks``) typed by :class:`BlockType`, plus
@@ -17,7 +17,7 @@ from acessilia_toolbox.providers.table_formats import html_table
 
 # Block types from mineru.utils.enum_class (inlined to avoid importing the
 # mineru package here — the toolbox must stay free of ML runtimes).
-TEXT_TYPES = ("text", "title", "list", "index")
+TEXT_TYPES = ("text", "title", "chapter", "paragraph", "heading", "list", "index", "code")
 TABLE_TYPES = ("table",)
 IMAGE_TYPES = ("image",)
 FORMULA_TYPES = ("interline_equation", "inline_equation", "equation")
@@ -134,6 +134,15 @@ class _ItemProxy:
     def _block_text(self) -> Any:
         if "text" in self._block:
             return self._block["text"]
+        content = self._block.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "".join(
+                str(part.get("content") or "")
+                for part in content
+                if isinstance(part, dict) and part.get("type") in ("text", "code", "paragraph")
+            )
         lines = self._block.get("lines") or []
         pieces: list[str] = []
         for line in lines:
@@ -154,6 +163,9 @@ class _ItemProxy:
     @property
     def html(self) -> str | None:
         """Table body HTML, when the block carries one."""
+        for part in self._block.get("content", []) or []:
+            if isinstance(part, dict) and part.get("type") in ("table", "html"):
+                return str(part.get("content") or part.get("html") or "") or None
         for sub in self._block.get("blocks", []) or []:
             if sub.get("type") in ("table_body",):
                 for line in sub.get("lines", []) or []:
@@ -172,6 +184,11 @@ class _ItemProxy:
         """Formula LaTeX, when the block carries one."""
         if self._block.get("latex"):
             return str(self._block["latex"])
+        for part in self._block.get("content", []) or []:
+            if isinstance(part, dict) and part.get("type") in (
+                "equation", "inline_equation", "interline_equation", "latex"
+            ):
+                return str(part.get("content") or part.get("latex") or "") or None
         for line in self._block.get("lines", []) or []:
             for span in line.get("spans", []) or []:
                 content = span.get("content") or span.get("latex")
@@ -194,13 +211,24 @@ class MineruDocument:
 
     def __init__(self, payload: Mapping[str, Any]) -> None:
         self._payload = payload
-        self._pages: list[Mapping[str, Any]] = list(payload.get("pdf_info") or [])
+        layout = payload.get("extensions", {}).get("docvortex_layout", {})
+        sizes = {
+            p["page_idx"]: [p.get("width_pt"), p.get("height_pt")]
+            for p in layout.get("pages", [])
+        }
+        self._pages: list[Mapping[str, Any]] = [
+            {**page, "page_size": page.get("page_size") or sizes.get(page.get("page_idx"), [])}
+            for page in (payload.get("pages") or payload.get("pdf_info") or [])
+        ]
 
     # -- pages -----------------------------------------------------------
 
     @property
     def pages(self) -> dict[int, _PageProxy]:
-        return {index + 1: _PageProxy(page) for index, page in enumerate(self._pages)}
+        return {
+            int(page.get("page_idx", index)) + 1: _PageProxy(page)
+            for index, page in enumerate(self._pages)
+        }
 
     @property
     def page_count(self) -> int:
@@ -216,7 +244,9 @@ class MineruDocument:
         for page in self._pages:
             page_idx = int(page.get("page_idx", 0))
             page_size = page.get("page_size") or []
-            sources: list[Mapping[str, Any]] = list(page.get("preproc_blocks") or [])
+            sources: list[Mapping[str, Any]] = list(
+                page.get("blocks") or page.get("preproc_blocks") or []
+            )
             if include_discarded:
                 sources += list(page.get("discarded_blocks") or [])
             for block in sources:
@@ -237,11 +267,11 @@ class MineruDocument:
         for page in sorted(self._pages, key=lambda p: int(p.get("page_idx", 0))):
             page_idx = int(page.get("page_idx", 0))
             page_size = page.get("page_size") or []
-            for block in page.get("preproc_blocks") or []:
+            for block in page.get("blocks") or page.get("preproc_blocks") or []:
                 if block.get("type") == "discarded":
                     continue
                 proxy = _ItemProxy(block, page_idx, page_size)
-                if block.get("type") == "title":
+                if block.get("type") in ("title", "heading", "chapter"):
                     yield proxy, 1
                     level = 2
                 else:
@@ -269,7 +299,7 @@ class MineruDocument:
     def full_text(self) -> str:
         parts: list[str] = []
         for page in self._pages:
-            for block in page.get("preproc_blocks") or []:
+            for block in page.get("blocks") or page.get("preproc_blocks") or []:
                 if block.get("type") == "discarded":
                     continue
                 proxy = _ItemProxy(
@@ -286,11 +316,23 @@ class MineruDocument:
 
     @property
     def backend(self) -> str | None:
-        return self._payload.get("_backend")
+        backend = self._payload.get("_backend")
+        if isinstance(backend, str):
+            return backend
+        extensions = self._payload.get("extensions")
+        mineru = extensions.get("mineru") if isinstance(extensions, Mapping) else None
+        tier = mineru.get("tier") if isinstance(mineru, Mapping) else None
+        return str(tier) if tier is not None else None
 
     @property
     def version_name(self) -> str | None:
-        return self._payload.get("_version_name")
+        version = self._payload.get("_version_name")
+        if isinstance(version, str):
+            return version
+        metadata = self._payload.get("metadata")
+        producer = metadata.get("producer") if isinstance(metadata, Mapping) else None
+        version = producer.get("version") if isinstance(producer, Mapping) else None
+        return str(version) if version is not None else None
 
     @property
     def raw(self) -> dict[str, Any]:
