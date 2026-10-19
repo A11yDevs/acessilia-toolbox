@@ -78,6 +78,9 @@ cannot be downloaded. This capability therefore requires an artifact store.
 
 ## Build
 
+CI publishes the image as `ghcr.io/a11ydevs/acessilia-toolbox-pdf-ua-render`
+(see [installation](installation.md#sidecar-images)). To build it locally:
+
 ``` bash
 docker build -f docker/pdf-ua-render.Dockerfile -t pdf-ua-render:latest .
 ```

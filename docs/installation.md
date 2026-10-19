@@ -248,28 +248,43 @@ docker build -f docker/audiveris-serve.Dockerfile -t audiveris-serve:latest .
 docker run -d --name audiveris-serve -p 5003:5003 audiveris-serve:latest
 ```
 
-### Sidecars that need a local build
+### Sidecar images
 
-Four sidecars have no published image, so Compose can only start them after the
-image exists on the host. Each one backs a capability that stays unavailable
-until then:
+The `Sidecars` workflow builds every sidecar from its `docker/` recipe and
+publishes it to GHCR as `ghcr.io/a11ydevs/acessilia-toolbox-<sidecar>`, tagged
+like the Toolbox image: the branch (`develop`, `main`, `release-x.y.z`),
+`sha-<7>`, `latest` on `main` and the version on a release tag.
+`docker-compose.staging.yml` pulls these images for the tracked branch, and
+`scripts/staging-update.sh` updates them together with the Toolbox, so no
+server builds a sidecar. Each image backs capabilities that stay unavailable
+while its sidecar is not running:
 
-| Sidecar | Build | Capability |
-|---|---|---|
-| `mineru-serve` | `./scripts/build-mineru-image.sh` | `document.structure.extract`, `document.layout.analyze`, `document.ocr` |
-| `nougat-serve` | `./scripts/build-nougat-image.sh` | `document.structure.extract` |
-| `rapid-latex-ocr` | `./scripts/build-math-ocr-image.sh` | `math.recognize` |
-| `audiveris-serve` | `docker build -f docker/audiveris-serve.Dockerfile -t audiveris-serve:latest .` | `music.omr` |
+| Sidecar (Compose service) | Image suffix | Recipe | Capability |
+|---|---|---|---|
+| `mineru-serve` | `mineru` | `docker/mineru-cpu.Dockerfile` | `document.structure.extract`, `document.layout.analyze`, `document.ocr` |
+| `nougat-serve` | `nougat` | `docker/nougat-cpu.Dockerfile` | `document.structure.extract` |
+| `rapid-latex-ocr` | `rapid-latex-ocr` | `docker/math-ocr.Dockerfile` | `math.recognize` |
+| `audiveris-serve` | `audiveris-serve` | `docker/audiveris-serve.Dockerfile` | `music.omr` |
+| `rapidocr-orient` | `rapidocr-orient` | `docker/rapidocr-orient.Dockerfile` | `image.page.orient` |
+| `pdf-ua-render` | `pdf-ua-render` | `docker/pdf-ua-render.Dockerfile` | `document.export.pdf_ua`, `document.export.docx` |
+| `verapdf-validate` | `verapdf-validate` | `docker/verapdf-validate.Dockerfile` | `pdf.validate.pdf_ua` |
 
-`rapidocr-orient` is built the same way
-(`docker build -f docker/rapidocr-orient.Dockerfile -t rapidocr-orient:latest .`)
-and backs `image.page.orient`. `pdf-ua-render`
-(`docker build -f docker/pdf-ua-render.Dockerfile -t pdf-ua-render:latest .`)
-backs `document.export.pdf_ua` and `document.export.docx`; its build renders a
-smoke-test PDF and DOCX.
-`verapdf-validate`
-(`docker build -f docker/verapdf-validate.Dockerfile -t verapdf-validate:latest .`)
-backs `pdf.validate.pdf_ua`; its build validates a smoke-test PDF.
+The `pdf-ua-render` build renders a smoke-test PDF and DOCX, and the
+`verapdf-validate` build validates a smoke-test PDF, so a broken toolchain
+fails CI rather than the first request.
+
+To run a local build instead (a recipe change under test, or the GPU variant
+of MinerU), build it and point the matching `*_IMAGE` variable at it, for
+example:
+
+```bash
+docker build -f docker/pdf-ua-render.Dockerfile -t pdf-ua-render:local .
+echo "PDF_UA_RENDER_IMAGE=pdf-ua-render:local" >> .env
+```
+
+`scripts/staging-update.sh` leaves a sidecar with such an override alone.
+`scripts/build-mineru-image.sh`, `build-nougat-image.sh` and
+`build-math-ocr-image.sh` still build those images locally.
 
 The Toolbox starts regardless: a provider whose endpoint does not resolve is
 reported as unhealthy and its capability answers `503`, while every other

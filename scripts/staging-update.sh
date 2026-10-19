@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# staging-update.sh — Updates the Acessilia Toolbox staging container
-# via GitHub API.
+# staging-update.sh — Updates the Acessilia Toolbox staging container and its
+# sidecars via GitHub API.
 #
 # Checks the SHA of the latest commit on the develop branch via GitHub API and
-# confirms that the corresponding image (sha-<7> tag) HAS BEEN PUBLISHED on GHCR
-# before updating. Prevents updating to a commit whose build is still running
-# or has failed.
+# confirms that the corresponding images (sha-<7> tag) of the toolbox and of
+# every sidecar it runs HAVE BEEN PUBLISHED on GHCR before updating them
+# together. Prevents updating to a commit whose build is still running or has
+# failed, and the API running against sidecars of another commit.
 #
 # Usage:
 #   ./scripts/staging-update.sh                     # Run once
@@ -59,6 +60,11 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.staging.yml}"
 CONTAINER_NAME="${CONTAINER_NAME:-acessilia-toolbox-staging}"
 GITHUB_REPO="A11yDevs/acessilia-toolbox"
 
+# Sidecars published by the Sidecars workflow (compose service names). They
+# are updated with the toolbox so the API never runs against an older sidecar.
+SIDECAR_SERVICES=(mineru-serve audiveris-serve nougat-serve rapid-latex-ocr rapidocr-orient pdf-ua-render verapdf-validate)
+CI_IMAGE_PREFIX="ghcr.io/a11ydevs/acessilia-toolbox-"
+
 # Cache and status live in a local directory
 CACHE_DIR="$STAGING_DIR/var/data"
 CACHE_FILE="${STAGING_UPDATE_CACHE:-$CACHE_DIR/.last_sha}"
@@ -81,6 +87,26 @@ _write_status() {
     --arg update "$last_update" \
     '{latest_sha: $latest, running_sha: $running, last_check: $check, last_update: $update}' \
     > "$STATUS_FILE"
+}
+
+# Prints "<service> <image>" for each sidecar this deployment runs (it has a
+# container) from a CI-published image. A sidecar whose *_IMAGE points at a
+# local build, or that was never started, is left alone.
+_managed_sidecars() {
+  local existing svc image
+  existing=$(docker compose -f "$COMPOSE_FILE" ps -a --services 2>/dev/null || true)
+  for svc in "${SIDECAR_SERVICES[@]}"; do
+    grep -qx "$svc" <<<"$existing" || continue
+    image=$(jq -r --arg s "$svc" '.services[$s].image // empty' <<<"$COMPOSE_CONFIG")
+    [[ "$image" == "$CI_IMAGE_PREFIX"* ]] || continue
+    echo "$svc $image"
+  done
+}
+
+# Pulls and restarts the toolbox together with the managed sidecars.
+_update_services() {
+  docker compose -f "$COMPOSE_FILE" pull toolbox "${SIDECARS[@]}"
+  docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox "${SIDECARS[@]}"
 }
 
 # ──────────────────────────────────────────────
@@ -107,6 +133,16 @@ TRACK_TAG="${GITHUB_BRANCH//\//-}"
 IMAGE_TAG="ghcr.io/a11ydevs/acessilia-toolbox:${TRACK_TAG}"
 export TRACK_TAG
 
+COMPOSE_CONFIG=$(docker compose -f "$COMPOSE_FILE" config --format json)
+SIDECARS=()
+SIDECAR_IMAGES=()
+while read -r svc image; do
+  [ -n "$svc" ] || continue
+  SIDECARS+=("$svc")
+  SIDECAR_IMAGES+=("$image")
+done < <(_managed_sidecars)
+echo "[staging-update] Managed sidecars: ${SIDECARS[*]:-none}"
+
 # ──────────────────────────────────────────────
 # 1. Check SHA of latest commit via GitHub API
 # ──────────────────────────────────────────────
@@ -123,11 +159,10 @@ LATEST_SHA=$(curl -fsS \
 # If SHA could not be obtained, pull directly (safe fallback)
 if [ -z "$LATEST_SHA" ] || [ "$LATEST_SHA" = "null" ]; then
   echo "[staging-update] ⚠️  Failed to query GitHub API. Pulling directly..."
-  docker pull "$IMAGE_TAG" 2>/dev/null || {
-    echo "[staging-update] ❌ Failed to pull $IMAGE_TAG"
+  _update_services || {
+    echo "[staging-update] ❌ Failed to pull or restart $IMAGE_TAG and its sidecars"
     exit 1
   }
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox
   docker image prune -f
   _write_status "" "" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "[staging-update] Container updated (fallback)."
@@ -158,18 +193,27 @@ else
   exit 0
 fi
 
+# The sidecars of the same commit must be published too; otherwise the API
+# would start against sidecars built from an older commit.
+for image in "${SIDECAR_IMAGES[@]}"; do
+  sidecar_sha_tag="${image%:*}:sha-$SHA7"
+  if ! docker manifest inspect "$sidecar_sha_tag" >/dev/null 2>&1; then
+    _write_status "$LATEST_SHA" "" ""
+    echo "[staging-update] ⏳ Sidecar image $sidecar_sha_tag not yet published on GHCR. Waiting for next check."
+    exit 0
+  fi
+done
+
 # ──────────────────────────────────────────────
 # 3. SHA changed and image published → update
 # ──────────────────────────────────────────────
 echo "[staging-update] 🔄 New commit detected: $SHA7. Updating..."
 
-docker pull "$IMAGE_TAG" 2>/dev/null || {
-  echo "[staging-update] ❌ Failed to pull $IMAGE_TAG"
+echo "[staging-update] 🚀 Pulling and restarting toolbox ${SIDECARS[*]}..."
+_update_services || {
+  echo "[staging-update] ❌ Failed to pull or restart $IMAGE_TAG and its sidecars"
   exit 1
 }
-
-echo "[staging-update] 🚀 Restarting container..."
-docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox
 
 # only write cache after successful restart (set -e aborts before on failure)
 echo "$LATEST_SHA" > "$CACHE_FILE"

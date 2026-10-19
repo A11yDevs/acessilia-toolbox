@@ -1,7 +1,10 @@
 # docker-compose.staging.yml — Acessilia Toolbox staging environment.
 #
-# Uses a pre-published GHCR image. The container is automatically updated
-# by the scripts/staging-update.sh script triggered by a systemd user timer.
+# Uses images pre-published on GHCR: the toolbox image (Delivery workflow) and
+# one image per sidecar (Sidecars workflow), all tagged with the tracked branch.
+# scripts/staging-update.sh, triggered by a systemd user timer, updates the
+# toolbox and its sidecars together once the images of a new commit exist.
+# Set a *_IMAGE variable only to run a locally built sidecar instead.
 #
 # Usage:
 #   docker compose -f docker-compose.staging.yml up -d
@@ -71,12 +74,12 @@ services:
       retries: 30
       start_period: 60s
 
-  # MinerU document parsing (CPU pipeline backend). The image is built from
-  # the official repo via scripts/build-mineru-image.sh (MinerU publishes no
-  # pre-built images). On a GPU host, build with the vllm base and add
-  # `deploy.resources.reservations.devices` for GPU access.
+  # MinerU document parsing (CPU pipeline backend), built by CI from
+  # docker/mineru-cpu.Dockerfile (MinerU publishes no pre-built images). On a
+  # GPU host, build with scripts/build-mineru-image.sh (vllm variant), set
+  # MINERU_SERVE_IMAGE and add `deploy.resources.reservations.devices`.
   mineru-serve:
-    image: ${MINERU_SERVE_IMAGE:-mineru:latest}
+    image: ${MINERU_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-mineru:${TRACK_TAG:-develop}}
     container_name: mineru-serve-staging
     entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
     ports:
@@ -94,10 +97,10 @@ services:
 
   # Audiveris optical music recognition sidecar (optional). Wraps the Java
   # Audiveris CLI + Tesseract behind a small FastAPI HTTP wrapper
-  # (POST /convert multipart -> MusicXML). Build the image from the
-  # audiveris-serve recipe before enabling.
+  # (POST /convert multipart -> MusicXML). Built by CI from
+  # docker/audiveris-serve.Dockerfile.
   audiveris-serve:
-    image: ${AUDIVERIS_SERVE_IMAGE:-audiveris-serve:latest}
+    image: ${AUDIVERIS_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-audiveris-serve:${TRACK_TAG:-develop}}
     container_name: audiveris-serve-staging
     ports:
       - "${AUDIVERIS_SERVE_PORT:-5003}:5003"
@@ -110,9 +113,9 @@ services:
     restart: unless-stopped
 
   # Nougat visual document transcription service (LaTeX math/tables).
-  # Built from docker/nougat-cpu.Dockerfile via scripts/build-nougat-image.sh.
+  # Built by CI from docker/nougat-cpu.Dockerfile.
   nougat-serve:
-    image: ${NOUGAT_SERVE_IMAGE:-nougat:latest}
+    image: ${NOUGAT_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-nougat:${TRACK_TAG:-develop}}
     container_name: nougat-serve-staging
     ports:
       - "${NOUGAT_SERVE_PORT:-5004}:5004"
@@ -127,11 +130,11 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # RapidLaTeXOCR math formula sidecar (optional). Built from
-  # docker/math-ocr.Dockerfile via scripts/build-math-ocr-image.sh; the Toolbox
-  # reaches it through RAPID_LATEX_OCR_URL.
+  # RapidLaTeXOCR math formula sidecar (optional). Built by CI from
+  # docker/math-ocr.Dockerfile; the Toolbox reaches it through
+  # RAPID_LATEX_OCR_URL.
   rapid-latex-ocr:
-    image: ${RAPID_LATEX_OCR_IMAGE:-rapid-latex-ocr:latest}
+    image: ${RAPID_LATEX_OCR_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-rapid-latex-ocr:${TRACK_TAG:-develop}}
     container_name: rapid-latex-ocr-staging
     ports:
       - "${RAPID_LATEX_OCR_PORT:-5005}:5004"
@@ -143,10 +146,10 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # RapidOCR page orientation sidecar (optional). Built from
+  # RapidOCR page orientation sidecar (optional). Built by CI from
   # docker/rapidocr-orient.Dockerfile; reports 503 until the engine is ready.
   rapidocr-orient:
-    image: ${RAPIDOCR_ORIENT_IMAGE:-rapidocr-orient:latest}
+    image: ${RAPIDOCR_ORIENT_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-rapidocr-orient:${TRACK_TAG:-develop}}
     container_name: rapidocr-orient-staging
     ports:
       - "${RAPIDOCR_ORIENT_PORT:-5006}:5006"
@@ -159,10 +162,10 @@ services:
     restart: unless-stopped
 
   # Pandoc + TeX Live sidecar (optional) for document.export.pdf_ua and
-  # document.export.docx. Built from docker/pdf-ua-render.Dockerfile; /health
+  # document.export.docx. Built by CI from docker/pdf-ua-render.Dockerfile; /health
   # reports 503 until pandoc, TeX and the template are found, for both routes.
   pdf-ua-render:
-    image: ${PDF_UA_RENDER_IMAGE:-pdf-ua-render:latest}
+    image: ${PDF_UA_RENDER_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-pdf-ua-render:${TRACK_TAG:-develop}}
     container_name: pdf-ua-render-staging
     ports:
       - "${PDF_UA_RENDER_PORT:-5007}:5007"
@@ -174,10 +177,10 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  # PDF/UA validation sidecar (optional). Built from
+  # PDF/UA validation sidecar (optional). Built by CI from
   # docker/verapdf-validate.Dockerfile; reports 503 until veraPDF is found.
   verapdf-validate:
-    image: ${VERAPDF_VALIDATE_IMAGE:-verapdf-validate:latest}
+    image: ${VERAPDF_VALIDATE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-verapdf-validate:${TRACK_TAG:-develop}}
     container_name: verapdf-validate-staging
     ports:
       - "${VERAPDF_VALIDATE_PORT:-5008}:5008"
