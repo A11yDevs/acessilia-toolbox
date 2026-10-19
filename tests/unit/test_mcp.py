@@ -197,3 +197,50 @@ def test_capabilities_resource_separates_registered_and_declared_providers() -> 
     [entry] = json.loads(content)
     assert entry["providers"] == ["docling", "mineru"]
     assert entry["declared_providers"] == ["docling", "teleocr"]
+
+
+def _mcp_with_two_versions(calls: list[dict[str, Any]]) -> ToolboxMCPServer:
+    """The capability is published as version 1 and version 2."""
+
+    class RecordingProvider(StubProvider):
+        def execute(self, capability_id: str, payload: bytes, **kwargs: Any) -> ExtractionResult:
+            calls.append(kwargs)
+            return super().execute(capability_id, payload)
+
+    version_2 = {**MANIFEST, "version": 2, "description": "Extract document structure, v2."}
+    caps = CapabilityRegistry(
+        [CapabilityManifest.model_validate(m) for m in (MANIFEST, version_2)]
+    )
+    providers = ProviderRegistry(
+        [ProviderDescriptor.model_validate({"id": "docling", "capabilities": [CAPABILITY]})]
+    )
+    executor = CapabilityExecutor(caps, providers, lambda d: RecordingProvider(d))
+    return create_mcp_app(caps, providers, executor)
+
+
+def test_a_capability_in_two_versions_is_one_tool_running_the_latest(tmp_path: Any) -> None:
+    calls: list[dict[str, Any]] = []
+    mcp = _mcp_with_two_versions(calls)
+
+    [tool] = mcp.list_tools()
+    assert tool["description"].strip() == "Extract document structure, v2."
+
+    document = tmp_path / "sample.pdf"
+    document.write_bytes(b"%PDF-test")
+    mcp.call_tool(tool["name"], {"file": str(document)})
+    assert [call.get("capability_version") for call in calls] == [2]
+
+
+def test_a_capability_in_two_versions_is_one_planning_action() -> None:
+    mcp = _mcp_with_two_versions([])
+
+    domain = mcp.read_resource("acessilia://planning/domain")
+    assert domain.count("(:action document-structure-extract") == 1
+    planning = [r["uri"] for r in mcp.list_resources() if "planning/capabilities/" in r["uri"]]
+    assert planning == [f"acessilia://planning/capabilities/{CAPABILITY}"]
+
+
+def test_the_catalogue_lists_every_version_and_flags_the_latest() -> None:
+    content = _mcp_with_two_versions([]).read_resource("acessilia://capabilities")
+
+    assert [(e["version"], e["latest"]) for e in json.loads(content)] == [(1, False), (2, True)]

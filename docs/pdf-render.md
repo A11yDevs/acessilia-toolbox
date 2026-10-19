@@ -13,8 +13,10 @@ published side by side.
 | Result | `artifact/image@1`, PNG inline as base64 | `artifact/image@2`, PNG stored as an artifact (`by_reference`) |
 | Selection | explicit `version=1` only | default when no version is given |
 
-Version 1 stays executable while clients migrate; MCP tools and PDDL actions
-expose only version 2.
+Version 1 stays executable through REST (`version=1`) and the CLI
+(`--capability-version 1`) while clients migrate. MCP tools, which take no
+version, and PDDL actions expose only version 2. The catalogue flags version 2
+with `latest: true` (see [api.md](api.md#capability-versions)).
 
 ## Version 2
 
@@ -31,14 +33,21 @@ expose only version 2.
 derives from the image resolution: pixels at 72 dpi when the image declares
 none. The response reports the page size in the same units.
 
+**Rotated pages:** for a PDF page with `/Rotate`, page units are those of the
+page **as rotated**, the way it is displayed. The `clip` (including the
+`BOTTOMLEFT` conversion), the reported `page_width`/`page_height` and the PNG
+all follow that space: a 200 × 100 page with `/Rotate 90` is 100 × 200.
+Coordinates taken from the unrotated space (the `MediaBox`) clip the wrong
+region.
+
 **Clip semantics:**
 - A `BOTTOMLEFT` box is converted to a top-left origin with the page height.
 - Swapped corners are normalized.
 - The box is intersected with the page.
 - A box that does not intersect the page, or that leaves less than one unit
   in either direction, is refused.
-- Unknown fields, non-numeric or non-finite coordinates and other origins are
-  refused.
+- Unknown fields, non-numeric coordinates (numeric strings and booleans
+  included), non-finite coordinates and other origins are refused.
 
 **Limit:** a render above 20,000,000 pixels (width × height) is refused;
 lower `dpi` or set `max_side`.

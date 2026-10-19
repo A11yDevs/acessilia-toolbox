@@ -92,8 +92,13 @@ def list_capabilities(
     registry: Annotated[CapabilityRegistry, Depends(capabilities)],
     provider_registry: Annotated[ProviderRegistry, Depends(providers)],
 ) -> list[CapabilitySummary]:
+    latest = {manifest.key for manifest in registry.latest()}
     return [
-        CapabilitySummary.of(manifest, _registered(provider_registry, manifest.id))
+        CapabilitySummary.of(
+            manifest,
+            _registered(provider_registry, manifest.id),
+            latest=manifest.key in latest,
+        )
         for manifest in registry.manifests()
     ]
 
@@ -111,7 +116,11 @@ def get_capability(
     version: int | None = None,
 ) -> CapabilityDetail:
     manifest = registry.get(capability_id, version)
-    return CapabilityDetail.of(manifest, _registered(provider_registry, manifest.id))
+    return CapabilityDetail.of(
+        manifest,
+        _registered(provider_registry, manifest.id),
+        latest=manifest.version == registry.get(capability_id).version,
+    )
 
 
 def _registered(registry: ProviderRegistry, capability_id: str) -> list[str]:

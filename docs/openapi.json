@@ -1882,6 +1882,11 @@
                         "type": "array",
                         "title": "Declared Providers"
                     },
+                    "latest": {
+                        "type": "boolean",
+                        "title": "Latest",
+                        "default": true
+                    },
                     "requires": {
                         "items": {
                             "type": "string"
@@ -1969,6 +1974,11 @@
                         },
                         "type": "array",
                         "title": "Declared Providers"
+                    },
+                    "latest": {
+                        "type": "boolean",
+                        "title": "Latest",
+                        "default": true
                     }
                 },
                 "type": "object",

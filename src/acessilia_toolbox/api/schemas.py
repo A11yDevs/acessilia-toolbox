@@ -38,15 +38,23 @@ class CapabilitySummary(BaseModel):
     providers: list[str]
     #: Providers the manifest binds, including opt-in ones not registered here.
     declared_providers: list[str]
+    #: Whether this is the highest version of the capability: the one a request
+    #: without a version executes.
+    latest: bool = True
 
     @classmethod
     def of(
-        cls, manifest: CapabilityManifest, registered: list[str] | None = None
+        cls,
+        manifest: CapabilityManifest,
+        registered: list[str] | None = None,
+        *,
+        latest: bool = True,
     ) -> CapabilitySummary:
         declared = [binding.id for binding in manifest.providers]
         return cls(
             id=manifest.id,
             version=manifest.version,
+            latest=latest,
             description=manifest.description,
             input_schema=manifest.input.schema_ref,
             output_schema=manifest.output.schema_ref,
@@ -65,9 +73,13 @@ class CapabilityDetail(CapabilitySummary):
 
     @classmethod
     def of(
-        cls, manifest: CapabilityManifest, registered: list[str] | None = None
+        cls,
+        manifest: CapabilityManifest,
+        registered: list[str] | None = None,
+        *,
+        latest: bool = True,
     ) -> CapabilityDetail:
-        summary = CapabilitySummary.of(manifest, registered)
+        summary = CapabilitySummary.of(manifest, registered, latest=latest)
         return cls(
             **summary.model_dump(),
             requires=manifest.semantics.requires,

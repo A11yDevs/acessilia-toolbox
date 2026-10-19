@@ -4,11 +4,13 @@ description: >-
   Render one page of a PDF, PNG or JPEG into a PNG image, optionally clipped to
   a region and bounded in size. The PNG is stored as an artifact and the result
   carries its reference and the transformation actually applied, never the
-  bytes. Version 1 (inline base64, PDF only) stays available by explicit
-  version while clients migrate.
+  bytes. Version 1 (inline base64, PDF only) stays available while clients
+  migrate, through REST and the CLI by explicit version; MCP tools run this
+  version.
 
 input:
-  schema: artifact/document@1
+  # Raster pages are not documents: artifact/binary@1 covers PDF, PNG and JPEG.
+  schema: artifact/binary@1
   media_types:
     - application/pdf
     - image/png

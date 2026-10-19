@@ -10,7 +10,11 @@ import fitz
 import pytest
 
 from acessilia_toolbox.core.capability import CapabilityRegistry
-from acessilia_toolbox.core.errors import InvalidInputError, UnsupportedMediaTypeError
+from acessilia_toolbox.core.errors import (
+    InvalidInputError,
+    ProviderExecutionError,
+    UnsupportedMediaTypeError,
+)
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers.pymupdf_pdf import MAX_RENDER_PIXELS, PyMuPDFProvider
@@ -120,6 +124,8 @@ def test_clip_is_converted_normalized_and_intersected(clip, expected):
         ({"left": 300, "top": 0, "right": 400, "bottom": 50}, "does not intersect"),
         ({"left": 0, "top": 0, "right": 50}, "numeric"),
         ({"left": 0, "top": 0, "right": "x", "bottom": 50}, "numeric"),
+        ({"left": 0, "top": 0, "right": "50", "bottom": 50}, "numeric"),
+        ({"left": 0, "top": 0, "right": 50, "bottom": True}, "numeric"),
         ({"left": 0, "top": 0, "right": float("inf"), "bottom": 50}, "finite"),
         ({"left": 0, "top": 0, "right": 50, "bottom": 50, "origin": "CENTER"}, "origin"),
         ({"left": 0, "top": 0, "right": 50, "bottom": 50, "unit": "px"}, "unknown clip"),
@@ -129,6 +135,40 @@ def test_clip_is_converted_normalized_and_intersected(clip, expected):
 def test_invalid_clips_are_refused(clip, message):
     with pytest.raises(InvalidInputError, match=message):
         render(_pdf(), clip=clip)
+
+
+def test_clip_is_in_the_rotated_page_space():
+    """page.rect, the clip and the reported page size all follow /Rotate."""
+    doc = fitz.open()
+    try:
+        page = doc.new_page(width=200, height=100)
+        # Unrotated, the red square covers the top-left 50 x 50 units.
+        page.draw_rect(fitz.Rect(0, 0, 50, 50), color=(1, 0, 0), fill=(1, 0, 0))
+        page.set_rotation(90)
+        payload = doc.tobytes()
+    finally:
+        doc.close()
+
+    full, _ = render(payload, dpi=72)
+    assert (full["page_width"], full["page_height"]) == (100, 200)
+    # Rotated 90 degrees clockwise, the square sits at the top right.
+    document, output = render(
+        payload, dpi=72, clip={"left": 50, "top": 200, "right": 100, "bottom": 150,
+                               "origin": "BOTTOMLEFT"}
+    )
+    assert document["clip"] == {"left": 50, "top": 0, "right": 100, "bottom": 50}
+    assert fitz.Pixmap(output.payload).pixel(25, 25) == (255, 0, 0)
+
+
+def test_unknown_versions_fail_loudly():
+    with pytest.raises(ProviderExecutionError, match=r"pdf\.render@3"):
+        PyMuPDFProvider(_descriptor()).execute(
+            "pdf.render",
+            _pdf(),
+            filename="doc.pdf",
+            media_type="application/pdf",
+            capability_version=3,
+        )
 
 
 @pytest.mark.parametrize(

@@ -81,6 +81,8 @@ class PyMuPDFProvider:
 
         if capability_id == "pdf.split":
             document = self._split(payload, filename, params)
+        elif capability_id == "pdf.render" and capability_version == 1:
+            document = self._render(payload, filename, params)
         elif capability_id == "pdf.render" and capability_version == 2:
             document, png = self._render_v2(payload, filename, media_type, params)
             stem = filename.rsplit(".", 1)[0] or "document"
@@ -88,7 +90,11 @@ class PyMuPDFProvider:
                 BinaryOutput(png, "image/png", f"{stem}.page-{document['page_number']}.png"),
             )
         elif capability_id == "pdf.render":
-            document = self._render(payload, filename, params)
+            # Fail loudly rather than answer a newer contract with an older one.
+            raise ProviderExecutionError(
+                f"pdf.render@{capability_version} is not implemented by the PyMuPDF provider",
+                provider=self.descriptor.id,
+            )
         else:
             raise ProviderExecutionError(
                 f"unknown capability {capability_id} for PyMuPDF provider",
@@ -294,12 +300,15 @@ def _clip_rect(page_rect: Any, clip: Any, provider: str) -> Any:
         raise InvalidInputError(
             f"clip.origin must be one of {sorted(CLIP_ORIGINS)}", provider=provider
         )
-    try:
-        left, top, right, bottom = (float(clip[key]) for key in ("left", "top", "right", "bottom"))
-    except (KeyError, TypeError, ValueError) as error:
+    values = [clip.get(key) for key in ("left", "top", "right", "bottom")]
+    # Strict like the other parameters: no numeric strings, and bool is not a number.
+    if not all(
+        isinstance(value, int | float) and not isinstance(value, bool) for value in values
+    ):
         raise InvalidInputError(
             "clip needs numeric left, top, right and bottom", provider=provider
-        ) from error
+        )
+    left, top, right, bottom = (float(value) for value in values)
     if not all(math.isfinite(value) for value in (left, top, right, bottom)):
         raise InvalidInputError("clip coordinates must be finite", provider=provider)
     if origin == "BOTTOMLEFT":

@@ -15,8 +15,10 @@ contrato são publicadas lado a lado.
 | Resultado | `artifact/image@1`, PNG inline em base64 | `artifact/image@2`, PNG guardado como artefato (`by_reference`) |
 | Seleção | só com `version=1` explícito | padrão quando nenhuma versão é informada |
 
-A versão 1 continua executável enquanto os clientes migram; as ferramentas MCP
-e as ações PDDL expõem só a versão 2.
+A versão 1 continua executável pela REST (`version=1`) e pelo CLI
+(`--capability-version 1`) enquanto os clientes migram. As ferramentas MCP, que
+não recebem versão, e as ações PDDL expõem só a versão 2. O catálogo marca a
+versão 2 com `latest: true` (veja [api.md](api.md#capability-versions)).
 
 ## Versão 2
 
@@ -33,6 +35,13 @@ e as ações PDDL expõem só a versão 2.
 o PyMuPDF deriva da resolução da imagem: pixels a 72 dpi quando a imagem não
 declara nenhuma. A resposta informa o tamanho da página nas mesmas unidades.
 
+**Páginas rotacionadas:** em um PDF com `/Rotate`, as unidades de página são as
+da página **já rotacionada**, como ela é exibida. O `clip` (incluindo a
+conversão de `BOTTOMLEFT`), o `page_width`/`page_height` informados e o PNG
+seguem esse espaço: uma página de 200 × 100 com `/Rotate 90` tem 100 × 200.
+Coordenadas tiradas do espaço não rotacionado (o `MediaBox`) recortam a região
+errada.
+
 **Semântica do recorte:**
 - Uma caixa `BOTTOMLEFT` é convertida para origem no topo com a altura da
   página.
@@ -40,8 +49,8 @@ declara nenhuma. A resposta informa o tamanho da página nas mesmas unidades.
 - A caixa é intersectada com a página.
 - Uma caixa que não toca a página, ou que deixa menos de uma unidade em alguma
   direção, é recusada.
-- Campos desconhecidos, coordenadas não numéricas ou não finitas e outras
-  origens são recusados.
+- Campos desconhecidos, coordenadas não numéricas (inclusive strings numéricas
+  e booleanos) ou não finitas e outras origens são recusados.
 
 **Limite:** uma renderização acima de 20.000.000 de pixels (largura × altura)
 é recusada; reduza o `dpi` ou defina `max_side`.
