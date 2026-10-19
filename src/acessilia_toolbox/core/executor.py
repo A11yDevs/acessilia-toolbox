@@ -156,12 +156,18 @@ class CapabilityExecutor:
                 # fingerprint; otherwise the cache could serve a stale result.
                 input_fingerprint = fingerprint_bytes(execution_payload)
 
+        # Only adapters of capabilities with more than one version need to
+        # know which contract they serve; version 1 keeps the original call.
+        version_kwargs = (
+            {"capability_version": manifest.version} if manifest.version > 1 else {}
+        )
         extraction = adapter.execute(
             manifest.id,
             execution_payload,
             filename=filename,
             media_type=media_type,
             parameters=parameters,
+            **version_kwargs,
         )
 
         # Capabilities that return a plain dict or list (e.g. pdf.split,

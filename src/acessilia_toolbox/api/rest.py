@@ -551,7 +551,7 @@ def planning_domain(
     registry: Annotated[CapabilityRegistry, Depends(capabilities)],
 ) -> Response:
     return Response(
-        content=domain_fragment(registry.manifests()),
+        content=domain_fragment(registry.latest()),
         media_type="text/plain",
     )
 

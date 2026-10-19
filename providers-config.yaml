@@ -41,6 +41,9 @@ providers:
       - pdf.render
     media_types:
       - application/pdf
+      # pdf.render@2 also renders raster inputs.
+      - image/png
+      - image/jpeg
 
   - id: nougat
     version: "0.1.17"

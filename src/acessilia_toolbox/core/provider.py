@@ -84,6 +84,10 @@ class ProviderAdapter(Protocol):
 
     Adapters stay thin: transport plus shape mapping. Normalization into the
     canonical structure belongs to the core.
+
+    An adapter of a capability published in more than one version also accepts
+    a keyword ``capability_version``; the executor passes it for versions above
+    1 only, so single-version adapters keep this signature unchanged.
     """
 
     descriptor: ProviderDescriptor

@@ -24,6 +24,7 @@ toolbox.
 | [installation.md](installation.md)                   | Development and deployment guidance                                 |
 | [testing.md](testing.md)                             | Testing strategy                                                    |
 | [media-inspect.md](media-inspect.md)                 | Deterministic media triage before heavy extraction                  |
+| [pdf-render.md](pdf-render.md)                       | Page rendering: `pdf.render` v1 and v2 (clip, size bound, raster inputs) |
 | [contribution.md](contribution.md)                   | Contribution workflow                                               |
 | [uml/architecture.md](uml/architecture.md)           | Architecture diagrams                                               |
 | [uml/use_cases.md](uml/use_cases.md)                 | Use cases                                                           |

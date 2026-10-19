@@ -195,7 +195,7 @@ flowchart TB
 | `document.structure.extract` | docling, nougat, mineru (teleocr: opt-in) | ✅ |
 | `document.layout.analyze` | docling-layout, mineru-layout | ✅ |
 | `document.ocr` | docling-ocr, mineru-ocr | ✅ |
-| `pdf.split`, `pdf.render` | pymupdf-pdf (in-process) | ✅ |
+| `pdf.split`, `pdf.render` (v1, v2) | pymupdf-pdf (in-process) | ✅ |
 | `math.recognize` | docling-math, rapid-latex-ocr | ✅ |
 | `math.convert`, `math.verbalize` | pure-math (in-process) | ✅ |
 | `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
@@ -299,6 +299,7 @@ pages: 1; elements: 7; obligations: 0
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
 | [Page Orientation](docs/rapidocr-orient.md) | Optional `image.page.orient` sidecar and auto-rotate preprocessing |
 | [PDF/UA Export](docs/pdf-ua-export.md) | `document.export.pdf_ua` sidecar with a pinned Pandoc and TeX Live |
+| [Page rendering](docs/pdf-render.md) | `pdf.render` v2: clip, size bound and raster inputs, PNG by reference |
 | [PDF/UA Validation](docs/pdf-ua-validation.md) | `pdf.validate.pdf_ua` sidecar with a pinned veraPDF |
 | [TeleOCR Adapter](docs/teleocr.md) | Optional image extraction, configuration and HTTP contract |
 | [TeleOCR Evaluation](docs/teleocr-evaluation.md) | Local gains, failure cases, coverage and remaining service validation |

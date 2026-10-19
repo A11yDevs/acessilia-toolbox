@@ -87,7 +87,8 @@ class ToolboxMCPServer:
 
     def list_tools(self) -> list[dict[str, Any]]:
         tools = []
-        for manifest in self._capabilities.manifests():
+        # One tool per capability: call_tool executes the latest version.
+        for manifest in self._capabilities.latest():
             tools.append(
                 _tool_from_capability(
                     manifest.model_dump(mode="json", by_alias=True),
@@ -220,7 +221,7 @@ class ToolboxMCPServer:
             },
         ]
 
-        for manifest in self._capabilities.manifests():
+        for manifest in self._capabilities.latest():
             resources.append(
                 {
                     "uri": f"{TOOLBOX_PREFIX}planning/capabilities/{manifest.id}",
@@ -259,7 +260,7 @@ class ToolboxMCPServer:
             )
 
         if uri == f"{TOOLBOX_PREFIX}planning/domain":
-            return domain_fragment(self._capabilities.manifests())
+            return domain_fragment(self._capabilities.latest())
 
         if uri == f"{TOOLBOX_PREFIX}planning/predicates":
             return json.dumps(
