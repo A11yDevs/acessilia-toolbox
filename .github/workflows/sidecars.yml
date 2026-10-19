@@ -1,0 +1,130 @@
+name: Sidecars
+
+# Builds and publishes every provider sidecar image, so the servers pull them
+# instead of building them by hand. Each image is tagged like the toolbox image
+# (branch, sha-<7>, latest on main, the version on a release tag), and
+# scripts/staging-update.sh only updates a deployment once the sidecars of the
+# same commit are published, so the API and its sidecars cannot drift apart.
+#
+# Unchanged sidecars rebuild from the registry layer cache in a few minutes.
+# A pull request that touches a sidecar builds every image without pushing it.
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'release/**'
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'docker/**'
+      - '.github/workflows/sidecars.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: sidecars-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' && github.ref_name != 'main' }}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: a11ydevs/acessilia-toolbox
+  PUSH: ${{ github.event_name != 'pull_request' }}
+
+jobs:
+  publish:
+    name: publish ${{ matrix.sidecar.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        sidecar:
+          - { name: pdf-ua-render, dockerfile: docker/pdf-ua-render.Dockerfile }
+          - { name: verapdf-validate, dockerfile: docker/verapdf-validate.Dockerfile }
+          - { name: rapidocr-orient, dockerfile: docker/rapidocr-orient.Dockerfile }
+          - { name: rapid-latex-ocr, dockerfile: docker/math-ocr.Dockerfile }
+          - { name: audiveris-serve, dockerfile: docker/audiveris-serve.Dockerfile }
+          - { name: nougat, dockerfile: docker/nougat-cpu.Dockerfile }
+          - { name: mineru, dockerfile: docker/mineru-cpu.Dockerfile }
+
+    steps:
+      - name: Check out commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Free runner disk space
+        # The MinerU and Nougat images carry CPU torch (several GB); the
+        # preinstalled SDKs below are not used by any sidecar build.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GitHub Container Registry
+        if: env.PUSH == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image tags
+        id: tags
+        env:
+          NAME: ${{ matrix.sidecar.name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          SHA: ${{ github.sha }}
+        run: |
+          IMAGE="${REGISTRY}/${IMAGE_PREFIX}-${NAME}"
+
+          # Docker tags do not accept "/" (release/0.1.0 -> release-0.1.0)
+          SAFE_REF="${REF_NAME//\//-}"
+          if [ "$REF_TYPE" = "tag" ]; then
+            SAFE_REF="${SAFE_REF#v}"
+          fi
+
+          TAGS="${IMAGE}:${SAFE_REF},${IMAGE}:sha-${SHA:0:7}"
+          if [ "$REF_TYPE" = "branch" ] && [ "$REF_NAME" = "main" ]; then
+            TAGS="${TAGS},${IMAGE}:latest"
+          fi
+
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish image
+        id: publish
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ${{ matrix.sidecar.dockerfile }}
+          platforms: linux/amd64
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=acessilia-toolbox-${{ matrix.sidecar.name }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=registry,ref=${{ steps.tags.outputs.image }}:buildcache
+          cache-to: ${{ env.PUSH == 'true' && format('type=registry,ref={0}:buildcache,mode=max', steps.tags.outputs.image) || '' }}
+
+      - name: Show immutable image reference
+        if: env.PUSH == 'true'
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          echo "${IMAGE}@${DIGEST}"
+          echo "${IMAGE}@${DIGEST}" >> "$GITHUB_STEP_SUMMARY"

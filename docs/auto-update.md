@@ -1,17 +1,40 @@
 # Automatic Image Update (Auto-Update)
 
-The Acessilia Toolbox offers automatic staging container updates via **systemd user timer**. Whenever a new commit is merged into `develop` (or the tracked branch), the container is automatically updated within 5 minutes.
+The Acessilia Toolbox offers automatic staging container updates via **systemd user timer**. Whenever a new commit is merged into `develop` (or the tracked branch), the toolbox container and its sidecars are updated together within 5 minutes of their images being published.
 
 ## How it works
 
 ```
-[Git push] → [GitHub Actions: CI + Delivery] → [GHCR: nova imagem develop]
+[Git push] → [GitHub Actions: CI + Delivery]  → [GHCR: toolbox image develop, sha-<7>]
+           → [GitHub Actions: Sidecars]       → [GHCR: acessilia-toolbox-<sidecar> develop, sha-<7>]
                                                       ↑
 [systemd timer (5 min)] → [staging-update.sh] ────────┘
                               │
-                              ├── 1. Consulta GitHub API (SHA do último commit)
-                              ├── 2. Confirma que a imagem sha-<7> já foi publicada
-                              └── 3. docker pull + docker compose up -d
+                              ├── 1. Queries the GitHub API (SHA of the latest commit)
+                              ├── 2. Confirms the toolbox image sha-<7> is published
+                              ├── 3. Confirms the sha-<7> image of every sidecar it runs is published
+                              └── 4. docker compose pull + up -d (toolbox and sidecars)
+```
+
+The sidecars it manages are those with a container on the host whose image is
+the CI-published one. A sidecar whose `*_IMAGE` variable points at a local
+build is left alone (see [installation](installation.md#sidecar-images)).
+
+### Moving a server from hand-built sidecars
+
+Sidecar images used to be built on each server. To switch a deployment to the
+CI-published images, once per server:
+
+```bash
+# 1. Drop the local image overrides (MINERU_SERVE_IMAGE=mineru:latest, ...)
+sed -i -E '/^(MINERU_SERVE|NOUGAT_SERVE|AUDIVERIS_SERVE|RAPID_LATEX_OCR|RAPIDOCR_ORIENT|PDF_UA_RENDER|VERAPDF_VALIDATE)_IMAGE=/d' .env
+
+# 2. Fetch the new staging-update.sh and docker-compose.staging.yml with
+#    scripts/update_scripts.sh (from the server's scripts directory), then
+#    start the sidecars from GHCR in the staging directory
+update_scripts.sh
+docker compose -f docker-compose.staging.yml pull
+docker compose -f docker-compose.staging.yml up -d
 ```
 
 ## Installation
@@ -110,10 +133,11 @@ systemctl --user stop staging-update.timer
 systemctl --user disable staging-update.timer
 ```
 
-### Check which image is running
+### Check which images are running
 
 ```bash
-docker inspect acessilia-toolbox-staging | jq '.[0].Config.Image'
+docker compose -f docker-compose.staging.yml images
+docker inspect pdf-ua-render-staging | jq -r '.[0].Config.Labels["org.opencontainers.image.revision"]'
 ```
 
 ## Branch tracking (BHS)

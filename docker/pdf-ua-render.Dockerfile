@@ -36,8 +36,14 @@ RUN arch="${TARGETARCH:-$(dpkg --print-architecture)}" && \
     rm /tmp/pandoc.deb
 
 COPY docker/pdf-ua-render/texlive.profile /tmp/texlive.profile
-RUN mkdir /tmp/install-tl && \
-    curl -fsSL "${TEXLIVE_REPOSITORY}/install-tl-unx.tar.gz" \
+# install-tl and tlmgr download through curl with a stall limit: their default
+# downloader (Perl LWP) can hang for good on a connection that stops mid-file,
+# which froze CI builds. A transfer below 1 KB/s for 30 s is aborted and retried.
+RUN export TL_DOWNLOAD_PROGRAM=curl \
+        TL_DOWNLOAD_ARGS="--user-agent texlive/curl --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 --speed-limit 1024 --speed-time 30 --max-time 600 --fail --location --silent --output" && \
+    mkdir /tmp/install-tl && \
+    curl -fsSL --retry 5 --retry-all-errors --connect-timeout 30 --speed-limit 1024 --speed-time 30 \
+        "${TEXLIVE_REPOSITORY}/install-tl-unx.tar.gz" \
         | tar -xz -C /tmp/install-tl --strip-components=1 && \
     /tmp/install-tl/install-tl \
         --profile=/tmp/texlive.profile \
