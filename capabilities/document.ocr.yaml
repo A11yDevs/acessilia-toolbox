@@ -33,4 +33,4 @@ providers:
   - id: docling-ocr
     version: "1.32+"
   - id: mineru-ocr
-    version: "2.1+"
+    version: "4.0.12+"
