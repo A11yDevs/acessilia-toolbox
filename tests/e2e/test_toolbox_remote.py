@@ -3,7 +3,8 @@
 Requires TOOLBOX_BASE_URL to be set (e.g. https://www.acessilia3.inf.ufg.br/toolbox).
 Skipped automatically when the variable is absent — never blocks the local suite.
 Set TOOLBOX_API_KEY too when the server requires authentication: every request
-then carries it as a Bearer token.
+then carries it as a Bearer token. Both can live in .env.e2e (copy
+.env.e2e.example), which conftest.py loads; the environment takes precedence.
 """
 
 from __future__ import annotations
