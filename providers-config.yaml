@@ -109,6 +109,19 @@ providers:
     media_types:
       - application/json
 
+  # DOCX export on the same sidecar: it reuses the pinned Pandoc, without TeX.
+  # Pandoc runs with --sandbox, so the AST cannot make it read local files.
+  - id: pandoc-docx
+    version: "1.0"
+    transport: http
+    endpoint: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
+    health_path: /health
+    timeout_seconds: 180
+    capabilities:
+      - document.export.docx
+    media_types:
+      - application/json
+
   # veraPDF sidecar for PDF/UA validation. The release is pinned in
   # docker/verapdf-validate.Dockerfile and reported by /version, so it is part
   # of the cache key.

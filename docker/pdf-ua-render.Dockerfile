@@ -1,4 +1,5 @@
-# PDF/UA rendering sidecar (document.export.pdf_ua): Pandoc + a frozen TeX Live.
+# Export sidecar: Pandoc + a frozen TeX Live for document.export.pdf_ua, and the
+# same Pandoc, without TeX, for document.export.docx.
 #
 # TeX Live is installed from the year's frozen "tlnet-final" repository, so a
 # rebuild yields the same kernel and tagging packages instead of whatever the
@@ -76,7 +77,9 @@ RUN luaotfload-tool --update && \
     printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
         | pandoc --from json --to pdf --pdf-engine=lualatex \
             --template=/app/templates/pdf_ua.tex -o /tmp/smoke.pdf && \
-    rm /tmp/smoke.pdf
+    printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
+        | pandoc --from json --to docx --sandbox -o /tmp/smoke.docx && \
+    rm /tmp/smoke.pdf /tmp/smoke.docx
 
 EXPOSE 5007
 

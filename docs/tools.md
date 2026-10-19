@@ -21,6 +21,7 @@ roadmap candidates.
 | Chemistry     | `chem.recognize`, `chem.convert`                        | docling-serve VLM (Granite Vision), pure-python mhchem | [implemented] |
 | Accessibility | `accessibility.mark`                                    | pure-python (in-process)                   | [implemented] |
 | PDF/UA        | `document.export.pdf_ua`, `pdf.validate.pdf_ua`         | Pandoc + TeX Live, veraPDF (sidecars)      | [implemented] |
+| DOCX          | `document.export.docx`                                  | Pandoc (PDF/UA sidecar)                    | [implemented] |
 | Code          | `code.normalize`                                        | pure-python (in-process)                   | [implemented] |
 | Text          | `text.postprocess`                                      | pure-python (in-process)                   | [implemented] |
 | Datasets      | `dataset.list`, `dataset.get_item`, `dataset.sync`, ... | GitHub, HuggingFace (in-process, optional) | [implemented] |
@@ -153,6 +154,16 @@ A single provider, `pandoc-pdf-ua`, calls the `pdf-ua-render` sidecar
 release. Configure the endpoint with `PDF_UA_RENDER_URL`. The PDF is returned by
 reference, so the capability needs an artifact store. See
 [pdf-ua-export.md](pdf-ua-export.md).
+
+## DOCX export
+
+``` text
+document.export.docx : Pandoc JSON AST -> Word document, stored as an artifact
+```
+
+The `pandoc-docx` provider calls the `/render/docx` route of the same
+`pdf-ua-render` sidecar, which runs its pinned Pandoc with `--sandbox` and no
+TeX. The DOCX is returned by reference. See [docx-export.md](docx-export.md).
 
 ## PDF/UA validation
 

@@ -202,6 +202,7 @@ flowchart TB
 | `music.omr` | homr (in-process, local installs only), audiveris (sidecar) | ✅ |
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
 | `document.export.pdf_ua` | pandoc-pdf-ua (sidecar, optional; PDF returned as an artifact) | ✅ |
+| `document.export.docx` | pandoc-docx (same sidecar, optional; DOCX returned as an artifact) | ✅ |
 | `pdf.validate.pdf_ua` | verapdf (sidecar, optional; PDF/UA-1 or PDF/UA-2 profile) | ✅ |
 | `document.ocr.page`, `document.adjudicate.page`, `document.adjudicate.region`, `table.recognize` | qwen3-vl-8b (OpenAI-compatible VLM server, `VLM_SERVE_URL`) | ✅ |
 | `chem.recognize` | docling-chem (Granite Vision VLM) | ✅ |
@@ -299,6 +300,7 @@ pages: 1; elements: 7; obligations: 0
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
 | [Page Orientation](docs/rapidocr-orient.md) | Optional `image.page.orient` sidecar and auto-rotate preprocessing |
 | [PDF/UA Export](docs/pdf-ua-export.md) | `document.export.pdf_ua` sidecar with a pinned Pandoc and TeX Live |
+| [DOCX Export](docs/docx-export.md) | `document.export.docx` on the same sidecar, with Pandoc sandboxed |
 | [Page rendering](docs/pdf-render.md) | `pdf.render` v2: clip, size bound and raster inputs, PNG by reference |
 | [PDF/UA Validation](docs/pdf-ua-validation.md) | `pdf.validate.pdf_ua` sidecar with a pinned veraPDF |
 | [TeleOCR Adapter](docs/teleocr.md) | Optional image extraction, configuration and HTTP contract |

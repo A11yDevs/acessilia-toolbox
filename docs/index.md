@@ -20,6 +20,8 @@ toolbox.
 | [rapidocr-orient.pt-br.md](rapidocr-orient.pt-br.md) | Page orientation provider (Brazilian Portuguese)                    |
 | [rapidocr-orient.md](rapidocr-orient.md)             | Optional page orientation sidecar and auto-rotate preprocessing     |
 | [pdf-ua-export.md](pdf-ua-export.md)                 | PDF/UA export sidecar, pinned toolchain and artifact output         |
+| [docx-export.md](docx-export.md)                     | DOCX export on the same sidecar (English)                           |
+| [docx-export.pt-br.md](docx-export.pt-br.md)         | DOCX export on the same sidecar (Brazilian Portuguese)              |
 | [pdf-ua-validation.md](pdf-ua-validation.md)         | PDF/UA validation sidecar (veraPDF) and its report                  |
 | [installation.md](installation.md)                   | Development and deployment guidance                                 |
 | [testing.md](testing.md)                             | Testing strategy                                                    |
