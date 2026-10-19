@@ -223,3 +223,5 @@ __marimo__/
 
 # Local development overrides (credentials, local endpoints)
 .env.local
+# Remote Toolbox the E2E smoke tests target (holds its API key)
+.env.e2e
