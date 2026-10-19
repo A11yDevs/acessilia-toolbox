@@ -158,8 +158,9 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # PDF/UA rendering sidecar (optional). Built from
-  # docker/pdf-ua-render.Dockerfile; reports 503 until pandoc and TeX are found.
+  # Pandoc + TeX Live sidecar (optional) for document.export.pdf_ua and
+  # document.export.docx. Built from docker/pdf-ua-render.Dockerfile; /health
+  # reports 503 until pandoc, TeX and the template are found, for both routes.
   pdf-ua-render:
     image: ${PDF_UA_RENDER_IMAGE:-pdf-ua-render:latest}
     container_name: pdf-ua-render-staging

@@ -1,4 +1,4 @@
-"""Pandoc + TeX Live sidecar that renders a Pandoc JSON AST into tagged PDF/UA.
+"""Pandoc + TeX Live sidecar that renders a Pandoc JSON AST into tagged PDF/UA or DOCX.
 
 The toolchain lives in this image only, pinned by docker/pdf-ua-render.Dockerfile,
 so every consumer gets the same LaTeX kernel, tagging packages and template.
@@ -10,6 +10,16 @@ The AST is untrusted input. Raw TeX nodes are rejected anywhere in it, the
 metadata included (the template prints title, author and date), so every
 string reaches LaTeX escaped by Pandoc; on top of that, shell escape is off and TeX
 may only write below its working directory.
+
+``/render/docx`` uses the same Pandoc without TeX. Only raw OpenXML nodes are
+rejected there: the docx writer pastes them into the document, while it drops
+every other raw format (TeX, HTML, ...) without a trace. Pandoc runs with
+``--sandbox``, so an image or include in the AST cannot make it read local
+files or URLs; a dropped image leaves its alt text behind.
+
+``/health`` checks the whole toolchain, TeX included, although ``/render/docx``
+needs only Pandoc: one health state for one image, at the cost of reporting the
+DOCX route down when only TeX is broken.
 """
 
 from __future__ import annotations
@@ -29,7 +39,7 @@ from typing import Annotated, Any
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.1.0"
 TEMPLATE_PATH = Path(
     os.environ.get("PDF_UA_TEMPLATE", Path(__file__).parent / "templates" / "pdf_ua.tex")
 )
@@ -40,6 +50,10 @@ MAX_AST_BYTES = int(os.environ.get("PDF_UA_MAX_AST_BYTES", str(20 * 1024 * 1024)
 # full log would bloat the error response.
 STDERR_TAIL_CHARS = 2000
 RAW_TEX_FORMATS = {"latex", "tex", "context"}
+# The docx writer pastes raw OpenXML into the document unchecked and drops every
+# other raw format, so OpenXML is the only one worth rejecting.
+RAW_DOCX_FORMATS = {"openxml"}
+DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 # Real documents nest a few dozen levels at most; the bound keeps a hostile AST
 # from turning the scan into an unbounded walk.
 MAX_AST_DEPTH = int(os.environ.get("PDF_UA_MAX_AST_DEPTH", "500"))
@@ -108,8 +122,15 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/version")
-def version() -> dict[str, str]:
-    return {"version": SERVER_VERSION, **toolchain(), "capability": "document.export.pdf_ua"}
+def version() -> dict[str, Any]:
+    # `capability` keeps the single-string field every sidecar reports;
+    # `capabilities` lists all the routes this one serves.
+    return {
+        "version": SERVER_VERSION,
+        **toolchain(),
+        "capability": "document.export.pdf_ua",
+        "capabilities": ["document.export.pdf_ua", "document.export.docx"],
+    }
 
 
 class AstTooDeepError(ValueError):
@@ -117,7 +138,12 @@ class AstTooDeepError(ValueError):
 
 
 def _raw_tex_nodes(node: Any) -> int:
-    """Count RawBlock/RawInline nodes carrying TeX anywhere in the AST.
+    """Count RawBlock/RawInline nodes carrying TeX anywhere in the AST."""
+    return _raw_nodes(node, RAW_TEX_FORMATS)
+
+
+def _raw_nodes(node: Any, formats: set[str]) -> int:
+    """Count RawBlock/RawInline nodes in one of ``formats`` anywhere in the AST.
 
     The walk is iterative so nesting depth is bounded by MAX_AST_DEPTH, not by
     the interpreter's recursion limit.
@@ -133,18 +159,16 @@ def _raw_tex_nodes(node: Any) -> int:
         elif isinstance(current, dict):
             if current.get("t") in {"RawBlock", "RawInline"}:
                 content = current.get("c")
-                if (
-                    isinstance(content, list)
-                    and content
-                    and str(content[0]).lower() in RAW_TEX_FORMATS
-                ):
+                if isinstance(content, list) and content and str(content[0]).lower() in formats:
                     count += 1
                     continue
             stack.extend((value, depth + 1) for value in current.values())
     return count
 
 
-def _parse_ast(content: bytes) -> dict[str, Any]:
+def _parse_ast(
+    content: bytes, formats: set[str] = RAW_TEX_FORMATS, label: str = "TeX"
+) -> dict[str, Any]:
     if not content:
         raise HTTPException(status_code=400, detail="empty AST payload")
     if len(content) > MAX_AST_BYTES:
@@ -162,12 +186,17 @@ def _parse_ast(content: bytes) -> dict[str, Any]:
     # The whole document, not only `blocks`: the template renders metadata
     # (title, author, date) too, so raw TeX there would reach the engine.
     try:
-        raw_nodes = _raw_tex_nodes(ast)
+        raw_nodes = _raw_nodes(ast, formats)
     except AstTooDeepError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if raw_nodes:
-        raise HTTPException(status_code=422, detail="raw TeX blocks are not accepted")
+        raise HTTPException(status_code=422, detail=f"raw {label} blocks are not accepted")
     return ast
+
+
+def _check_lang(lang: str) -> None:
+    if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*", lang):
+        raise HTTPException(status_code=400, detail=f"invalid language tag: {lang!r}")
 
 
 def _sandboxed_env(workdir: Path) -> dict[str, str]:
@@ -186,8 +215,7 @@ def render(
 ) -> Response:
     content = file.file.read()
     _parse_ast(content)
-    if not re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*", lang):
-        raise HTTPException(status_code=400, detail=f"invalid language tag: {lang!r}")
+    _check_lang(lang)
     missing = _missing_components()
     if missing:
         raise HTTPException(status_code=503, detail=f"missing: {', '.join(missing)}")
@@ -237,3 +265,58 @@ def render(
         media_type="application/pdf",
         headers={"X-Pdf-Standard": "ua-1", "X-Pdf-Engine": ENGINE},
     )
+
+
+@app.post("/render/docx")
+def render_docx(
+    file: Annotated[UploadFile, File(description="Pandoc JSON AST")],
+    lang: Annotated[str, Form(description="BCP 47 document language")] = "pt-BR",
+) -> Response:
+    content = file.file.read()
+    _parse_ast(content, RAW_DOCX_FORMATS, "OpenXML")
+    _check_lang(lang)
+    if shutil.which("pandoc") is None:
+        raise HTTPException(status_code=503, detail="missing: pandoc")
+
+    with tempfile.TemporaryDirectory(prefix="docx-") as tmp:
+        workdir = Path(tmp)
+        output = workdir / "document.docx"
+        command = [
+            "pandoc",
+            "--from",
+            "json",
+            "--to",
+            "docx",
+            "--standalone",
+            # No file or network reads: images and includes in the AST stay out.
+            "--sandbox",
+            "--metadata",
+            f"lang={lang}",
+            "-o",
+            str(output),
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                input=content,
+                capture_output=True,
+                cwd=workdir,
+                env={**os.environ, "TMPDIR": str(workdir)},
+                timeout=RENDER_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise HTTPException(
+                status_code=504, detail=f"rendering exceeded {RENDER_TIMEOUT_SECONDS}s"
+            ) from exc
+        if result.returncode != 0 or not output.is_file():
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            LOG.warning(
+                "pandoc docx failed (%s): %s", result.returncode, stderr[-STDERR_TAIL_CHARS:]
+            )
+            raise HTTPException(
+                status_code=422, detail=f"pandoc failed: {stderr[-STDERR_TAIL_CHARS:]}"
+            )
+        docx = output.read_bytes()
+
+    return Response(content=docx, media_type=DOCX_MEDIA_TYPE)

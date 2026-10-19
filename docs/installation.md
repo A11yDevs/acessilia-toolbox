@@ -265,7 +265,8 @@ until then:
 (`docker build -f docker/rapidocr-orient.Dockerfile -t rapidocr-orient:latest .`)
 and backs `image.page.orient`. `pdf-ua-render`
 (`docker build -f docker/pdf-ua-render.Dockerfile -t pdf-ua-render:latest .`)
-backs `document.export.pdf_ua`; its build renders a smoke-test PDF.
+backs `document.export.pdf_ua` and `document.export.docx`; its build renders a
+smoke-test PDF and DOCX.
 `verapdf-validate`
 (`docker build -f docker/verapdf-validate.Dockerfile -t verapdf-validate:latest .`)
 backs `pdf.validate.pdf_ua`; its build validates a smoke-test PDF.

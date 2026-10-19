@@ -222,8 +222,9 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # Pandoc + frozen TeX Live sidecar for document.export.pdf_ua. The image
-  # build renders a smoke-test PDF, so a broken toolchain fails at build time.
+  # Pandoc + frozen TeX Live sidecar for document.export.pdf_ua, and Pandoc alone
+  # for document.export.docx. The image build renders a smoke-test PDF and DOCX,
+  # so a broken toolchain fails at build time.
   pdf-ua-render:
     build:
       context: .
