@@ -267,9 +267,16 @@ providers:
     media_types:
       - application/json
 
-  - id: pure-math
+  # math-speech sidecar: MathJax converts LaTeX to MathML and MathCAT speaks it
+  # in pt-BR. MathJax and the MathCAT commit are pinned in
+  # docker/math-speech.Dockerfile and reported by /version, so they are part of
+  # the cache key. mathml-to-latex runs in-process in the adapter.
+  - id: math-speech
     version: "1.0"
-    transport: in_process
+    transport: http
+    endpoint: ${MATH_SPEECH_URL:-http://math-speech:5009}
+    health_path: /health
+    timeout_seconds: 30
     capabilities:
       - math.convert
       - math.verbalize

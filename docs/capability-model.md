@@ -27,7 +27,7 @@ and normalizes the result into a canonical format.
                                          │ audiveris-serve(opt.)│
                                          └──────────────────────┘
         ← external providers (docling, MinerU, Audiveris) and
-          in-process pure providers (pure-math, pure-chem, homr, …)
+          in-process pure providers (pure-chem, homr, …)
 ```
 
 ---
@@ -572,7 +572,6 @@ pip install .[storage]               # + boto3 (MinIO/S3)
 pip install .[cache]                 # + redis (Valkey)
 pip install .[pdf]                   # + pymupdf (pdf.split, pdf.render)
 pip install .[media]                 # + Pillow (media.inspect image payloads)
-pip install .[math]                  # + latex2mathml (math.convert LaTeX → MathML)
 pip install .[music]                 # + homr (music.omr in-process)
 pip install .[dev]                   # + pytest, ruff, mypy, all extras above
 ```

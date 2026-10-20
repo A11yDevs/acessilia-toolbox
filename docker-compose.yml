@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        TOOLBOX_EXTRAS: api,storage,cache,pdf,media,math
+        TOOLBOX_EXTRAS: api,storage,cache,pdf,media
         # Surfaced by GET /v1/health so a local container reports the revision
         # it was built from. Override with GIT_COMMIT/IMAGE_TAG in the shell.
         GIT_COMMIT: ${GIT_COMMIT:-}

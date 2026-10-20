@@ -1,0 +1,122 @@
+[
+  {
+    "name": "fração",
+    "latex": "x=\\frac{a}{b}",
+    "speech": "x é igual a a sobre b"
+  },
+  {
+    "name": "fração aninhada",
+    "latex": "\\frac{\\frac{a}{b}}{c}",
+    "speech": "a fração com numerador; a sobre b; e denominador c"
+  },
+  {
+    "name": "expoente composto",
+    "latex": "x^{n+1}",
+    "speech": "x elevado à potência n mais 1"
+  },
+  {
+    "name": "E=mc²",
+    "latex": "E=mc^2",
+    "speech": "maiúscula e é igual a, m c ao quadrado"
+  },
+  {
+    "name": "raiz quadrada",
+    "latex": "\\sqrt{x}",
+    "speech": "a raiz quadrada de x"
+  },
+  {
+    "name": "raiz cúbica",
+    "latex": "\\sqrt[3]{x}",
+    "speech": "a raiz cúbica de x"
+  },
+  {
+    "name": "raiz de índice n",
+    "latex": "\\sqrt[n]{x}",
+    "speech": "a raiz de índice n de x"
+  },
+  {
+    "name": "índice",
+    "latex": "a_{ij}",
+    "speech": "a índice i j"
+  },
+  {
+    "name": "fórmula quadrática",
+    "latex": "x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}",
+    "speech": "x é igual a; a fração com numerador; menos b mais ou menos; a raiz quadrada de b ao quadrado menos 4 a c; e denominador 2 a"
+  },
+  {
+    "name": "matriz",
+    "latex": "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}",
+    "speech": "a matriz 2 por 2; linha 1; a, b; linha 2; c, d"
+  },
+  {
+    "name": "determinante",
+    "latex": "\\begin{vmatrix} a & b \\\\ c & d \\end{vmatrix}",
+    "speech": "o determinante 2 por 2; linha 1; a, b; linha 2; c, d"
+  },
+  {
+    "name": "limite",
+    "latex": "\\lim_{x \\to \\infty} \\frac{1}{x} = 0",
+    "speech": "limite quando x tende a infinito, de 1 sobre x; é igual a 0"
+  },
+  {
+    "name": "somatório",
+    "latex": "\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}",
+    "speech": "o somatório de i é igual a 1 a n de i; é igual a; a fração com numerador; n vezes, abre parênteses, n mais 1, fecha parênteses; e denominador 2"
+  },
+  {
+    "name": "integral",
+    "latex": "\\int_{0}^{1} x^2 \\, dx = \\frac{1}{3}",
+    "speech": "a integral de 0 a 1 de, x ao quadrado d x; é igual a 1 terço"
+  },
+  {
+    "name": "derivada",
+    "latex": "\\frac{d}{dx} \\sin x = \\cos x",
+    "speech": "d sobre d x, seno x; é igual a cosseno x"
+  },
+  {
+    "name": "conjuntos",
+    "latex": "\\forall x \\in A,\\ x \\leq \\gamma",
+    "speech": "para todo, x pertence a  maiúscula a; vírgula; x é menor ou igual a gama"
+  },
+  {
+    "name": "binomial",
+    "latex": "\\binom{n}{k} = \\frac{n!}{k!(n-k)!}",
+    "speech": "n escolhe k, é igual a; a fração com numerador; n fatorial; e denominador k fatorial; abre parênteses, n menos k, fecha parênteses; fatorial"
+  },
+  {
+    "name": "casos",
+    "latex": "f(x) = \\begin{cases} 1 & x \\geq 0 \\\\ 0 & x < 0 \\end{cases}",
+    "speech": "f de x é igual a; 2 casos, caso 1; 1 x é maior ou igual a 0; caso 2; 0 x é menor que 0"
+  },
+  {
+    "name": "texto",
+    "latex": "v = \\frac{\\Delta s}{\\Delta t} \\text{ em m/s}",
+    "speech": "v é igual a;  maiúscula delta s sobre  maiúscula delta t;  em m/s"
+  },
+  {
+    "name": "reais",
+    "latex": "x \\in \\mathbb{R}",
+    "speech": "x pertence a números reais"
+  },
+  {
+    "name": "alinhado",
+    "latex": "\\begin{aligned} a &= b \\\\ c &= d \\end{aligned}",
+    "speech": "2 linhas, linha 1; a é igual a b; linha 2; c é igual a d"
+  },
+  {
+    "name": "logaritmo",
+    "latex": "\\log_2 8 = 3",
+    "speech": "o log na base 2, de 8, é igual a 3"
+  },
+  {
+    "name": "graus",
+    "latex": "90^\\circ",
+    "speech": "90 graus"
+  },
+  {
+    "name": "química",
+    "latex": "\\ce{H2O}",
+    "speech": "maiúscula h, sub 2;  maiúscula o"
+  }
+]
