@@ -162,7 +162,7 @@ sed -i '/^TRACK_BRANCH=/d' .env
 
 The script maintains status files in `var/data/`:
 
-- `var/data/.last_sha` — SHA of the last commit that triggered an update
+- `var/data/.last_sha` — tracked branch and SHA of the last commit that triggered an update
 - `var/data/staging-status.json` — JSON status with current SHA, last check and last update
 
 ```bash
