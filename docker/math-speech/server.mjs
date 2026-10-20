@@ -11,9 +11,14 @@
 // /version reports both; the Toolbox adapter feeds them into the cache key,
 // so an upgrade re-speaks instead of serving text produced by older rules.
 //
-// Errors answer {"detail": "<code>: <reason>"}. Caller errors are 400
-// (invalid_json, invalid_latex, invalid_mathml, invalid_parameter) or 413;
-// a MathCAT failure on valid MathML is 500 (speech_failed, braille_failed).
+// Errors answer {"detail": "<code>: <reason>"}:
+//   400  invalid_json, invalid_latex, invalid_mathml, invalid_parameter
+//   404  not_found;  405 method_not_allowed (with an Allow header)
+//   413  body_too_large (request body), expression_too_large (one field)
+//   500  speech_failed (MathCAT failed on valid MathML), internal_error
+//   503  unavailable (/health, when MathCAT did not start or broke)
+// A braille failure does not discard the speech: /speak answers 200 without
+// braille and with braille_error: "braille_failed: <reason>".
 // No error message quotes the expression, which may be document content.
 
 import http from 'node:http';
@@ -97,17 +102,34 @@ try {
   mathcat.init();
   mathcatReady = true;
 } catch (error) {
-  mathcatProblem = String(error?.message ?? error);
+  mathcatProblem = `MathCAT failed to start: ${error?.message ?? error}`;
 }
 
 // MathCAT errors come prefixed with their code (see mathcat-wasm/src/lib.rs).
-function mathcatError(error) {
+// Anything else is a trap or panic inside the module (e.g. "unreachable").
+const CALLER_CODES = new Set(['invalid_mathml', 'invalid_preference']);
+const FAILURE_CODES = new Set(['speech_failed', 'braille_failed']);
+
+function mathcatError(error, fallback) {
   const message = String(error?.message ?? error);
-  const [code] = message.split(':', 1);
-  if (code === 'invalid_mathml' || code === 'invalid_preference') {
-    return new RequestError(400, code, message.slice(code.length + 1).trim() || 'rejected');
+  const separator = message.indexOf(':');
+  const code = separator > 0 ? message.slice(0, separator) : '';
+  const reason = separator > 0 ? message.slice(separator + 1).trim() : '';
+  if (CALLER_CODES.has(code)) {
+    return new RequestError(400, code, reason || 'rejected');
   }
-  return new RequestError(500, code || 'speech_failed', message.slice(code.length + 1).trim());
+  if (FAILURE_CODES.has(code)) {
+    return new RequestError(500, code, reason || 'MathCAT failed');
+  }
+  // MathCAT keeps its preferences and expression in global state, which a
+  // panic can leave half applied. Stop answering and let the container
+  // restart into a clean instance once this response is sent.
+  mathcatReady = false;
+  mathcatProblem = 'MathCAT trapped; restarting';
+  console.error('math-speech: MathCAT trapped, exiting after this response', error);
+  const failure = new RequestError(500, fallback, 'MathCAT trapped');
+  failure.fatal = true;
+  return failure;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +178,22 @@ function speak(body) {
   const result = { mathml, language, style, verbosity };
   try {
     result.speech = mathcat.speak(mathml, LANGUAGES[language], style, verbosity).trim();
-    if (brailleCode) {
-      result.braille = mathcat.braille(mathml, brailleCode);
-      result.braille_code = brailleCode;
-    }
   } catch (error) {
-    throw mathcatError(error);
+    throw mathcatError(error, 'speech_failed');
+  }
+  if (brailleCode) {
+    result.braille_code = brailleCode;
+    try {
+      result.braille = mathcat.braille(mathml, brailleCode);
+    } catch (error) {
+      // Speech is the main result: keep it and let the caller decide
+      // whether missing braille matters. A trap still restarts the sidecar.
+      const failure = mathcatError(error, 'braille_failed');
+      if (failure.fatal) {
+        throw failure;
+      }
+      result.braille_error = failure.message;
+    }
   }
   return result;
 }
@@ -179,7 +211,7 @@ function versions() {
 const ROUTES = {
   'GET /health': () => {
     if (!mathcatReady) {
-      throw new RequestError(503, 'unavailable', `MathCAT failed to start: ${mathcatProblem}`);
+      throw new RequestError(503, 'unavailable', mathcatProblem);
     }
     return { status: 'ok', version: SERVER_VERSION };
   },
@@ -193,15 +225,23 @@ function readJson(request) {
     const chunks = [];
     let size = 0;
     request.on('data', (chunk) => {
+      if (size > MAX_BODY_BYTES) {
+        return; // already answered 413; drain the rest of the upload
+      }
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
+        // Destroying the socket here would reset the connection before the
+        // 413 reaches the client, so answer now and keep reading.
+        chunks.length = 0;
         reject(new RequestError(413, 'body_too_large', `body exceeds ${MAX_BODY_BYTES} bytes`));
-        request.destroy();
         return;
       }
       chunks.push(chunk);
     });
     request.on('end', () => {
+      if (size > MAX_BODY_BYTES) {
+        return;
+      }
       try {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
         if (body === null || typeof body !== 'object' || Array.isArray(body)) {
@@ -216,21 +256,28 @@ function readJson(request) {
   });
 }
 
-function send(response, status, payload) {
+function send(response, status, payload, headers = {}, done) {
   const body = JSON.stringify(payload);
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(body),
+    ...headers,
   });
-  response.end(body);
+  response.end(body, done);
 }
 
 const server = http.createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
   const handler = ROUTES[`${request.method} ${path}`];
   if (!handler) {
-    const known = Object.keys(ROUTES).some((route) => route.endsWith(` ${path}`));
-    send(response, known ? 405 : 404, { detail: known ? 'method not allowed' : 'not found' });
+    const allowed = Object.keys(ROUTES)
+      .filter((route) => route.endsWith(` ${path}`))
+      .map((route) => route.split(' ', 1)[0]);
+    if (allowed.length) {
+      send(response, 405, { detail: `method_not_allowed: use ${allowed.join(', ')}` }, { allow: allowed.join(', ') });
+    } else {
+      send(response, 404, { detail: 'not_found: no such route' });
+    }
     return;
   }
   try {
@@ -238,7 +285,11 @@ const server = http.createServer(async (request, response) => {
     send(response, 200, handler(body));
   } catch (error) {
     if (error instanceof RequestError) {
-      send(response, error.status, { detail: error.message });
+      // After a 413 the rest of the upload is unread; do not keep the
+      // connection alive for it.
+      const headers = error.status === 413 ? { connection: 'close' } : {};
+      const done = error.fatal ? () => process.exit(1) : undefined;
+      send(response, error.status, { detail: error.message }, headers, done);
       return;
     }
     console.error('math-speech: unexpected error', error);

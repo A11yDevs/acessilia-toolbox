@@ -44,6 +44,14 @@ const checks = [
     (r) => r.status === 400 && r.json.detail.startsWith('invalid_mathml')],
   ['invalid parameter', () => call('POST', '/speak', { latex: 'x', style: 'Shout' }),
     (r) => r.status === 400 && r.json.detail.startsWith('invalid_parameter')],
+  ['body too large', () => call('POST', '/speak', { latex: 'x'.repeat(300 * 1024) }),
+    (r) => r.status === 413 && r.json.detail.startsWith('body_too_large')],
+  ['expression too large', () => call('POST', '/convert', { latex: 'x'.repeat(20001) }),
+    (r) => r.status === 413 && r.json.detail.startsWith('expression_too_large')],
+  ['method not allowed', () => call('GET', '/speak'),
+    (r) => r.status === 405 && r.json.detail.startsWith('method_not_allowed')],
+  ['not found', () => call('GET', '/nope'),
+    (r) => r.status === 404 && r.json.detail.startsWith('not_found')],
 ];
 
 const golden = JSON.parse(readFileSync(new URL('./golden.json', import.meta.url), 'utf8'));
