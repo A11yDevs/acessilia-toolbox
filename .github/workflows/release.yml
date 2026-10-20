@@ -69,7 +69,7 @@ jobs:
           push: false
           tags: ${{ env.LOCAL_IMAGE }}
           build-args: |
-            TOOLBOX_EXTRAS=api,storage,cache,pdf,media,math
+            TOOLBOX_EXTRAS=api,storage,cache,pdf,media
             GIT_COMMIT=${{ github.sha }}
             IMAGE_TAG=${{ github.ref_name }}
           cache-from: type=gha,scope=production
@@ -121,7 +121,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            TOOLBOX_EXTRAS=api,storage,cache,pdf,media,math
+            TOOLBOX_EXTRAS=api,storage,cache,pdf,media
             GIT_COMMIT=${{ github.sha }}
             IMAGE_TAG=${{ github.ref_name }}
           cache-from: type=gha,scope=production

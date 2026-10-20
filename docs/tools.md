@@ -13,7 +13,7 @@ roadmap candidates.
 | PDF           | `pdf.split`, `pdf.render` (v2: clip, `max_side`, PNG/JPEG; [pdf-render.md](pdf-render.md)) | PyMuPDF                                    | [implemented] |
 | Tables        | table extraction inside `document.structure.extract`    | Docling (TableFormer), MinerU              | [implemented] |
 | Conversion    | `document.convert`                                      | Pandoc                                     | roadmap       |
-| Mathematics   | `math.recognize`, `math.convert`, `math.verbalize`      | docling-serve, pure-python (latex2mathml)  | [implemented] |
+| Mathematics   | `math.recognize`, `math.convert`, `math.verbalize`      | docling-serve, math-speech (MathJax, MathCAT) | [implemented] |
 | Media triage  | `media.inspect`                                         | pure-python (Pillow, in-process, optional extra) | [implemented] |
 | Music         | `music.omr`                                             | homr (in-process), Audiveris (sidecar)     | [implemented] |
 | Page layout   | `image.page.orient`                                     | RapidOCR (sidecar)                         | [implemented] |
@@ -72,8 +72,8 @@ Separate concerns:
 
 ``` text
 math.recognize : image -> structured math (docling-serve)
-math.convert   : LaTeX <-> MathML (pure-python, latex2mathml)
-math.verbalize : LaTeX -> natural language (pure-python, pt-BR)
+math.convert   : LaTeX -> MathML (math-speech, MathJax); MathML -> LaTeX (in-process mapper)
+math.verbalize : LaTeX -> pt-BR speech (math-speech, MathJax + MathCAT)
 ```
 
 These capabilities accept `artifact/latex@1`, a JSON object carrying the

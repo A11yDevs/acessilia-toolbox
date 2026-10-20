@@ -197,7 +197,7 @@ flowchart TB
 | `document.ocr` | docling-ocr, mineru-ocr | ✅ |
 | `pdf.split`, `pdf.render` (v1, v2) | pymupdf-pdf (in-process) | ✅ |
 | `math.recognize` | docling-math, rapid-latex-ocr | ✅ |
-| `math.convert`, `math.verbalize` | pure-math (in-process) | ✅ |
+| `math.convert`, `math.verbalize` | math-speech (MathJax + MathCAT sidecar) | ✅ |
 | `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
 | `music.omr` | homr (in-process, local installs only), audiveris (sidecar) | ✅ |
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |

@@ -109,7 +109,7 @@ docker build -t acessilia-toolbox:local .
 
 # Build with extras (storage + cache + pdf + media + math)
 docker build \
-  --build-arg TOOLBOX_EXTRAS="api,storage,cache,pdf,media,math" \
+  --build-arg TOOLBOX_EXTRAS="api,storage,cache,pdf,media" \
   -t acessilia-toolbox:local .
 
 # Run

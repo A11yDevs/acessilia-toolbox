@@ -1,7 +1,12 @@
 // Build-time smoke test: the image only builds if MathJax converts, MathCAT
 // speaks pt-BR and brailles CMU, and bad input is refused with the right code.
+//
+// golden.json pins the exact pt-BR speech of a set of formulas. A MathJax or
+// MathCAT upgrade that changes any of them fails the build, so the new text
+// is reviewed and golden.json updated on purpose.
 
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const PORT = 5099;
@@ -48,6 +53,12 @@ const checks = [
   ['not found', () => call('GET', '/nope'),
     (r) => r.status === 404 && r.json.detail.startsWith('not_found')],
 ];
+
+const golden = JSON.parse(readFileSync(new URL('./golden.json', import.meta.url), 'utf8'));
+for (const { name, latex, speech } of golden) {
+  checks.push([`golden: ${name}`, () => call('POST', '/speak', { latex }),
+    (r) => r.status === 200 && r.json.speech === speech]);
+}
 
 let failed = 0;
 try {

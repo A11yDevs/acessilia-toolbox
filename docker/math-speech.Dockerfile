@@ -34,12 +34,12 @@ COPY docker/math-speech/package.json docker/math-speech/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=mathcat /pkg ./mathcat
-COPY docker/math-speech/server.mjs docker/math-speech/smoke.mjs ./
+COPY docker/math-speech/server.mjs docker/math-speech/smoke.mjs docker/math-speech/golden.json ./
 
 USER node
 
 # Smoke test: the image only builds if conversion, pt-BR speech, CMU braille
-# and the error codes behave.
+# and the error codes behave, and the speech of golden.json is unchanged.
 RUN node smoke.mjs
 
 EXPOSE 5009

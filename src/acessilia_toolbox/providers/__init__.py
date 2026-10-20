@@ -13,6 +13,7 @@ from acessilia_toolbox.providers.docling_chem import DoclingChemProvider
 from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
 from acessilia_toolbox.providers.docling_math import DoclingMathProvider
 from acessilia_toolbox.providers.docling_ocr import DoclingOcrProvider
+from acessilia_toolbox.providers.math_speech import MathSpeechProvider
 from acessilia_toolbox.providers.media_inspect import PureMediaInspectProvider
 from acessilia_toolbox.providers.mineru import MineruProvider
 from acessilia_toolbox.providers.mineru_layout import MineruLayoutProvider
@@ -25,7 +26,6 @@ from acessilia_toolbox.providers.pandoc_pdf_ua import PandocPdfUaProvider
 from acessilia_toolbox.providers.pure_accessibility import PureAccessibilityProvider
 from acessilia_toolbox.providers.pure_chem import PureChemProvider
 from acessilia_toolbox.providers.pure_code import PureCodeProvider
-from acessilia_toolbox.providers.pure_math import PureMathProvider
 from acessilia_toolbox.providers.pure_text import PureTextProvider
 from acessilia_toolbox.providers.pymupdf_pdf import PyMuPDFProvider
 from acessilia_toolbox.providers.rapid_latex_ocr import RapidLatexOcrProvider
@@ -81,6 +81,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "docling-math": DoclingMathProvider,
     "docling-ocr": DoclingOcrProvider,
     "homr": HomrProvider,
+    "math-speech": MathSpeechProvider,
     "mineru": MineruProvider,
     "mineru-layout": MineruLayoutProvider,
     "mineru-ocr": MineruOcrProvider,
@@ -90,7 +91,6 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "pure-accessibility": PureAccessibilityProvider,
     "pure-chem": PureChemProvider,
     "pure-code": PureCodeProvider,
-    "pure-math": PureMathProvider,
     "pure-media-inspect": PureMediaInspectProvider,
     "pure-text": PureTextProvider,
     "pymupdf-pdf": PyMuPDFProvider,
@@ -125,6 +125,7 @@ __all__ = [
     "GitHubDatasetProvider",
     "HomrProvider",
     "HuggingFaceDatasetProvider",
+    "MathSpeechProvider",
     "MineruLayoutProvider",
     "MineruOcrProvider",
     "MineruProvider",
@@ -135,7 +136,6 @@ __all__ = [
     "PureAccessibilityProvider",
     "PureChemProvider",
     "PureCodeProvider",
-    "PureMathProvider",
     "PureMediaInspectProvider",
     "PureTextProvider",
     "PyMuPDFProvider",
