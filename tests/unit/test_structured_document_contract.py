@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -108,6 +108,7 @@ def _valid() -> dict:
     payload = copy.deepcopy(_snapshot(SNAPSHOTS[0]))
     elements = payload["elements"]
     assert len(elements) >= 2 and len(payload["pages"]) >= 1
+    assert elements[0]["provenance"]
     return payload
 
 
@@ -185,10 +186,19 @@ def _duplicate_artifact_ids(payload: dict) -> None:
 
 
 def _inverted_extraction(payload: dict) -> None:
-    from datetime import datetime
-
     started = datetime.fromisoformat(payload["extractor"]["started_at"])
     payload["extractor"]["completed_at"] = (started - timedelta(seconds=1)).isoformat()
+
+
+
+def _mixed_timezones(payload: dict) -> None:
+    started = datetime.fromisoformat(payload["extractor"]["started_at"])
+    completed = started + timedelta(seconds=1)
+    # Flip the awareness of completed_at relative to started_at.
+    completed = (
+        completed.astimezone() if started.tzinfo is None else completed.replace(tzinfo=None)
+    )
+    payload["extractor"]["completed_at"] = completed.isoformat()
 
 
 PROCESS_BREAKS = {
@@ -196,6 +206,7 @@ PROCESS_BREAKS = {
     "duplicate obligation ids": _with_obligations({}, {}),
     "duplicate artifact ids": _duplicate_artifact_ids,
     "extraction ends before it starts": _inverted_extraction,
+    "extraction timestamps in different timezones": _mixed_timezones,
     "negative method cost": _with_obligations({"method_costs": {"vision": -1}}),
     "cost for a method that is not admissible": _with_obligations(
         {"admissible_methods": [], "method_costs": {"vision": 1}}

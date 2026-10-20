@@ -189,7 +189,12 @@ class ProcessingManifest(StrictModel):
 
     @model_validator(mode="after")
     def validate_references(self) -> ProcessingManifest:
-        if self.extractor.completed_at < self.extractor.started_at:
+        started, completed = self.extractor.started_at, self.extractor.completed_at
+        # Comparing a naive with an aware datetime raises TypeError, which
+        # pydantic does not turn into a ValidationError.
+        if (started.tzinfo is None) != (completed.tzinfo is None):
+            raise ValueError("extraction timestamps must share a timezone")
+        if completed < started:
             raise ValueError("extraction finished before it started")
 
         # Document invariants are docstruct's (acessilia#203): unique element
