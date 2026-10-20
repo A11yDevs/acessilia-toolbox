@@ -104,6 +104,34 @@ should be supported.
 Capability schemas and artifact contracts must be versioned. Breaking
 changes require explicit major-version transitions.
 
+## Ecosystem principles and decisions
+
+The Toolbox is one of four components, with the Acessilia core, the SDK
+(`acessilia-sdk`) and docstruct (`acessilia-docstruct`). Their shared
+principles, P1–P9, are in the core's
+[constitution, section 7](https://github.com/A11yDevs/acessilia/blob/develop/docs/constitution.md#7-ecosystem-architecture-principles), and the decisions that cross
+component boundaries are recorded as ADRs in the core's
+[docs/adr](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/README.md), which is their single source of truth. ADRs
+about the Toolbox's own internals may live in this repository and link to
+them instead of restating them.
+
+How the ecosystem principles meet the principles above:
+
+| Ecosystem principle | In the Toolbox | Decision |
+|---|---|---|
+| P1, P2 — one owner per functionality, separation of responsibilities | The Toolbox executes operational capabilities; the core plans and decides (principles 1 and 5). Pure structural algorithms are taken from docstruct, not copied. | [ADR-0002](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0002-component-responsibilities.md) |
+| P3 — directional dependencies | The Toolbox depends on docstruct only; it imports neither `acessilia_sdk` nor the core. | [ADR-0002](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0002-component-responsibilities.md) |
+| P4 — lightweight core, remote execution | Operations that need heavy dependencies or specialized infrastructure run here, behind capabilities; the core keeps no local fallback (principle 4). | [ADR-0003](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0003-remote-only-operational-capabilities.md) |
+| P5 — reference-oriented processing | Artifacts stay in object storage and travel as references (principle 6). The Toolbox owns the `ArtifactRef` contract. | [ADR-0005](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0005-artifact-references.md) |
+| P6 — reliability without operational duplication | Availability comes from stateless replicas sharing storage (principles 2 and 5), and sidecar images are built and published by the `Sidecars` workflow, never by hand on a server. | [ADR-0006](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0006-availability-and-failover.md) |
+| P7 — one source of truth per contract | The Toolbox owns the operational contracts (capabilities, `ArtifactRef`, jobs) and publishes them versioned (principles 7 and 12). The document's semantic model comes from docstruct; `artifact/structured-document@1` is derived from it. | [ADR-0004](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0004-single-source-of-truth-for-contracts.md), [ADR-0007](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0007-manifest-model-and-mathml-conversion.md) |
+| P8 — incremental evolution | Small, verifiable changes; architectural and behavioural changes are not mixed. | — |
+| P9 — traceability and contract compatibility | Results carry provenance (principle 9); contracts change only through new versions (principle 12). | — |
+
+Capability-specific decisions recorded there include
+[ADR-0008](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0008-math-capabilities-on-mathjax-and-mathcat.md)
+(`math.convert` and `math.verbalize` on MathJax and MathCAT).
+
 ## Language and contribution conventions
 
 ### English-first, with Brazilian Portuguese as the official secondary language

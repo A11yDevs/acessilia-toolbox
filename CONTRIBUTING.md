@@ -123,6 +123,8 @@ git push origin develop
 git branch -d feat/my-feature
 ```
 
+When opening the PR, fill in the [pull request template](.github/pull_request_template.md), including its conformance checklist. It covers the principles in [docs/constitution.md](docs/constitution.md) and the ecosystem principles and ADRs it links to. `Closes #N` closes the issue only when the PR merges into `main`; for a PR into `develop`, close the issue by hand after the merge.
+
 ### 5. Staging (QA)
 
 After a PR is merged into `develop`, the **CD pipeline** (`.github/workflows/delivery.yml`) automatically builds a Docker image and publishes it to GHCR with the `develop` and `sha-<commit>` tags.
