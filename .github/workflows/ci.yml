@@ -63,7 +63,7 @@ jobs:
           python -m pip install ".[dev]"
 
       - name: Lint with ruff
-        run: python -m ruff check src/ tests/
+        run: python -m ruff check src/ tests/ scripts/
 
       - name: Type check with mypy
         run: python -m mypy src/
