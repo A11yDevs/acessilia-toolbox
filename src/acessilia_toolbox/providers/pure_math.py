@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
 
-from acessilia_toolbox.core.errors import ProviderUnavailableError
+from acessilia_toolbox.core.errors import InvalidInputError, ProviderUnavailableError
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.payload import latex_from_payload
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
@@ -38,10 +38,22 @@ def _missing_latex2mathml_detail() -> str:
 
 
 def _convert_latex_to_mathml(latex: str) -> str:
-    """Convert a LaTeX expression to MathML."""
+    """Convert a LaTeX expression to MathML.
+
+    LaTeX that latex2mathml cannot parse is the caller's input, not a provider
+    failure, so it is reported as invalid input (400) and kept apart from an
+    unavailable provider (503). The message leaves the expression out, since
+    it may quote private document content.
+    """
     if _latex_to_mathml is None:
         raise ProviderUnavailableError(_missing_latex2mathml_detail())
-    return _latex_to_mathml(latex)
+    try:
+        return _latex_to_mathml(latex)
+    except Exception as exc:
+        raise InvalidInputError(
+            f"LaTeX could not be converted to MathML ({type(exc).__name__})",
+            capability="math.convert",
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +421,7 @@ def _verbalize_latex(latex: str) -> str:
 # Provider
 # ---------------------------------------------------------------------------
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 
 class PureMathProvider:
