@@ -207,6 +207,18 @@ PROCESS_BREAKS = {
     "duplicate artifact ids": _duplicate_artifact_ids,
     "extraction ends before it starts": _inverted_extraction,
     "extraction timestamps in different timezones": _mixed_timezones,
+    "attempt timestamps in different timezones": _with_obligations(
+        {
+            "attempts": [
+                {
+                    "method": "vision",
+                    "status": "failed",
+                    "started_at": "2026-10-20T00:00:00",
+                    "completed_at": "2026-10-20T00:00:01+00:00",
+                }
+            ]
+        }
+    ),
     "negative method cost": _with_obligations({"method_costs": {"vision": -1}}),
     "cost for a method that is not admissible": _with_obligations(
         {"admissible_methods": [], "method_costs": {"vision": 1}}

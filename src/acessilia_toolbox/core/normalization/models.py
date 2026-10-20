@@ -118,6 +118,10 @@ class ObligationAttempt(StrictModel):
 
     @model_validator(mode="after")
     def validate_interval(self) -> ObligationAttempt:
+        # Comparing a naive with an aware datetime raises TypeError, which
+        # pydantic does not turn into a ValidationError.
+        if (self.started_at.tzinfo is None) != (self.completed_at.tzinfo is None):
+            raise ValueError("attempt timestamps must share a timezone")
         if self.completed_at < self.started_at:
             raise ValueError("attempt finished before it started")
         return self
