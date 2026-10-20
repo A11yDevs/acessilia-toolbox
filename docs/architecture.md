@@ -73,7 +73,13 @@ dependencies of its own. The normalization builder uses it for table ASTs.
   docstruct long before.
 - **No planning policy.** docstruct holds none, and neither does the Toolbox:
   structured documents carry observations, never obligations, methods or costs
-  (`obligations` is kept empty and deprecated in schema 1.1.0).
+  (`obligations` is always empty; the field stays, without a `deprecated` mark,
+  because schema 1.1.0 was published with it).
+- **Document invariants from docstruct.** The structured document's
+  document part (pages, elements, provenance, boxes) is checked against
+  `docstruct.manifest`: its invariants run in the model's validator, and
+  `tests/unit/test_structured_document_contract.py` compares the published
+  schema with `docstruct.manifest.field_specs`.
 - **Pinned by hash.** docstruct is installed from the wheel of a
   `docstruct-vX.Y.Z` GitHub Release of the core, pinned by URL and `#sha256=`.
   See [Updating docstruct](dev-workflow.md#6-updating-docstruct).

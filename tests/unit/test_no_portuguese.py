@@ -46,8 +46,9 @@ EXEMPT_STRINGS: list[tuple[str, str]] = [
     ("src/acessilia_toolbox/core/normalization/builder.py", "atención"),
     ("src/acessilia_toolbox/core/normalization/builder.py", "información"),
     # Schema description — canonical name
-    ("src/acessilia_toolbox/core/normalization/models.py", "Acessilia structural extractor"),
-    ("schemas/structured-document@1.json", "Acessilia structural extractor"),
+    # The published processing-manifest 1.1.0 description is Portuguese, verbatim.
+    ("src/acessilia_toolbox/core/normalization/models.py", "extrator estrutural do Acessília"),
+    ("schemas/structured-document@1.json", "extrator estrutural do Acessília"),
     # mhchem verbalization — pt-BR output for chemistry accessibility
     ("src/acessilia_toolbox/providers/pure_chem.py", "equilíbrio"),
     ("src/acessilia_toolbox/providers/pure_chem.py", "condições"),
