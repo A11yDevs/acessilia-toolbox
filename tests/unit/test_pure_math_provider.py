@@ -224,6 +224,49 @@ class TestVerbalizeLatex:
         assert "hello" in result
 
 
+class TestInvalidLatex:
+    """LaTeX that cannot be converted is the caller's input, not a provider fault.
+
+    It must surface as invalid input (400), apart from an unavailable provider
+    (503), so the caller can tell "this formula has no MathML" from "retry".
+    Before, latex2mathml's own exception escaped as an unhandled error.
+    """
+
+    @pytest.mark.parametrize(
+        "latex",
+        [
+            r"\frac{a}{",  # NoAvailableTokensError
+            "x^",  # MissingSuperScriptOrSubscriptError
+            r"x_1_2",  # DoubleSubscriptsError
+            r"\left( x",  # ExtraLeftOrMissingRightError
+        ],
+    )
+    def test_unparseable_latex_is_invalid_input(self, latex: str) -> None:
+        adapter = PureMathProvider(descriptor())
+        with pytest.raises(InvalidInputError, match="could not be converted") as excinfo:
+            extract(adapter, "math.convert", latex, direction="latex-to-mathml")
+        assert excinfo.value.http_status == 400
+
+    def test_library_bug_is_not_reported_as_invalid_input(self) -> None:
+        r"""A latex2mathml internal fault must not surface as a 400.
+
+        With the installed latex2mathml, `\color` raises `StopIteration` (a
+        library bug), so reporting it as invalid input would mask a provider
+        failure as bad user input.
+        """
+        adapter = PureMathProvider(descriptor())
+        with pytest.raises(Exception) as excinfo:
+            extract(adapter, "math.convert", r"\color", direction="latex-to-mathml")
+        assert not isinstance(excinfo.value, InvalidInputError)
+
+    def test_error_message_does_not_quote_the_expression(self) -> None:
+        adapter = PureMathProvider(descriptor())
+        with pytest.raises(InvalidInputError) as excinfo:
+            extract(adapter, "math.convert", r"\frac{private_source}{", direction="latex-to-mathml")
+        assert "private_source" not in str(excinfo.value)
+        assert "private_source" not in str(excinfo.value.to_payload())
+
+
 class TestJsonPayload:
     """`artifact/latex@1` is a JSON object, so a JSON payload must be parsed.
 
