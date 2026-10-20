@@ -142,8 +142,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # The capability contract travels with the release, so consumers can
+          # check a pinned Toolbox version (A11yDevs/acessilia#186).
           gh release create "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             --title "${{ github.ref_name }}" \
             --generate-notes \
-            --verify-tag
+            --verify-tag \
+            contract/toolbox-contract.json
