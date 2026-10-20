@@ -268,9 +268,11 @@ while its sidecar is not running:
 | `rapidocr-orient` | `rapidocr-orient` | `docker/rapidocr-orient.Dockerfile` | `image.page.orient` |
 | `pdf-ua-render` | `pdf-ua-render` | `docker/pdf-ua-render.Dockerfile` | `document.export.pdf_ua`, `document.export.docx` |
 | `verapdf-validate` | `verapdf-validate` | `docker/verapdf-validate.Dockerfile` | `pdf.validate.pdf_ua` |
+| `math-speech` | `math-speech` | `docker/math-speech.Dockerfile` | `math.convert`, `math.verbalize` (provider pending, see #64) |
 
-The `pdf-ua-render` build renders a smoke-test PDF and DOCX, and the
-`verapdf-validate` build validates a smoke-test PDF, so a broken toolchain
+The `pdf-ua-render` build renders a smoke-test PDF and DOCX, the
+`verapdf-validate` build validates a smoke-test PDF, and the `math-speech`
+build converts, speaks and brailles test formulas, so a broken toolchain
 fails CI rather than the first request.
 
 To run a local build instead (a recipe change under test, or the GPU variant

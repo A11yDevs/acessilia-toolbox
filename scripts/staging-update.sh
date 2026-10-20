@@ -62,7 +62,7 @@ GITHUB_REPO="A11yDevs/acessilia-toolbox"
 
 # Sidecars published by the Sidecars workflow (compose service names). They
 # are updated with the toolbox so the API never runs against an older sidecar.
-SIDECAR_SERVICES=(mineru-serve audiveris-serve nougat-serve rapid-latex-ocr rapidocr-orient pdf-ua-render verapdf-validate)
+SIDECAR_SERVICES=(mineru-serve audiveris-serve nougat-serve rapid-latex-ocr rapidocr-orient pdf-ua-render verapdf-validate math-speech)
 CI_IMAGE_PREFIX="ghcr.io/a11ydevs/acessilia-toolbox-"
 
 # Cache and status live in a local directory

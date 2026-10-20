@@ -225,3 +225,7 @@ __marimo__/
 .env.local
 # Remote Toolbox the E2E smoke tests target (holds its API key)
 .env.e2e
+
+# math-speech sidecar build outputs (rebuilt inside the image).
+docker/math-speech/node_modules/
+docker/math-speech/mathcat-wasm/target/
