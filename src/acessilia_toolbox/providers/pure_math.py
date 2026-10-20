@@ -18,16 +18,38 @@ from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.payload import latex_from_payload
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
+_LATEX2MATHML_PARSE_ERROR_NAMES = (
+    "DenominatorNotFoundError",
+    "DoubleSubscriptsError",
+    "DoubleSuperscriptsError",
+    "ExtraLeftOrMissingRightError",
+    "InvalidAlignmentError",
+    "InvalidStyleForGenfracError",
+    "InvalidWidthError",
+    "LimitsMustFollowMathOperatorError",
+    "MissingEndError",
+    "MissingSuperScriptOrSubscriptError",
+    "NoAvailableTokensError",
+    "NumeratorNotFoundError",
+)
+
+try:
+    from latex2mathml import exceptions as _latex2mathml_exceptions
+    from latex2mathml.converter import convert as _latex_to_mathml
+
+    _LATEX2MATHML_PARSE_ERRORS: tuple[type[Exception], ...] = tuple(
+        getattr(_latex2mathml_exceptions, name)
+        for name in _LATEX2MATHML_PARSE_ERROR_NAMES
+    )
+except ImportError:
+    _latex_to_mathml = None  # type: ignore[assignment]
+    _LATEX2MATHML_PARSE_ERRORS = ()
+
 # ---------------------------------------------------------------------------
 # LaTeX → MathML
 # ---------------------------------------------------------------------------
 
 LATEX2MATHML_EXTRA = "math"
-
-try:
-    from latex2mathml.converter import convert as _latex_to_mathml
-except ImportError:
-    _latex_to_mathml = None  # type: ignore[assignment]
 
 
 def _missing_latex2mathml_detail() -> str:
@@ -49,11 +71,11 @@ def _convert_latex_to_mathml(latex: str) -> str:
         raise ProviderUnavailableError(_missing_latex2mathml_detail())
     try:
         return _latex_to_mathml(latex)
-    except Exception as exc:
+    except _LATEX2MATHML_PARSE_ERRORS:
         raise InvalidInputError(
-            f"LaTeX could not be converted to MathML ({type(exc).__name__})",
+            "LaTeX could not be converted to MathML",
             capability="math.convert",
-        ) from exc
+        ) from None
 
 
 # ---------------------------------------------------------------------------
