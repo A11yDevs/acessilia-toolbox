@@ -26,3 +26,6 @@ tests/fixtures/dataset/
 
 # macOS artefacts.
 .DS_Store
+# math-speech sidecar build outputs (rebuilt inside the image).
+docker/math-speech/node_modules/
+docker/math-speech/mathcat-wasm/target/

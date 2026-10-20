@@ -38,6 +38,7 @@ services:
       RAPIDOCR_ORIENT_URL: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
       PDF_UA_RENDER_URL: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
       VERAPDF_VALIDATE_URL: ${VERAPDF_VALIDATE_URL:-http://verapdf-validate:5008}
+      MATH_SPEECH_URL: ${MATH_SPEECH_URL:-http://math-speech:5009}
       VLM_SERVE_URL: ${VLM_SERVE_URL:-}
       VLM_API_KEY: ${VLM_API_KEY:-}
     env_file:
@@ -190,6 +191,22 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    restart: unless-stopped
+
+  # Math speech sidecar (optional) for math.convert and math.verbalize: MathJax
+  # converts LaTeX to MathML and MathCAT speaks it in pt-BR and writes math
+  # braille. Built by CI from docker/math-speech.Dockerfile.
+  math-speech:
+    image: ${MATH_SPEECH_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-math-speech:${TRACK_TAG:-develop}}
+    container_name: math-speech-staging
+    ports:
+      - "${MATH_SPEECH_PORT:-5009}:5009"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5009/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   minio:
