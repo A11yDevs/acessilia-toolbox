@@ -57,7 +57,9 @@ echo <token> | docker login ghcr.io -u <your-user> --password-stdin   # read:pac
 ./scripts/ops.sh auto-update setup
 ```
 
-`setup` sets `COMPOSE_PROJECT_NAME=acessilia-toolbox-staging` in `.env`, so the containers and named volumes belong to the same compose project whatever the clone's directory is called. It then starts the stack and enables `acessilia-toolbox-staging-update.timer`, enabling with `sudo` linger (the timer survives logout) and membership in the `docker` group (log out and back in once it is added).
+`setup` sets `COMPOSE_PROJECT_NAME=acessilia-toolbox-staging` in `.env`, so the containers and named volumes belong to the same compose project whatever the clone's directory is called. It then starts the stack and enables `acessilia-toolbox-staging-update.timer`.
+
+The user that runs the timer needs, granted once by an administrator, membership in the `docker` group (`usermod -aG docker <user>`, then log in again; `setup` and `migrate` refuse to run without access to the Docker daemon) and linger (`loginctl enable-linger <user>`, so the timer keeps running after logout; `setup` warns when it is off). `ops.sh` never calls `sudo`; if something must run as root, run that command (or `ops.sh` itself) as root.
 
 ### Migrating from `/opt/a9a-toolbox/staging`
 
@@ -69,7 +71,7 @@ cd ~/acessilia-toolbox
 ./scripts/ops.sh auto-update migrate /opt/a9a-toolbox/staging
 ```
 
-`migrate` copies `.env` (refusing to overwrite a different `.env` in the clone) and `var/`, keeps the compose project name of the running toolbox container so compose takes over its containers and **named volumes** (MinIO data, model caches) instead of creating new ones, removes the old `staging-update` timer, checks out the branch in `TRACK_BRANCH` and runs `setup`. The old directory is left untouched; remove it once staging works.
+`migrate` first checks everything it needs: that it can read the old `.env` and all of `var/` (it lists what it cannot read), that the clone has no different `.env`, that the branch in `TRACK_BRANCH` can be checked out, and that Docker is reachable. Any failure stops it before anything changes, and a run interrupted later can simply be repeated. It then copies `.env` and `var/`, keeps the compose project name of the running toolbox container so compose takes over its containers and **named volumes** (MinIO data, model caches) instead of creating new ones, removes the old `staging-update` timer, checks out the branch in `TRACK_BRANCH` and runs `setup`. The old directory is left untouched; remove it once staging works.
 
 ## Management
 
@@ -157,7 +159,7 @@ docker inspect acessilia-toolbox-staging --format '{{ index .Config.Labels "com.
 
 ### Linger not enabled
 
-The user timer won't survive logout if linger is not active. `ops.sh auto-update setup` enables it, but you can check with:
+The user timer won't survive logout if linger is not active. `ops.sh auto-update setup` warns when it is off; an administrator enables it with `loginctl enable-linger <user>`. To check:
 
 ```bash
 loginctl show-user $USER | grep Linger
