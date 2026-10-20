@@ -12,6 +12,7 @@ import pytest
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
     ProviderExecutionError,
+    ProviderNotBoundError,
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
@@ -121,6 +122,18 @@ class TestConvert:
         assert result.document["direction"] == "mathml-to-latex"
         assert result.document["mathml"] == MATHML
         assert r"\frac" in result.document["latex"]
+
+    def test_unconvertible_mathml_fails_loudly(self) -> None:
+        def no_network(request: httpx.Request) -> httpx.Response:
+            raise AssertionError(f"unexpected request to {request.url}")
+
+        table = "<math><mtable><mtr><mtd><mi>x</mi></mtd></mtr></mtable></math>"
+        with pytest.raises(ProviderExecutionError, match="mtable"):
+            run(provider_with(no_network), "math.convert", table, direction="mathml-to-latex")
+
+    def test_unserved_capability_is_not_bound(self) -> None:
+        with pytest.raises(ProviderNotBoundError):
+            run(provider_with(Sidecar()), "chem.convert", "x")
 
     def test_unknown_direction_is_rejected_before_calling(self) -> None:
         sidecar = Sidecar()
@@ -246,3 +259,21 @@ class TestMathmlToLatex:
 
     def test_square_root(self) -> None:
         assert r"\sqrt{x}" in mathml_to_latex("<math><msqrt><mi>x</mi></msqrt></math>")
+
+    def test_token_attributes_are_dropped(self) -> None:
+        assert mathml_to_latex('<math><mi mathvariant="bold">v</mi></math>') == "v"
+
+    def test_pretty_printed_mathml(self) -> None:
+        mathml = "<math>\n  <msqrt>\n    <mi>x</mi>\n  </msqrt>\n</math>"
+        assert mathml_to_latex(mathml) == r"\sqrt{x}"
+
+    def test_semantics_keeps_presentation_and_drops_annotation(self) -> None:
+        mathml = (
+            "<math><semantics><mi>x</mi>"
+            '<annotation encoding="TeX">x</annotation></semantics></math>'
+        )
+        assert mathml_to_latex(mathml) == "x"
+
+    def test_unsupported_element_raises(self) -> None:
+        with pytest.raises(ValueError, match="mtable"):
+            mathml_to_latex("<math><mtable><mtr><mtd><mi>x</mi></mtd></mtr></mtable></math>")

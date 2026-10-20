@@ -10,7 +10,8 @@ Errors follow the sidecar's codes: input it rejects (unparseable LaTeX or
 MathML, a bad parameter, an oversized expression) is the caller's
 (``InvalidInputError``, 400); an unreachable or starting sidecar is
 ``ProviderUnavailableError`` (503); anything else, including MathCAT failing
-on valid MathML, is ``ProviderExecutionError``.
+on valid MathML or MathML the local mapper cannot convert, is
+``ProviderExecutionError``.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ import httpx
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
     ProviderExecutionError,
+    ProviderNotBoundError,
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
@@ -82,8 +84,12 @@ class MathSpeechProvider:
             direction = _choice(params, "direction", DIRECTIONS, "latex-to-mathml")
             configuration: dict[str, Any] = {"direction": direction}
             if direction == "mathml-to-latex":
+                try:
+                    latex = mathml_to_latex(expression)
+                except ValueError as exc:
+                    raise ProviderExecutionError(str(exc), provider=self.descriptor.id) from exc
                 document = {
-                    "latex": mathml_to_latex(expression),
+                    "latex": latex,
                     "mathml": expression,
                     "direction": direction,
                 }
@@ -116,7 +122,7 @@ class MathSpeechProvider:
                 "language": LANGUAGE,
             }
         else:
-            raise InvalidInputError(
+            raise ProviderNotBoundError(
                 f"provider {self.descriptor.id} does not serve {capability_id}",
                 provider=self.descriptor.id,
             )
