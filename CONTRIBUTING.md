@@ -129,13 +129,11 @@ When opening the PR, fill in the [pull request template](.github/pull_request_te
 
 After a PR is merged into `develop`, the **CD pipeline** (`.github/workflows/delivery.yml`) automatically builds a Docker image and publishes it to GHCR with the `develop` and `sha-<commit>` tags.
 
-The staging environment uses a **systemd timer** (`staging-update.timer`) that checks every 60s for a new image and restarts the container automatically. See [`docs/auto-update.md`](docs/auto-update.md) for detailed installation and management instructions.
+The staging server runs from a clone of this repository and a systemd user timer (`acessilia-toolbox-staging-update.timer`) that checks the tracked branch every 5 minutes and updates the toolbox and its sidecars once their images of a new commit are on GHCR. `scripts/ops.sh` installs and operates it; see [`docs/auto-update.md`](docs/auto-update.md).
 
-The complete staging environment setup is at:
-
-- `docker-compose.staging.yml` — defines the container
-- `scripts/staging-update.sh` — update script
-- `scripts/setup-homologacao.sh` — initial setup script
+- `docker-compose.staging.yml` — defines the containers
+- `scripts/ops.sh` — `auto-update setup|status|start|migrate`, `track` and the BHS commands
+- `scripts/staging-update.sh` — the update itself, run by `ops.sh auto-update start`
 
 ```bash
 # Check which image is running (via health API)
@@ -157,7 +155,7 @@ The Toolbox and [Acessilia](https://github.com/A11yDevs/acessilia) run BHS toget
 1. **Cut** — at the start of BHS:
 
    ```bash
-   ./scripts/start_bhs_cycle.sh 0.2.0
+   ./scripts/ops.sh bhs start 0.2.0
    ```
 
    The script forks `release/0.2.0` from `origin/develop`, commits the version bump (`pyproject.toml` and `uv.lock`) on it and pushes it, in a temporary worktree, so your checkout is left untouched. It refuses a version whose branch or `v` tag already exists.
@@ -168,31 +166,32 @@ The Toolbox and [Acessilia](https://github.com/A11yDevs/acessilia) run BHS toget
    - The **CI pipeline** (`ci.yml`) runs the same tests for PRs and pushes to `release/**`.
    - The **CD pipelines** (`delivery.yml`, `sidecars.yml`) publish the toolbox and sidecar images of `release/0.2.0` to GHCR with the `release-0.2.0` and `sha-<commit>` tags.
 
-3. **Staging points to the release** — set `TRACK_BRANCH=release/0.2.0` in the staging server's `.env` and refresh the scripts, so that `scripts/staging-update.sh` tracks the release branch (image tag `release-0.2.0`) instead of `develop`:
+3. **Staging points to the release** — on the staging server, in the clone (before Acessilia's staging):
 
    ```bash
-   echo "TRACK_BRANCH=release/0.2.0" >> .env
-   ./update_scripts.sh
+   ./scripts/ops.sh track release/0.2.0
    ```
+
+   It checks out and pulls `release/0.2.0`, sets `TRACK_BRANCH` (and `TRACK_TAG`) in `.env` and updates, so staging runs the `release-0.2.0` images. Run `./scripts/ops.sh bhs status` from your machine to see the release's workflows, image and PRs.
 
 4. **BHS closing** — when the release is stable (close the Toolbox before Acessilia, whose CI on `main` checks the Toolbox's `main` contract):
 
    ```bash
-   ./scripts/finish_bhs_cycle.sh 0.2.0            # opens release/0.2.0 → main and chore/sync-release-0.2.0 → develop
+   ./scripts/ops.sh bhs finish 0.2.0            # opens release/0.2.0 → main and chore/sync-release-0.2.0 → develop
    # review and merge both PRs (release → main with "Create a merge commit")
-   ./scripts/finish_bhs_cycle.sh 0.2.0 --cleanup  # tags v0.2.0 on the merge into main, deletes the branches
+   ./scripts/ops.sh bhs finish 0.2.0 --cleanup  # tags v0.2.0 on the merge into main, deletes the branches
    ```
 
    Fixes reach `develop` through `chore/sync-release-0.2.0`, forked from the release: resolve conflicts with `develop` there, never on `release/0.2.0`, which goes to `main`. Running the script again carries fixes merged afterwards over to the sync branch.
 
-   Then remove `TRACK_BRANCH` from the staging `.env` so staging goes back to tracking `develop`.
+   Then, on the staging server, `./scripts/ops.sh track develop` goes back to tracking `develop` (only once the sync PR is merged: `track` refuses a branch without `scripts/ops.sh`).
 
 ### 6. Release (`release/*` → `main`)
 
 Only maintainers ([@marceloakira](https://github.com/marceloakira), [@jhonata192](https://github.com/jhonata192) and [@fragaeduardo](https://github.com/fragaeduardo)) can merge a release into `main`.
 
 1. **QA approved the BHS?** → proceed.
-2. Run `./scripts/finish_bhs_cycle.sh x.y.z`, which opens the Pull Request from `release/x.y.z` to `main`.
+2. Run `./scripts/ops.sh bhs finish x.y.z`, which opens the Pull Request from `release/x.y.z` to `main`.
 3. Request review from another maintainer.
 4. After approval, merge with **"Create a merge commit"**: the release replaces `main`, and squash or rebase would discard its history.
 5. The **CD pipeline** on `main` publishes the `main`, `latest` and `sha-<commit>` tags.
@@ -201,7 +200,7 @@ The version was already bumped on the release branch when it was cut. To create 
 
 ```bash
 # 1. Tag the merge into main (also deletes release/x.y.z and its sync branch)
-./scripts/finish_bhs_cycle.sh 0.2.0 --cleanup
+./scripts/ops.sh bhs finish 0.2.0 --cleanup
 
 # 2. The Release workflow (release.yml) builds, publishes v0.2.0 to GHCR
 #    and creates the GitHub Release with automatic changelog
