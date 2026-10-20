@@ -2,35 +2,22 @@
 # staging-update.sh — Updates the Acessilia Toolbox staging container and its
 # sidecars via GitHub API.
 #
-# Checks the SHA of the latest commit on the develop branch via GitHub API and
+# Checks the SHA of the latest commit on the tracked branch via GitHub API and
 # confirms that the corresponding images (sha-<7> tag) of the toolbox and of
 # every sidecar it runs HAVE BEEN PUBLISHED on GHCR before updating them
 # together. Prevents updating to a commit whose build is still running or has
 # failed, and the API running against sidecars of another commit.
 #
-# Usage:
-#   ./scripts/staging-update.sh                     # Run once
-#   systemctl start staging-update.service           # Run via systemd
+# On the staging server it runs from the clone through scripts/ops.sh
+# (`auto-update start`, which the timer installed by `auto-update setup`
+# calls); production-update.sh reuses it with production defaults.
 #
-# Installation as systemd user timer (every 5 min):
-#   1. sudo cp scripts/staging-update.sh /opt/acessilia-toolbox/scripts/
-#   2. Create ~/.config/systemd/user/staging-update.service
-#   3. Create ~/.config/systemd/user/staging-update.timer
-#   4. systemctl --user daemon-reload
-#   5. systemctl --user enable --now staging-update.timer
-#
-# Prerequisites:
-#   - Docker + Docker Compose installed
-#   - jq installed (sudo apt install jq)
-#   - docker login ghcr.io configured
-#   - GHCR_TOKEN variable set (token with read:packages scope)
-#   - Run from the project root directory
+# Prerequisites: Docker + Docker Compose, jq, and a .env in the deployment
+# directory (GHCR_TOKEN raises the GitHub API rate limit).
 #
 # Tracked branch (Bug Hunting/Squashing):
-#   By default tracks "develop". During the BHS cycle, set TRACK_BRANCH
-#   in .env (e.g. TRACK_BRANCH=release/0.1.0) to point staging to the
-#   ephemeral release branch; when BHS ends, remove the variable (or revert
-#   to "develop") to resume normal tracking.
+#   "develop" by default. During BHS `ops.sh track release/x.y.z` sets
+#   TRACK_BRANCH in .env; `ops.sh track develop` removes it again.
 
 set -euo pipefail
 

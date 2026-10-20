@@ -152,11 +152,12 @@ curl http://localhost:8002/v1/health
 
 ### Auto-update (staging)
 
-The staging environment auto-updates via a systemd timer that checks for new
-images every 5 minutes:
+The staging server runs from a clone of this repository and auto-updates via a
+systemd timer that checks for new images every 5 minutes:
 
 ```bash
-./scripts/setup-homologacao.sh
+cp .env.example .env    # fill in the credentials
+./scripts/ops.sh auto-update setup
 ```
 
 📄 See [`docs/auto-update.md`](docs/auto-update.md) for setup and management.

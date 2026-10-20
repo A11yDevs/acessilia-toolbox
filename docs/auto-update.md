@@ -1,6 +1,16 @@
 # Automatic Image Update (Auto-Update)
 
-The Acessilia Toolbox offers automatic staging container updates via **systemd user timer**. Whenever a new commit is merged into `develop` (or the tracked branch), the toolbox container and its sidecars are updated together within 5 minutes of their images being published.
+The staging server runs from a **clone of this repository**: the clone holds the scripts, `docker-compose.staging.yml`, `.env` and `var/`, and the containers run the images CI publishes on GHCR. A **systemd user timer** updates the toolbox container and its sidecars together within 5 minutes of the images of a new commit on the tracked branch (`develop`, or `release/x.y.z` during BHS) being published.
+
+Everything goes through `scripts/ops.sh`:
+
+| Command | What it does |
+|---------|--------------|
+| `./scripts/ops.sh auto-update setup` | Starts the stack and installs the timer |
+| `./scripts/ops.sh auto-update status` | Clone branch, tracked branch, timer, last check, health, recent runs |
+| `./scripts/ops.sh auto-update start` | Updates now (what the timer runs) |
+| `./scripts/ops.sh track [<branch>]` | Follows a branch: `git pull` of the clone and `TRACK_BRANCH` in `.env`, then updates; without a branch, pulls the tracked one |
+| `./scripts/ops.sh auto-update migrate <dir>` | Moves an install made by the former `setup-homologacao.sh` into the clone |
 
 ## How it works
 
@@ -8,7 +18,7 @@ The Acessilia Toolbox offers automatic staging container updates via **systemd u
 [Git push] → [GitHub Actions: CI + Delivery]  → [GHCR: toolbox image develop, sha-<7>]
            → [GitHub Actions: Sidecars]       → [GHCR: acessilia-toolbox-<sidecar> develop, sha-<7>]
                                                       ↑
-[systemd timer (5 min)] → [staging-update.sh] ────────┘
+[systemd timer (5 min)] → [ops.sh auto-update start → staging-update.sh]
                               │
                               ├── 1. Queries the GitHub API (SHA of the latest commit)
                               ├── 2. Confirms the toolbox image sha-<7> is published
@@ -29,109 +39,52 @@ CI-published images, once per server:
 # 1. Drop the local image overrides (MINERU_SERVE_IMAGE=mineru:latest, ...)
 sed -i -E '/^(MINERU_SERVE|NOUGAT_SERVE|AUDIVERIS_SERVE|RAPID_LATEX_OCR|RAPIDOCR_ORIENT|PDF_UA_RENDER|VERAPDF_VALIDATE)_IMAGE=/d' .env
 
-# 2. Fetch the new staging-update.sh and docker-compose.staging.yml with
-#    scripts/update_scripts.sh (from the server's scripts directory), then
-#    start the sidecars from GHCR in the staging directory
-update_scripts.sh
+# 2. Pull the clone (new compose file) and start the sidecars from GHCR
+./scripts/ops.sh track
 docker compose -f docker-compose.staging.yml pull
 docker compose -f docker-compose.staging.yml up -d
 ```
 
 ## Installation
 
-### Full setup (recommended)
-
-Run the interactive setup script:
+### First install
 
 ```bash
-./scripts/setup-homologacao.sh
+git clone https://github.com/A11yDevs/acessilia-toolbox.git
+cd acessilia-toolbox
+cp .env.example .env              # fill in MINIO_ACCESS_KEY, MINIO_SECRET_KEY, TOOLBOX_API_KEY...
+echo <token> | docker login ghcr.io -u <your-user> --password-stdin   # read:packages
+./scripts/ops.sh auto-update setup
 ```
 
-Or non-interactively:
+`setup` sets `COMPOSE_PROJECT_NAME=acessilia-toolbox-staging` in `.env`, so the containers and named volumes belong to the same compose project whatever the clone's directory is called. It then starts the stack and enables `acessilia-toolbox-staging-update.timer`.
+
+The user that runs the timer needs, granted once by an administrator, membership in the `docker` group (`usermod -aG docker <user>`, then log in again; `setup` and `migrate` refuse to run without access to the Docker daemon) and linger (`loginctl enable-linger <user>`, so the timer keeps running after logout; `setup` warns when it is off). `ops.sh` never calls `sudo`; if something must run as root, run that command (or `ops.sh` itself) as root.
+
+### Migrating from `/opt/a9a-toolbox/staging`
+
+Installs made by the former `setup-homologacao.sh` copied the scripts next to the deployment and kept `.env` and `var/` in `/opt/a9a-toolbox/staging` (or `/opt/acessilia-toolbox/staging`). To move one into a clone:
 
 ```bash
-GITHUB_USER=your-user GHCR_TOKEN=your-token ./scripts/setup-homologacao.sh
+git clone -b release/0.2.0 https://github.com/A11yDevs/acessilia-toolbox.git ~/acessilia-toolbox
+cd ~/acessilia-toolbox
+./scripts/ops.sh auto-update migrate /opt/a9a-toolbox/staging
 ```
 
-The script:
-
-1. Checks dependencies (Docker, Compose, jq)
-2. Configures GHCR authentication
-3. Creates `.env` from `.env.example` if it doesn't exist
-4. Starts containers with `docker-compose.staging.yml`
-5. Installs the systemd user timer
-
-### Manual installation
-
-If you prefer to install manually:
-
-```bash
-# 1. Authenticate to GHCR
-echo <token> | docker login ghcr.io -u <your-user> --password-stdin
-
-# 2. Copy the update script
-sudo mkdir -p /opt/acessilia-toolbox/scripts
-sudo cp scripts/staging-update.sh /opt/acessilia-toolbox/scripts/
-sudo chmod +x /opt/acessilia-toolbox/scripts/staging-update.sh
-
-# 3. Create the service unit
-mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/staging-update.service << 'SERVICE'
-[Unit]
-Description=Update acessilia-toolbox staging container
-
-[Service]
-Type=oneshot
-ExecStart=/opt/acessilia-toolbox/scripts/staging-update.sh
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-SERVICE
-
-# 4. Create the timer unit (every 5 minutes)
-cat > ~/.config/systemd/user/staging-update.timer << 'TIMER'
-[Unit]
-Description=Check acessilia-toolbox staging updates every 5 minutes
-
-[Timer]
-OnBootSec=30s
-OnUnitActiveSec=300s
-
-[Install]
-WantedBy=timers.target
-TIMER
-
-# 5. Enable the timer
-systemctl --user daemon-reload
-systemctl --user enable --now staging-update.timer
-```
+`migrate` first checks everything it needs: that it can read the old `.env` and all of `var/` (it lists what it cannot read), that the clone has no different `.env`, that the branch in `TRACK_BRANCH` can be checked out, and that Docker is reachable. Any failure stops it before anything changes, and a run interrupted later can simply be repeated. It then copies `.env` and `var/`, keeps the compose project name of the running toolbox container so compose takes over its containers and **named volumes** (MinIO data, model caches) instead of creating new ones, removes the old `staging-update` timer, checks out the branch in `TRACK_BRANCH` and runs `setup`. The old directory is left untouched; remove it once staging works.
 
 ## Management
 
-### Check timer status
-
 ```bash
-systemctl --user status staging-update.timer
-systemctl --user list-timers
+./scripts/ops.sh auto-update status          # overview
+./scripts/ops.sh auto-update start           # update now
+./scripts/ops.sh track                       # git pull of the tracked branch, then update
+journalctl --user -u acessilia-toolbox-staging-update.service -n 50 --no-pager
+systemctl --user stop acessilia-toolbox-staging-update.timer    # pause updates
+systemctl --user start acessilia-toolbox-staging-update.timer   # resume them
 ```
 
-### View last execution logs
-
-```bash
-systemctl --user status staging-update.service
-journalctl --user -u staging-update.service -n 50
-```
-
-### Run a manual update
-
-```bash
-./scripts/staging-update.sh
-```
-
-### Stop the timer
-
-```bash
-systemctl --user stop staging-update.timer
-systemctl --user disable staging-update.timer
-```
+`track` refuses to run when tracked files in the clone have local changes, so the server never drifts from the repository. To test a locally built image, stop the timer first: otherwise the next update pulls the GHCR image over it.
 
 ### Check which images are running
 
@@ -142,21 +95,19 @@ docker inspect pdf-ua-render-staging | jq -r '.[0].Config.Labels["org.opencontai
 
 ## Branch tracking (BHS)
 
-During the Bug Hunting/Squashing (BHS) cycle, you can point staging to a specific release branch:
+During the Bug Hunting/Squashing (BHS) cycle, staging follows the release branch:
 
 ```bash
-# In the staging server's .env
-echo "TRACK_BRANCH=release/0.1.0" >> .env
-
-# Or via environment variable
-TRACK_BRANCH=release/0.1.0 ./scripts/staging-update.sh
+./scripts/ops.sh track release/0.2.0     # before Acessilia's staging
 ```
 
-To go back to tracking `develop`, remove the variable from `.env`:
+It checks out and pulls the branch, sets `TRACK_BRANCH` and `TRACK_TAG` in `.env` (so a plain `docker compose` in the clone uses the same images) and updates. When the cycle ends, once the release's sync PR is merged into `develop`:
 
 ```bash
-sed -i '/^TRACK_BRANCH=/d' .env
+./scripts/ops.sh track develop
 ```
+
+`track` refuses a branch without `scripts/ops.sh`, since the timer runs it from the clone.
 
 ## Status files
 
@@ -185,8 +136,8 @@ Example output:
 ### Container not updating
 
 1. Check if the GHCR token has `read:packages` permission
-2. Check logs: `journalctl --user -u staging-update.service -n 50`
-3. Run manually: `./scripts/staging-update.sh`
+2. Check the overview and logs: `./scripts/ops.sh auto-update status`
+3. Run manually: `./scripts/ops.sh auto-update start`
 4. Check if the image was published: `docker manifest inspect ghcr.io/a11ydevs/acessilia-toolbox:sha-<sha7>`
 
 ### docker compose not found
@@ -198,13 +149,17 @@ export COMPOSE_FILE="docker-compose.staging.yml"
 docker-compose up -d
 ```
 
-### Permission denied accessing /opt/acessilia-toolbox
+### `Container name already in use`
 
-The script needs `sudo` to create directories in `/opt`. Run the setup with a sudo-enabled user.
+Another compose project owns the container, typically an install not yet migrated. Use `./scripts/ops.sh auto-update migrate <old dir>`, or set `COMPOSE_PROJECT_NAME` in `.env` to that project:
+
+```bash
+docker inspect acessilia-toolbox-staging --format '{{ index .Config.Labels "com.docker.compose.project" }}'
+```
 
 ### Linger not enabled
 
-The user timer won't survive logout if linger is not active. The setup script enables it automatically, but you can check with:
+The user timer won't survive logout if linger is not active. `ops.sh auto-update setup` warns when it is off; an administrator enables it with `loginctl enable-linger <user>`. To check:
 
 ```bash
 loginctl show-user $USER | grep Linger
