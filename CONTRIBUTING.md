@@ -111,8 +111,6 @@ pytest tests/ -v
 
 The CI pipeline will run tests automatically on GitHub. The PR can only be reviewed if **all tests are green**.
 
-Fill in the [pull request template](.github/pull_request_template.md), including its conformance checklist. It covers the principles in [docs/constitution.md](docs/constitution.md) and the ecosystem principles and ADRs it links to. `Closes #N` closes the issue only when the PR merges into `main`; for a PR into `develop`, close the issue by hand after the merge.
-
 ```bash
 # Option A — via GitHub (recommended)
 git push origin feat/my-feature
@@ -124,6 +122,8 @@ git merge feat/my-feature
 git push origin develop
 git branch -d feat/my-feature
 ```
+
+When opening the PR, fill in the [pull request template](.github/pull_request_template.md), including its conformance checklist. It covers the principles in [docs/constitution.md](docs/constitution.md) and the ecosystem principles and ADRs it links to. `Closes #N` closes the issue only when the PR merges into `main`; for a PR into `develop`, close the issue by hand after the merge.
 
 ### 5. Staging (QA)
 
