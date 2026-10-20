@@ -171,6 +171,23 @@ The toolbox now exposes the capability via REST (`GET /v1/capabilities/speech.sy
 and MCP. Trying to execute it without a provider returns a clear error:
 "no provider implements speech.synthesize".
 
+### Regenerate the published contract
+
+Adding, versioning or removing a capability or a provider changes the
+contract that consumers check against. Regenerate it in the same pull request:
+
+```bash
+python scripts/export_contract.py
+```
+
+It rewrites `contract/toolbox-contract.json` from `capabilities/` and
+`providers-config.yaml`. In each capability entry, `providers` lists the
+providers registered for the capability id, not for a specific version.
+`tests/unit/test_published_contract.py` fails while
+the file is stale. The file is attached to every release, and the Acessilia
+core's CI checks its SDK registry against it
+([A11yDevs/acessilia#186](https://github.com/A11yDevs/acessilia/issues/186)).
+
 ---
 
 ## 5. How to add a new provider
