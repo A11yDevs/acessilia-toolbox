@@ -131,9 +131,11 @@ _bhs_start() {
     _die "tag v${version} already exists: ${version} has been released."
   fi
 
-  worktree="$(mktemp -d)"
+  worktree="$(mktemp -d "${TMPDIR:-/tmp}/bhs-worktree.XXXXXX")"
+  # rm -rf covers a failed `git worktree add`: git does not know the directory
+  # then, and `worktree remove` leaves it behind; prune drops the registration.
   # shellcheck disable=SC2064
-  trap "git worktree remove --force '$worktree' >/dev/null 2>&1 || true" EXIT
+  trap "git worktree remove --force '$worktree' >/dev/null 2>&1 || true; rm -rf '$worktree'; git worktree prune" EXIT
   git worktree add --quiet --detach "$worktree" origin/develop
 
   _info "Bumping ${PACKAGE} to ${version}..."
