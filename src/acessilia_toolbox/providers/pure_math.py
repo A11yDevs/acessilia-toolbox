@@ -13,21 +13,43 @@ from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any
 
-from acessilia_toolbox.core.errors import ProviderUnavailableError
+from acessilia_toolbox.core.errors import InvalidInputError, ProviderUnavailableError
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.payload import latex_from_payload
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+
+_LATEX2MATHML_PARSE_ERROR_NAMES = (
+    "DenominatorNotFoundError",
+    "DoubleSubscriptsError",
+    "DoubleSuperscriptsError",
+    "ExtraLeftOrMissingRightError",
+    "InvalidAlignmentError",
+    "InvalidStyleForGenfracError",
+    "InvalidWidthError",
+    "LimitsMustFollowMathOperatorError",
+    "MissingEndError",
+    "MissingSuperScriptOrSubscriptError",
+    "NoAvailableTokensError",
+    "NumeratorNotFoundError",
+)
+
+try:
+    from latex2mathml import exceptions as _latex2mathml_exceptions
+    from latex2mathml.converter import convert as _latex_to_mathml
+
+    _LATEX2MATHML_PARSE_ERRORS: tuple[type[Exception], ...] = tuple(
+        getattr(_latex2mathml_exceptions, name)
+        for name in _LATEX2MATHML_PARSE_ERROR_NAMES
+    )
+except ImportError:
+    _latex_to_mathml = None  # type: ignore[assignment]
+    _LATEX2MATHML_PARSE_ERRORS = ()
 
 # ---------------------------------------------------------------------------
 # LaTeX → MathML
 # ---------------------------------------------------------------------------
 
 LATEX2MATHML_EXTRA = "math"
-
-try:
-    from latex2mathml.converter import convert as _latex_to_mathml
-except ImportError:
-    _latex_to_mathml = None  # type: ignore[assignment]
 
 
 def _missing_latex2mathml_detail() -> str:
@@ -38,10 +60,22 @@ def _missing_latex2mathml_detail() -> str:
 
 
 def _convert_latex_to_mathml(latex: str) -> str:
-    """Convert a LaTeX expression to MathML."""
+    """Convert a LaTeX expression to MathML.
+
+    LaTeX that latex2mathml cannot parse is the caller's input, not a provider
+    failure, so it is reported as invalid input (400) and kept apart from an
+    unavailable provider (503). The message leaves the expression out, since
+    it may quote private document content.
+    """
     if _latex_to_mathml is None:
         raise ProviderUnavailableError(_missing_latex2mathml_detail())
-    return _latex_to_mathml(latex)
+    try:
+        return _latex_to_mathml(latex)
+    except _LATEX2MATHML_PARSE_ERRORS:
+        raise InvalidInputError(
+            "LaTeX could not be converted to MathML",
+            capability="math.convert",
+        ) from None
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +443,7 @@ def _verbalize_latex(latex: str) -> str:
 # Provider
 # ---------------------------------------------------------------------------
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 
 class PureMathProvider:
