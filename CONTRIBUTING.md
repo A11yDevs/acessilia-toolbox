@@ -150,67 +150,60 @@ docker inspect acessilia-toolbox-staging | jq '.[0].Config.Image'
 
 ### 5.1 Bug Hunting/Squashing (BHS)
 
-Before each release, there is a **Bug Hunting/Squashing (BHS)** cycle: a period where staging tests exactly the release candidate, without mixing features still in development. To do this, we create an ephemeral `release/x.y.z` branch from `develop`.
+Before each release, there is a **Bug Hunting/Squashing (BHS)** cycle: a period where staging tests exactly the release candidate, without mixing features still in development. To do this, we fork an ephemeral `release/x.y.z` branch from `develop`; it becomes the candidate to replace `main`.
 
-1. **Cut** — at the start of BHS, cut the release branch from `develop`:
+The Toolbox and [Acessilia](https://github.com/A11yDevs/acessilia) run BHS together, with the same version. **Cut the Toolbox first**: Acessilia's CI checks a `release/x.y.z` branch against the capability contract of the Toolbox's `release/x.y.z`.
+
+1. **Cut** — at the start of BHS:
 
    ```bash
-   git checkout develop && git pull
-   git checkout -b release/0.1.0 origin/develop
-   git push origin release/0.1.0
+   ./scripts/start_bhs_cycle.sh 0.2.0
    ```
+
+   The script forks `release/0.2.0` from `origin/develop`, commits the version bump (`pyproject.toml` and `uv.lock`) on it and pushes it, in a temporary worktree, so your checkout is left untouched. It refuses a version whose branch or `v` tag already exists.
 
 2. **During BHS**:
-   - PRs `fix/*` that fix bugs found in staging go to `release/0.1.0` (instead of `develop`).
-   - PRs `feat/*` continue targeting `develop` normally — `develop` is never blocked, since the release scope was already locked at cut time.
+   - PRs `fix/*` (or `hotfix/*`) that fix bugs found in staging go to `release/0.2.0` (instead of `develop`). The `release-scope` CI job rejects PRs from any other branch.
+   - PRs `feat/*`, `refactor/*` and the rest keep targeting `develop` — `develop` is never blocked, since the release scope was locked at cut time.
    - The **CI pipeline** (`ci.yml`) runs the same tests for PRs and pushes to `release/**`.
-   - The **CD pipeline** (`delivery.yml`) publishes the `release/0.1.0` image to GHCR with the `release-0.1.0` and `sha-<commit>` tags.
+   - The **CD pipelines** (`delivery.yml`, `sidecars.yml`) publish the toolbox and sidecar images of `release/0.2.0` to GHCR with the `release-0.2.0` and `sha-<commit>` tags.
 
-3. **Staging points to the release** — set `TRACK_BRANCH=release/0.1.0` in the staging server's `.env` so that `scripts/staging-update.sh` tracks the release branch (image tag `release-0.1.0`) instead of `develop`:
-
-   ```bash
-   echo "TRACK_BRANCH=release/0.1.0" >> .env
-   ```
-
-4. **BHS closing** — when the release is stable:
+3. **Staging points to the release** — set `TRACK_BRANCH=release/0.2.0` in the staging server's `.env` and refresh the scripts, so that `scripts/staging-update.sh` tracks the release branch (image tag `release-0.2.0`) instead of `develop`:
 
    ```bash
-   # Merge to main (creates the official release, see section 6)
-   # Open a PR from release/0.1.0 → main and merge after approval
-
-   # Propagate fixes to develop
-   # Open a PR from release/0.1.0 → develop and merge after approval
-
-   git push origin --delete release/0.1.0
+   echo "TRACK_BRANCH=release/0.2.0" >> .env
+   ./update_scripts.sh
    ```
 
-   Then remove (or revert) `TRACK_BRANCH` from the staging `.env` so staging goes back to tracking `develop`.
+4. **BHS closing** — when the release is stable (close the Toolbox before Acessilia, whose CI on `main` checks the Toolbox's `main` contract):
 
-### 6. Release (develop → main)
+   ```bash
+   ./scripts/finish_bhs_cycle.sh 0.2.0            # opens release/0.2.0 → main and chore/sync-release-0.2.0 → develop
+   # review and merge both PRs (release → main with "Create a merge commit")
+   ./scripts/finish_bhs_cycle.sh 0.2.0 --cleanup  # tags v0.2.0 on the merge into main, deletes the branches
+   ```
 
-Only maintainers ([@marceloakira](https://github.com/marceloakira), [@jhonata192](https://github.com/jhonata192) and [@fragaeduardo](https://github.com/fragaeduardo)) can merge `develop → main`.
+   Fixes reach `develop` through `chore/sync-release-0.2.0`, forked from the release: resolve conflicts with `develop` there, never on `release/0.2.0`, which goes to `main`. Running the script again carries fixes merged afterwards over to the sync branch.
 
-1. **QA approved?** → proceed.
-2. Open a Pull Request from `develop` to `main` on GitHub.
+   Then remove `TRACK_BRANCH` from the staging `.env` so staging goes back to tracking `develop`.
+
+### 6. Release (`release/*` → `main`)
+
+Only maintainers ([@marceloakira](https://github.com/marceloakira), [@jhonata192](https://github.com/jhonata192) and [@fragaeduardo](https://github.com/fragaeduardo)) can merge a release into `main`.
+
+1. **QA approved the BHS?** → proceed.
+2. Run `./scripts/finish_bhs_cycle.sh x.y.z`, which opens the Pull Request from `release/x.y.z` to `main`.
 3. Request review from another maintainer.
-4. After approval, merge (preferably "Create a merge commit").
+4. After approval, merge with **"Create a merge commit"**: the release replaces `main`, and squash or rebase would discard its history.
 5. The **CD pipeline** on `main` publishes the `main`, `latest` and `sha-<commit>` tags.
 
-To create an **official Release** with semantic versioning:
+The version was already bumped on the release branch when it was cut. To create the **official Release**:
 
 ```bash
-# 1. Update the version in pyproject.toml
-#    (e.g. bump from "0.1.0" to "0.2.0")
-git checkout main && git pull
-# edit pyproject.toml
-git add pyproject.toml
-git commit -m "chore(release): bump to 0.2.0"
+# 1. Tag the merge into main (also deletes release/x.y.z and its sync branch)
+./scripts/finish_bhs_cycle.sh 0.2.0 --cleanup
 
-# 2. Create the semantic tag
-git tag v0.2.0
-git push origin main --tags
-
-# 3. The Release workflow (release.yml) builds, publishes v0.2.0 to GHCR
+# 2. The Release workflow (release.yml) builds, publishes v0.2.0 to GHCR
 #    and creates the GitHub Release with automatic changelog
 ```
 

@@ -110,18 +110,27 @@ _update_services() {
 }
 
 # ──────────────────────────────────────────────
-# 0. Load GHCR_TOKEN (if not set in environment)
+# 0. Load settings from .env
 # ──────────────────────────────────────────────
-# Possible sources, in order:
-#   1. GHCR_TOKEN environment variable
-#   2. <STAGING_DIR>/.env file (GHCR_TOKEN=...)
-if [ -z "${GHCR_TOKEN:-}" ]; then
-  if [ -f "$STAGING_DIR/.env" ]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$STAGING_DIR/.env"
-    set +a
-  fi
+# .env is always loaded, so TRACK_BRANCH set there for BHS applies even when
+# GHCR_TOKEN already comes from the environment. Variables already exported
+# (GHCR_TOKEN, TRACK_BRANCH) win over .env.
+ENV_GHCR_TOKEN="${GHCR_TOKEN:-}"
+ENV_TRACK_BRANCH="${TRACK_BRANCH:-}"
+
+if [ -f "$STAGING_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$STAGING_DIR/.env"
+  set +a
+fi
+
+if [ -n "$ENV_GHCR_TOKEN" ]; then
+  GHCR_TOKEN="$ENV_GHCR_TOKEN"
+fi
+
+if [ -n "$ENV_TRACK_BRANCH" ]; then
+  TRACK_BRANCH="$ENV_TRACK_BRANCH"
 fi
 
 # Tracked branch/tag: TRACK_BRANCH (env or .env) wins, then the caller's
@@ -151,10 +160,14 @@ if [ -n "${GHCR_TOKEN:-}" ]; then
   AUTH_HEADER=(-H "Authorization: token $GHCR_TOKEN")
 fi
 
-LATEST_SHA=$(curl -fsS \
+# A failed request must reach the fallback below instead of aborting under
+# set -e.
+if ! LATEST_SHA=$(curl -fsS \
   "${AUTH_HEADER[@]}" \
   "https://api.github.com/repos/$GITHUB_REPO/commits/$GITHUB_BRANCH" \
-  | jq -r '.sha')
+  | jq -r '.sha'); then
+  LATEST_SHA=""
+fi
 
 # If SHA could not be obtained, pull directly (safe fallback)
 if [ -z "$LATEST_SHA" ] || [ "$LATEST_SHA" = "null" ]; then
@@ -169,10 +182,14 @@ if [ -z "$LATEST_SHA" ] || [ "$LATEST_SHA" = "null" ]; then
   exit 0
 fi
 
-# Compare with SHA from last execution
+# Compare with the branch and SHA of the last execution. The branch is part of
+# the key because a newly tracked branch (e.g. the BHS cut) can point at the
+# same commit: comparing only the SHA kept the containers on the previous
+# branch's images until the next commit.
+CACHE_KEY="$GITHUB_BRANCH $LATEST_SHA"
 if [ -f "$CACHE_FILE" ]; then
-  CACHED_SHA=$(cat "$CACHE_FILE")
-  if [ "$CACHED_SHA" = "$LATEST_SHA" ]; then
+  CACHED_KEY=$(cat "$CACHE_FILE")
+  if [ "$CACHED_KEY" = "$CACHE_KEY" ]; then
     _write_status "$LATEST_SHA" "" ""
     echo "[staging-update] ✅ No new commits on $GITHUB_REPO/$GITHUB_BRANCH. Skipping."
     exit 0
@@ -216,7 +233,7 @@ _update_services || {
 }
 
 # only write cache after successful restart (set -e aborts before on failure)
-echo "$LATEST_SHA" > "$CACHE_FILE"
+echo "$CACHE_KEY" > "$CACHE_FILE"
 
 docker image prune -f
 
