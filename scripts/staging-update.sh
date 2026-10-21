@@ -177,7 +177,8 @@ CACHE_KEY="$GITHUB_BRANCH $LATEST_SHA"
 if [ -f "$CACHE_FILE" ]; then
   CACHED_KEY=$(cat "$CACHE_FILE")
   if [ "$CACHED_KEY" = "$CACHE_KEY" ]; then
-    _write_status "$LATEST_SHA" "" ""
+    # Nothing to update means the cached commit is the one running.
+    _write_status "$LATEST_SHA" "$LATEST_SHA" ""
     echo "[staging-update] ✅ No new commits on $GITHUB_REPO/$GITHUB_BRANCH. Skipping."
     exit 0
   fi
