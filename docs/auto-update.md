@@ -59,7 +59,7 @@ echo <token> | docker login ghcr.io -u <your-user> --password-stdin   # read:pac
 
 `setup` sets `COMPOSE_PROJECT_NAME=acessilia-toolbox-staging` in `.env`, so the containers and named volumes belong to the same compose project whatever the clone's directory is called. It then starts the stack and enables `acessilia-toolbox-staging-update.timer`.
 
-The user that runs the timer needs, granted once by an administrator, membership in the `docker` group (`usermod -aG docker <user>`, then log in again; `setup` and `migrate` refuse to run without access to the Docker daemon) and linger (`loginctl enable-linger <user>`, so the timer keeps running after logout; `setup` warns when it is off). `ops.sh` never calls `sudo`; if something must run as root, run that command (or `ops.sh` itself) as root.
+The user that runs the timer needs, granted once by an administrator, membership in the `docker` group (`usermod -aG docker <user>`, then log in again; `setup` and `migrate` refuse to run without access to the Docker daemon) and linger (`loginctl enable-linger <user>`, so the timer keeps running after logout; `setup` warns when it is off). `ops.sh` never calls `sudo`; if something must run as root, run that command (or `ops.sh` itself) as root. A session opened with `su` has no `XDG_RUNTIME_DIR`; `ops.sh` then uses `/run/user/<uid>` by itself, and when that does not exist either (no linger, no login), `setup` and `migrate` stop and say so.
 
 ### Migrating from `/opt/a9a-toolbox/staging`
 
@@ -71,7 +71,7 @@ cd ~/acessilia-toolbox
 ./scripts/ops.sh auto-update migrate /opt/a9a-toolbox/staging
 ```
 
-`migrate` first checks everything it needs: that it can read the old `.env` and all of `var/` (it lists what it cannot read), that the clone has no different `.env`, that the branch in `TRACK_BRANCH` can be checked out, and that Docker is reachable. Any failure stops it before anything changes, and a run interrupted later can simply be repeated. It then copies `.env` and `var/`, keeps the compose project name of the running toolbox container so compose takes over its containers and **named volumes** (MinIO data, model caches) instead of creating new ones, removes the old `staging-update` timer, checks out the branch in `TRACK_BRANCH` and runs `setup`. The old directory is left untouched; remove it once staging works.
+`migrate` first checks everything it needs: that it can read the old `.env` and all of `var/` (it lists what it cannot read), that the clone has no different `.env`, that the branch in `TRACK_BRANCH` can be checked out, and that Docker and the user's systemd instance are reachable. Any failure stops it before anything changes, and a run interrupted later can simply be repeated. It then disables the old `staging-update` timer (stopping if it cannot), copies `.env` and `var/`, keeps the compose project name of the running toolbox container so compose takes over its containers and **named volumes** (MinIO data, model caches) instead of creating new ones, checks out the branch in `TRACK_BRANCH` and runs `setup`. The old installs kept the Toolbox and Acessilia in one project named `staging`: `migrate` warns when the project holds another stack's containers, which a `--remove-orphans` here would delete. Acessilia's own `migrate` moves it to a project of its own. The old directory is left untouched; remove it once staging works.
 
 ## Management
 
@@ -149,13 +149,9 @@ export COMPOSE_FILE="docker-compose.staging.yml"
 docker-compose up -d
 ```
 
-### `Container name already in use`
+### `acessilia-toolbox-staging belongs to compose project '…'`
 
-Another compose project owns the container, typically an install not yet migrated. Use `./scripts/ops.sh auto-update migrate <old dir>`, or set `COMPOSE_PROJECT_NAME` in `.env` to that project:
-
-```bash
-docker inspect acessilia-toolbox-staging --format '{{ index .Config.Labels "com.docker.compose.project" }}'
-```
+`track`, `auto-update start` and `setup` refuse to run when the toolbox container belongs to another install, which would make compose fail with a name conflict. The message names that install's directory; move it into the clone with `./scripts/ops.sh auto-update migrate <dir>`.
 
 ### Linger not enabled
 
