@@ -47,6 +47,18 @@ committed):
 cp .env.example .env
 ```
 
+When a later version adds keys to `.env.example`, bring them into your `.env`
+without touching the values already there:
+
+``` bash
+python scripts/sync_env.py          # appends the missing keys with their comments
+python scripts/sync_env.py --check  # changes nothing; exit 1 if keys are missing
+```
+
+The script also lists keys of `.env` that the example no longer declares
+(probably deprecated when no versioned file mentions them), keys set twice,
+and values that `scripts/staging-update.sh` cannot `source` unquoted.
+
 ### 2. Edit the secrets
 
 Open `.env` in your editor and replace the placeholder credentials with
