@@ -58,6 +58,17 @@ CACHE_FILE="${STAGING_UPDATE_CACHE:-$CACHE_DIR/.last_sha}"
 STATUS_FILE="${STAGING_STATUS_FILE:-$CACHE_DIR/staging-status.json}"
 mkdir -p "$CACHE_DIR"
 
+# Run one update at a time: a manual `ops.sh auto-update start` during the
+# timer's run would have two `compose up` calls recreating the same containers.
+# The MinerU image alone can take minutes to pull, so an overlap is plausible.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$CACHE_DIR/.update.lock"
+  if ! flock -n 9; then
+    echo "[staging-update] ⏭️  Another update is already running. Skipping."
+    exit 0
+  fi
+fi
+
 # ──────────────────────────────────────────────
 # Status helpers
 # ──────────────────────────────────────────────
@@ -90,9 +101,42 @@ _managed_sidecars() {
   done
 }
 
+# Removes containers left behind when a previous `compose up` was interrupted.
+# Compose creates the replacement container as <old-container-id[:12]>_<name>
+# and only afterwards stops/removes the old one and renames the new one. If
+# the process dies in between (a pull of the MinerU image can take minutes),
+# the next `up` reuses that temporary name and fails with "container name is
+# already in use". Deleting the leftovers is safe: the image is already pulled,
+# so compose creates the containers again on the `up` that follows.
+_clear_interrupted_recreations() {
+  local project svc name id cname
+  local -a stale
+  project=$(jq -r '.name // empty' <<<"$COMPOSE_CONFIG")
+  [ -n "$project" ] || return 0
+  for svc in toolbox "${SIDECARS[@]}"; do
+    name=$(jq -r --arg s "$svc" '.services[$s].container_name // empty' <<<"$COMPOSE_CONFIG")
+    [ -n "$name" ] || continue
+    stale=()
+    while read -r id cname; do
+      [ -n "$id" ] || continue
+      case "$cname" in
+        [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]_"$name")
+          stale+=("$id") ;;
+      esac
+    done < <(docker ps -a \
+      --filter "label=com.docker.compose.project=$project" \
+      --filter "label=com.docker.compose.service=$svc" \
+      --format '{{.ID}} {{.Names}}' 2>/dev/null || true)
+    [ "${#stale[@]}" -gt 0 ] || continue
+    echo "[staging-update] 🧹 Removing container left by an interrupted recreation of $svc: ${stale[*]}"
+    docker rm -f "${stale[@]}" >/dev/null
+  done
+}
+
 # Pulls and restarts the toolbox together with the managed sidecars.
 _update_services() {
   docker compose -f "$COMPOSE_FILE" pull toolbox "${SIDECARS[@]}"
+  _clear_interrupted_recreations
   docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox "${SIDECARS[@]}"
 }
 

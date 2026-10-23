@@ -1,5 +1,6 @@
 """scripts/staging-update.sh against stubbed curl and docker commands."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -12,7 +13,14 @@ SHA = "1234567890abcdef"
 _DOCKER = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$STAGING_DIR/docker-args.txt"
 case "$*" in
-  *"config --format json"*) printf '{"services":{}}' ;;
+  *"config --format json"*)
+    if [ -n "${DOCKER_CONFIG_JSON:-}" ]; then
+      printf '%s' "$DOCKER_CONFIG_JSON"
+    else
+      printf '{"services":{}}'
+    fi ;;
+  compose*"ps -a --services"*) printf '%b' "${COMPOSE_SERVICES:-}" ;;
+  ps*-a*) printf '%b' "${DOCKER_PS:-}" ;;
 esac
 exit 0
 """
@@ -107,3 +115,47 @@ def test_failed_github_request_falls_back_to_pulling(tmp_path):
 
     assert "compose -f docker-compose.staging.yml pull toolbox" in docker_calls
     assert "compose -f docker-compose.staging.yml up -d --no-deps toolbox" in docker_calls
+
+
+def _sidecar_config() -> str:
+    return json.dumps(
+        {
+            "name": "acessilia-toolbox-staging",
+            "services": {
+                "mineru-serve": {
+                    "image": "ghcr.io/a11ydevs/acessilia-toolbox-mineru:release-0.2.0",
+                    "container_name": "mineru-serve-staging",
+                }
+            },
+        }
+    )
+
+
+def test_removes_container_left_by_interrupted_compose_recreate(tmp_path):
+    """Compose renames the old container to <id>_<name> before recreating it.
+
+    If a previous `up` was interrupted in between, that renamed container stays
+    behind and the next `up` fails with "container name is already in use".
+    """
+    staging_dir, env = _staging(tmp_path, "TRACK_BRANCH=release/0.2.0\n", _CURL_OK)
+    env.update(
+        {
+            "DOCKER_CONFIG_JSON": _sidecar_config(),
+            "COMPOSE_SERVICES": "mineru-serve\n",
+            "DOCKER_PS": (
+                "af9061dc09c4 e84cd08e46e5_mineru-serve-staging\n"
+                "deadbeef0000 mineru-serve-staging\n"
+            ),
+        }
+    )
+
+    docker_calls = _run(staging_dir, env)
+
+    assert "rm -f af9061dc09c4" in docker_calls
+    assert "rm -f deadbeef0000" not in docker_calls
+    assert (
+        "compose -f docker-compose.staging.yml up -d --no-deps toolbox mineru-serve"
+        in docker_calls
+    )
+    cache_file = staging_dir / "var" / "data" / ".last_sha"
+    assert cache_file.read_text().strip() == f"release/0.2.0 {SHA}"
