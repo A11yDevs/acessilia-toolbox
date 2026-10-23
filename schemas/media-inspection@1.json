@@ -88,6 +88,16 @@
       "enum": ["standalone_image", "scanned_page", "paginated_document", "unknown"],
       "description": "Classification heuristic of the artifact nature."
     },
+    "document_genre": {
+      "type": ["string", "null"],
+      "enum": ["presentation", "document", null],
+      "description": "Whether a PDF is a slide deck (presentation) or another document; null when it was not measured (images, or PDFs without PyMuPDF). Absent in reports from providers older than pure-media-inspect 1.1.0."
+    },
+    "genre_signals": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Why document_genre is presentation: the producer or creator software (producer:powerpoint) or the page geometry (geometry:landscape-uniform). Empty for a document."
+    },
     "requires_visual_inspection": {
       "type": "boolean",
       "description": "Flag indicating that the artifact is, or contains, prominent visual content the agent must inspect with vision."
