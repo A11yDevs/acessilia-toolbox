@@ -99,12 +99,18 @@ For a PDF, `document_genre` tells a slide deck (`presentation`) from any other
 document (`document`), so a consumer can structure a deck slide by slide.
 `genre_signals` says why; either signal is enough:
 
-- `producer:<name>` / `creator:<name>`: the PDF metadata names software that
-  only makes decks (PowerPoint, Keynote, Impress, Beamer). Google Slides is not
-  listed: its PDFs share the "Google" producer with Google Docs.
+- `producer:<name>` / `creator:<name>`: the PDF metadata names, as a whole
+  word, software that only makes decks. `<name>` is a lowercase token, one of
+  `powerpoint`, `keynote`, `impress` or `beamer`, whatever the casing in the
+  metadata. Google Slides is not listed: its PDFs share the "Google" producer
+  with Google Docs.
 - `geometry:landscape-uniform`: two or more pages, at least 90% of them with
-  the same landscape size, with a width/height ratio between 1.25 and 1.85
-  (4:3 to 16:9).
+  the same landscape size, with a width/height ratio within 0.02 of 4:3, 16:10
+  or 16:9. Landscape paper (Letter 1.29, A4 1.41, Legal 1.65) falls outside, so
+  a landscape report stays a `document`.
+
+The genre is best-effort: when a later page or the metadata cannot be read,
+`document_genre` is `null` and the rest of the inspection is still reported.
 
 `document_genre` is `null` for images and for PDFs inspected without PyMuPDF,
 whose pages are not measured. Providers before `pure-media-inspect` 1.1.0 do

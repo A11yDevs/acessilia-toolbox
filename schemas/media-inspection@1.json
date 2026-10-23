@@ -96,7 +96,7 @@
     "genre_signals": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Why document_genre is presentation: the producer or creator software (producer:PowerPoint) or the page geometry (geometry:landscape-uniform). Empty for a document."
+      "description": "Why document_genre is presentation: the producer or creator software (producer:powerpoint) or the page geometry (geometry:landscape-uniform). Empty for a document."
     },
     "requires_visual_inspection": {
       "type": "boolean",

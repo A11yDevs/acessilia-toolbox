@@ -217,8 +217,8 @@ def test_multi_page_pdf_reports_every_page() -> None:
 
 @pytest.mark.parametrize(
     ("width", "height"),
-    [(960, 540), (720, 540)],
-    ids=["16:9", "4:3"],
+    [(960, 540), (720, 540), (720, 450)],
+    ids=["16:9", "4:3", "16:10"],
 )
 def test_uniform_landscape_slides_are_a_presentation(width: int, height: int) -> None:
     result = inspect(pdf_bytes(pages=3, width=width, height=height), "deck.pdf", "application/pdf")
@@ -229,6 +229,21 @@ def test_uniform_landscape_slides_are_a_presentation(width: int, height: int) ->
 
 def test_portrait_pages_are_a_document() -> None:
     result = inspect(pdf_bytes(pages=3), "report.pdf", "application/pdf")
+
+    assert result["document_genre"] == "document"
+    assert result["genre_signals"] == []
+
+
+@pytest.mark.parametrize(
+    ("width", "height"),
+    [(842, 595), (792, 612), (1008, 612)],
+    ids=["A4", "Letter", "Legal"],
+)
+def test_landscape_paper_is_a_document(width: int, height: int) -> None:
+    """A landscape report has paper proportions, not slide ones."""
+    payload = pdf_bytes(pages=3, width=width, height=height)
+
+    result = inspect(payload, "report.pdf", "application/pdf")
 
     assert result["document_genre"] == "document"
     assert result["genre_signals"] == []
@@ -264,7 +279,50 @@ def test_presentation_software_is_a_presentation_whatever_the_page_shape() -> No
     result = inspect(payload, "deck.pdf", "application/pdf")
 
     assert result["document_genre"] == "presentation"
-    assert result["genre_signals"] == ["creator:PowerPoint"]
+    assert result["genre_signals"] == ["creator:powerpoint"]
+
+
+@pytest.mark.parametrize(
+    ("producer", "signal"),
+    [
+        ("Microsoft® POWERPOINT®", "producer:powerpoint"),
+        ("macOS Version 14.5 (Build 23F79) Quartz PDFContext / Keynote", "producer:keynote"),
+        ("LibreOffice 7.6 Impress", "producer:impress"),
+    ],
+)
+def test_presentation_producer_is_reported_as_a_canonical_token(
+    producer: str, signal: str
+) -> None:
+    payload = pdf_bytes(pages=2, metadata={"producer": producer})
+
+    result = inspect(payload, "deck.pdf", "application/pdf")
+
+    assert result["document_genre"] == "presentation"
+    assert result["genre_signals"] == [signal]
+
+
+def test_software_names_match_whole_words_only() -> None:
+    payload = pdf_bytes(pages=2, metadata={"creator": "Impressions Studio"})
+
+    result = inspect(payload, "flyer.pdf", "application/pdf")
+
+    assert result["document_genre"] == "document"
+
+
+def test_a_genre_failure_leaves_the_inspection_intact(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A damaged later page must not fail an inspection page 0 answered."""
+
+    def damaged(*_args: object) -> None:
+        raise RuntimeError("cannot load page 2")
+
+    monkeypatch.setattr("acessilia_toolbox.providers.media_inspect._document_genre", damaged)
+
+    result = inspect(pdf_bytes(pages=3), "doc.pdf", "application/pdf")
+
+    assert result["page_count"] == 3
+    assert result["dimensions"]["width"] == 595
+    assert result["document_genre"] is None
+    assert result["genre_signals"] == []
 
 
 def test_genre_is_not_measured_without_pymupdf(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -407,6 +465,14 @@ def test_output_validates_against_the_versioned_schema(
 
     for payload, filename, media_type in payloads:
         jsonschema.validate(instance=inspect(payload, filename, media_type), schema=schema)
+
+
+def test_a_report_without_the_genre_fields_still_validates(schema: dict[str, Any]) -> None:
+    """The genre fields are optional, which is what lets the schema stay @1."""
+    report = inspect(pdf_bytes(pages=2), "doc.pdf", "application/pdf")
+    del report["document_genre"], report["genre_signals"]
+
+    jsonschema.validate(instance=report, schema=schema)
 
 
 def test_provider_executes_and_reports_health() -> None:

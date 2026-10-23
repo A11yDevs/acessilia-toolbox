@@ -55,13 +55,15 @@ MIN_SCANNED_PAGE_PX = 200
 # A4 and US Letter portrait pages fall between these width/height ratios.
 SCANNED_PAGE_ASPECT = (0.65, 0.78)
 
-# Producers and creators that only make slide decks. Google Slides is absent:
-# its PDFs carry the same "Google" producer as Google Docs, so geometry decides.
-PRESENTATION_SOFTWARE = re.compile(r"powerpoint|keynote|impress|beamer", re.IGNORECASE)
+# Producers and creators that only make slide decks, matched as whole words so
+# "Impressions" is not "Impress". Google Slides is absent: its PDFs carry the
+# same "Google" producer as Google Docs, so geometry decides.
+PRESENTATION_SOFTWARE = re.compile(r"\b(powerpoint|keynote|impress|beamer)\b", re.IGNORECASE)
 
-# A slide is landscape, between 4:3 (1.33) and 16:9 (1.78), with some margin;
-# a portrait page or a wide banner is not.
-PRESENTATION_ASPECT = (1.25, 1.85)
+# Slide shapes: 4:3, 16:10 and 16:9. Only a narrow tolerance around each is
+# accepted, so landscape paper (Letter 1.29, A4 1.41, Legal 1.65) is not a deck.
+PRESENTATION_ASPECTS = (4 / 3, 16 / 10, 16 / 9)
+PRESENTATION_ASPECT_TOLERANCE = 0.02
 
 # Share of pages with the deck's own page size: a document with a couple of
 # landscape tables among portrait pages is not a presentation.
@@ -148,10 +150,12 @@ def _document_genre(
     """Whether a PDF is a slide deck, and the signals that say so.
 
     Either signal suffices: software that only makes decks, or two or more
-    pages that are nearly all the same landscape, slide-proportioned size.
+    pages that are nearly all the same 4:3, 16:10 or 16:9 landscape size.
     """
+    # The token is lowercased so consumers can compare it as is, whatever the
+    # casing the metadata used ("Microsoft® POWERPOINT®" -> producer:powerpoint).
     signals = [
-        f"{field}:{match.group(0)}"
+        f"{field}:{match.group(1).lower()}"
         for field in ("producer", "creator")
         if (match := PRESENTATION_SOFTWARE.search(str(metadata.get(field) or "")))
     ]
@@ -161,7 +165,10 @@ def _document_genre(
         if (
             count / len(page_sizes) >= PRESENTATION_UNIFORM_SHARE
             and height > 0
-            and PRESENTATION_ASPECT[0] <= width / height <= PRESENTATION_ASPECT[1]
+            and any(
+                abs(width / height - aspect) <= PRESENTATION_ASPECT_TOLERANCE
+                for aspect in PRESENTATION_ASPECTS
+            )
         ):
             signals.append("geometry:landscape-uniform")
     return ("presentation" if signals else "document"), signals
@@ -198,10 +205,16 @@ def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, An
                 if width > 0 and height > 0:
                     dimensions = _dimensions(width, height)
                     dimensions_source = "pymupdf"
-                genre, genre_signals = _document_genre(
-                    [(round(page.rect.width), round(page.rect.height)) for page in document],
-                    document.metadata or {},
-                )
+                # The genre is optional, so a damaged later page or unreadable
+                # metadata leaves it unknown instead of failing an inspection
+                # that page 0 already answered.
+                try:
+                    genre, genre_signals = _document_genre(
+                        [(round(page.rect.width), round(page.rect.height)) for page in document],
+                        document.metadata or {},
+                    )
+                except Exception:
+                    genre, genre_signals = None, []
         except fitz.FileDataError:
             pass
         finally:
