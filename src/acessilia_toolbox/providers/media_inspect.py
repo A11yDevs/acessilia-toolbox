@@ -13,6 +13,8 @@ measured value from a missing one.
 from __future__ import annotations
 
 import io
+import re
+from collections import Counter
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
@@ -26,7 +28,7 @@ from acessilia_toolbox.core.errors import (
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # Pillow is an optional dependency: the core install must keep working without
 # it, so the import is guarded and the adapter reports itself unavailable.
@@ -52,6 +54,18 @@ MIN_SCANNED_PAGE_PX = 200
 
 # A4 and US Letter portrait pages fall between these width/height ratios.
 SCANNED_PAGE_ASPECT = (0.65, 0.78)
+
+# Producers and creators that only make slide decks. Google Slides is absent:
+# its PDFs carry the same "Google" producer as Google Docs, so geometry decides.
+PRESENTATION_SOFTWARE = re.compile(r"powerpoint|keynote|impress|beamer", re.IGNORECASE)
+
+# A slide is landscape, between 4:3 (1.33) and 16:9 (1.78), with some margin;
+# a portrait page or a wide banner is not.
+PRESENTATION_ASPECT = (1.25, 1.85)
+
+# Share of pages with the deck's own page size: a document with a couple of
+# landscape tables among portrait pages is not a presentation.
+PRESENTATION_UNIFORM_SHARE = 0.9
 
 # Container format -> MIME type. Pillow's own ``Image.MIME`` map omits formats
 # that are not built into the running binary, so the mapping is kept explicit.
@@ -128,6 +142,31 @@ def _pdf_page_count_from_content(payload: bytes) -> int:
     return max(1, counted)
 
 
+def _document_genre(
+    page_sizes: list[tuple[int, int]], metadata: Mapping[str, Any]
+) -> tuple[str, list[str]]:
+    """Whether a PDF is a slide deck, and the signals that say so.
+
+    Either signal suffices: software that only makes decks, or two or more
+    pages that are nearly all the same landscape, slide-proportioned size.
+    """
+    signals = [
+        f"{field}:{match.group(0)}"
+        for field in ("producer", "creator")
+        if (match := PRESENTATION_SOFTWARE.search(str(metadata.get(field) or "")))
+    ]
+    if len(page_sizes) >= 2:
+        size, count = Counter(page_sizes).most_common(1)[0]
+        width, height = size
+        if (
+            count / len(page_sizes) >= PRESENTATION_UNIFORM_SHARE
+            and height > 0
+            and PRESENTATION_ASPECT[0] <= width / height <= PRESENTATION_ASPECT[1]
+        ):
+            signals.append("geometry:landscape-uniform")
+    return ("presentation" if signals else "document"), signals
+
+
 def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, Any] | None:
     """Inspect a PDF, using PyMuPDF when available.
 
@@ -139,6 +178,10 @@ def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, An
     page_count_source: str | None = "content_stream_scan"
     dimensions: dict[str, Any] | None = None
     dimensions_source: str | None = None
+    # Without PyMuPDF neither the pages nor the metadata are measured, so the
+    # genre stays unknown instead of defaulting to "document".
+    genre: str | None = None
+    genre_signals: list[str] = []
     verified = payload.startswith(b"%PDF-")
 
     if fitz is not None:
@@ -155,6 +198,10 @@ def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, An
                 if width > 0 and height > 0:
                     dimensions = _dimensions(width, height)
                     dimensions_source = "pymupdf"
+                genre, genre_signals = _document_genre(
+                    [(round(page.rect.width), round(page.rect.height)) for page in document],
+                    document.metadata or {},
+                )
         except fitz.FileDataError:
             pass
         finally:
@@ -177,6 +224,8 @@ def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, An
         "color_mode": None,
         "format": "PDF",
         "artifact_nature": "paginated_document",
+        "document_genre": genre,
+        "genre_signals": genre_signals,
         "requires_visual_inspection": False,
         "metadata": {"filename": filename},
     }
@@ -199,6 +248,8 @@ def _unsupported_media(payload: bytes, filename: str, media_type: str) -> dict[s
         "color_mode": None,
         "format": None,
         "artifact_nature": "unknown",
+        "document_genre": None,
+        "genre_signals": [],
         "requires_visual_inspection": False,
         "metadata": {"filename": filename},
     }
@@ -281,6 +332,9 @@ def _inspect_media(
         "color_mode": color_mode,
         "format": format_name,
         "artifact_nature": nature,
+        # A slide deck is told apart by its pages; a single image has none.
+        "document_genre": None,
+        "genre_signals": [],
         # Only a page-sized, single-frame, document-proportioned image is
         # assumed to be text-recoverable; everything else may carry meaning in
         # its graphics, so vision inspection is requested.

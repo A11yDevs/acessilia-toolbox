@@ -79,13 +79,22 @@ def image_bytes(
     return buf.getvalue()
 
 
-def pdf_bytes(pages: int = 1, width: int = 595, height: int = 842) -> bytes:
+def pdf_bytes(
+    pages: int = 1,
+    width: int = 595,
+    height: int = 842,
+    *,
+    sizes: list[tuple[int, int]] | None = None,
+    metadata: dict[str, str] | None = None,
+) -> bytes:
     import pymupdf
 
     document = pymupdf.open()
     try:
-        for _ in range(pages):
-            document.new_page(width=width, height=height)
+        for page_width, page_height in sizes or [(width, height)] * pages:
+            document.new_page(width=page_width, height=page_height)
+        if metadata:
+            document.set_metadata(metadata)
         return document.tobytes()
     finally:
         document.close()
@@ -199,6 +208,80 @@ def test_multi_page_pdf_reports_every_page() -> None:
     assert result["page_count"] == 3
     assert result["page_count_source"] == "pymupdf"
     assert result["artifact_nature"] == "paginated_document"
+
+
+# ---------------------------------------------------------------------------
+# Document genre
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("width", "height"),
+    [(960, 540), (720, 540)],
+    ids=["16:9", "4:3"],
+)
+def test_uniform_landscape_slides_are_a_presentation(width: int, height: int) -> None:
+    result = inspect(pdf_bytes(pages=3, width=width, height=height), "deck.pdf", "application/pdf")
+
+    assert result["document_genre"] == "presentation"
+    assert result["genre_signals"] == ["geometry:landscape-uniform"]
+
+
+def test_portrait_pages_are_a_document() -> None:
+    result = inspect(pdf_bytes(pages=3), "report.pdf", "application/pdf")
+
+    assert result["document_genre"] == "document"
+    assert result["genre_signals"] == []
+
+
+def test_a_single_landscape_page_is_not_enough_for_a_deck() -> None:
+    result = inspect(pdf_bytes(pages=1, width=960, height=540), "one.pdf", "application/pdf")
+
+    assert result["document_genre"] == "document"
+
+
+def test_a_few_landscape_pages_among_portrait_ones_are_a_document() -> None:
+    sizes = [(595, 842)] * 8 + [(842, 595)] * 2
+
+    result = inspect(pdf_bytes(sizes=sizes), "tables.pdf", "application/pdf")
+
+    assert result["document_genre"] == "document"
+
+
+def test_a_deck_with_one_odd_page_is_still_a_presentation() -> None:
+    sizes = [(960, 540)] * 10 + [(595, 842)]
+
+    result = inspect(pdf_bytes(sizes=sizes), "deck.pdf", "application/pdf")
+
+    assert result["document_genre"] == "presentation"
+
+
+def test_presentation_software_is_a_presentation_whatever_the_page_shape() -> None:
+    payload = pdf_bytes(
+        pages=2, metadata={"creator": "Microsoft® PowerPoint® for Microsoft 365"}
+    )
+
+    result = inspect(payload, "deck.pdf", "application/pdf")
+
+    assert result["document_genre"] == "presentation"
+    assert result["genre_signals"] == ["creator:PowerPoint"]
+
+
+def test_genre_is_not_measured_without_pymupdf(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("acessilia_toolbox.providers.media_inspect.fitz", None)
+
+    result = inspect(
+        b"%PDF-1.4\n1 0 obj\n<< /Type /Page >>\nendobj\n", "doc.pdf", "application/pdf"
+    )
+
+    assert result["document_genre"] is None
+    assert result["genre_signals"] == []
+
+
+def test_images_have_no_genre() -> None:
+    result = inspect(image_bytes(1920, 1080), "slide.png", "image/png")
+
+    assert result["document_genre"] is None
 
 
 def test_payload_without_pdf_structure_is_not_reported_as_a_pdf() -> None:
@@ -319,6 +402,7 @@ def test_output_validates_against_the_versioned_schema(
         (image_bytes(600, 800, fmt="TIFF", frames=3), "multi.tiff", "image/tiff"),
         (b"unrecognized", "unknown.dat", "application/octet-stream"),
         (pdf_bytes(pages=2), "doc.pdf", "application/pdf"),
+        (pdf_bytes(pages=2, width=960, height=540), "deck.pdf", "application/pdf"),
     ]
 
     for payload, filename, media_type in payloads:

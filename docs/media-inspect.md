@@ -69,6 +69,8 @@ The output complies with `schemas/media-inspection@1.json`:
   "color_mode": "RGB",
   "format": "JPEG",
   "artifact_nature": "standalone_image",
+  "document_genre": null,
+  "genre_signals": [],
   "requires_visual_inspection": true,
   "metadata": {
     "filename": "diagram.jpg"
@@ -90,6 +92,23 @@ the artifact cannot be decoded. `page_count_source` is `pillow`, `pymupdf`,
   `min_dimension_px` pixels. Sets `requires_visual_inspection: false`.
 - `paginated_document`: a PDF, or a multi-frame image container.
 - `unknown`: unrecognized or unsupported byte stream.
+
+## Document Genre (`document_genre`)
+
+For a PDF, `document_genre` tells a slide deck (`presentation`) from any other
+document (`document`), so a consumer can structure a deck slide by slide.
+`genre_signals` says why; either signal is enough:
+
+- `producer:<name>` / `creator:<name>`: the PDF metadata names software that
+  only makes decks (PowerPoint, Keynote, Impress, Beamer). Google Slides is not
+  listed: its PDFs share the "Google" producer with Google Docs.
+- `geometry:landscape-uniform`: two or more pages, at least 90% of them with
+  the same landscape size, with a width/height ratio between 1.25 and 1.85
+  (4:3 to 16:9).
+
+`document_genre` is `null` for images and for PDFs inspected without PyMuPDF,
+whose pages are not measured. Providers before `pure-media-inspect` 1.1.0 do
+not report the field, so consumers must treat its absence as unknown.
 
 `min_dimension_px` and `scanned_page_aspect_ratio` can be supplied as request
 parameters to override the defaults (`200` pixels, `[0.65, 0.78]`). Passed
