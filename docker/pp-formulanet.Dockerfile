@@ -35,12 +35,15 @@ RUN pip install --no-cache-dir \
     "python-multipart>=0.0.9" \
     "Pillow>=10.0" \
     "numpy<3" \
+    "tokenizers==0.19.1" \
     "paddlepaddle==3.3.1" \
     "paddleocr==3.7.0" && \
     pip cache purge
 
 # Load the pinned weights now. FormulaRecognition downloads them on first use,
-# which the non-root runtime user could not do.
+# which the non-root runtime user could not do. tokenizers is an optional
+# paddleocr dependency that the UniMERNet decoder (PP-FormulaNet) requires but
+# the base install does not pull in, so it is pinned above.
 RUN python -c "from paddleocr import FormulaRecognition; FormulaRecognition(model_name='${PP_FORMULANET_MODEL}', device='cpu')"
 
 RUN useradd --create-home --shell /bin/bash appuser && \
