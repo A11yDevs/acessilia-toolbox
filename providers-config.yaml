@@ -81,6 +81,22 @@ providers:
       - image/jpeg
       - image/tiff
 
+  # PP-FormulaNet_plus-M: PaddleOCR's formula recognition model on CPU. More
+  # accurate than rapid-latex-ocr on matrices and vector notation; heavier to
+  # start (the Paddle runtime loads the weights into memory).
+  - id: pp-formulanet
+    version: "1.0"
+    transport: http
+    endpoint: ${PP_FORMULANET_URL:-http://pp-formulanet:5010}
+    health_path: /health
+    timeout_seconds: 300
+    capabilities:
+      - math.recognize
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+
   - id: rapidocr-orient
     version: "1.0"
     transport: http

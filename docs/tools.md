@@ -13,7 +13,7 @@ roadmap candidates.
 | PDF           | `pdf.split`, `pdf.render` (v2: clip, `max_side`, PNG/JPEG; [pdf-render.md](pdf-render.md)) | PyMuPDF                                    | [implemented] |
 | Tables        | table extraction inside `document.structure.extract`    | Docling (TableFormer), MinerU              | [implemented] |
 | Conversion    | `document.convert`                                      | Pandoc                                     | roadmap       |
-| Mathematics   | `math.recognize`, `math.convert`, `math.verbalize`      | docling-serve, math-speech (MathJax, MathCAT) | [implemented] |
+| Mathematics   | `math.recognize`, `math.convert`, `math.verbalize`      | docling-serve, PP-FormulaNet, math-speech (MathJax, MathCAT) | [implemented] |
 | Media triage  | `media.inspect`                                         | pure-python (Pillow, in-process, optional extra) | [implemented] |
 | Music         | `music.omr`                                             | homr (in-process), Audiveris (sidecar)     | [implemented] |
 | Page layout   | `image.page.orient`                                     | RapidOCR (sidecar)                         | [implemented] |
@@ -71,10 +71,17 @@ internal document representation.
 Separate concerns:
 
 ``` text
-math.recognize : image -> structured math (docling-serve)
+math.recognize : image -> LaTeX (docling-serve, PP-FormulaNet, RapidLaTeXOCR)
 math.convert   : LaTeX -> MathML (math-speech, MathJax); MathML -> LaTeX (in-process mapper)
 math.verbalize : LaTeX -> pt-BR speech (math-speech, MathJax + MathCAT)
 ```
+
+`math.recognize` has three providers. `pp-formulanet` runs PaddleOCR's
+PP-FormulaNet_plus-M on CPU and is the recommended chip model: it is 2D-aware,
+so matrices and vector notation survive recognition. `rapid-latex-ocr` is the
+lighter, faster alternative, but its 1D decoder collapses matrices and drops
+accents such as `\vec`. `docling-math` goes through docling-serve and is meant
+for formula groups found in a document, not for a cropped chip.
 
 These capabilities accept `artifact/latex@1`, a JSON object carrying the
 expression under `latex`:

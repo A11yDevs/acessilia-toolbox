@@ -276,6 +276,7 @@ while its sidecar is not running:
 | `mineru-serve` | `mineru` | `docker/mineru-cpu.Dockerfile` | `document.structure.extract`, `document.layout.analyze`, `document.ocr` |
 | `nougat-serve` | `nougat` | `docker/nougat-cpu.Dockerfile` | `document.structure.extract` |
 | `rapid-latex-ocr` | `rapid-latex-ocr` | `docker/math-ocr.Dockerfile` | `math.recognize` |
+| `pp-formulanet` | `pp-formulanet` | `docker/pp-formulanet.Dockerfile` | `math.recognize` |
 | `audiveris-serve` | `audiveris-serve` | `docker/audiveris-serve.Dockerfile` | `music.omr` |
 | `rapidocr-orient` | `rapidocr-orient` | `docker/rapidocr-orient.Dockerfile` | `image.page.orient` |
 | `pdf-ua-render` | `pdf-ua-render` | `docker/pdf-ua-render.Dockerfile` | `document.export.pdf_ua`, `document.export.docx` |
@@ -297,8 +298,9 @@ echo "PDF_UA_RENDER_IMAGE=pdf-ua-render:local" >> .env
 ```
 
 `scripts/staging-update.sh` leaves a sidecar with such an override alone.
-`scripts/build-mineru-image.sh`, `build-nougat-image.sh` and
-`build-math-ocr-image.sh` still build those images locally.
+`scripts/build-mineru-image.sh`, `build-nougat-image.sh`,
+`build-math-ocr-image.sh` and `build-pp-formulanet-image.sh` still build those
+images locally.
 
 The Toolbox starts regardless: a provider whose endpoint does not resolve is
 reported as unhealthy and its capability answers `503`, while every other

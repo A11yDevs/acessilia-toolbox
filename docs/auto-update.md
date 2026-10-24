@@ -38,7 +38,7 @@ CI-published images, once per server:
 
 ```bash
 # 1. Drop the local image overrides (MINERU_SERVE_IMAGE=mineru:latest, ...)
-sed -i -E '/^(MINERU_SERVE|NOUGAT_SERVE|AUDIVERIS_SERVE|RAPID_LATEX_OCR|RAPIDOCR_ORIENT|PDF_UA_RENDER|VERAPDF_VALIDATE)_IMAGE=/d' .env
+sed -i -E '/^(MINERU_SERVE|NOUGAT_SERVE|AUDIVERIS_SERVE|RAPID_LATEX_OCR|PP_FORMULANET|RAPIDOCR_ORIENT|PDF_UA_RENDER|VERAPDF_VALIDATE)_IMAGE=/d' .env
 
 # 2. Pull the clone (new compose file) and start the sidecars from GHCR
 ./scripts/ops.sh track
