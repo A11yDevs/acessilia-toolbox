@@ -5,7 +5,8 @@
 # model cache and a missing model fails the build instead of the first request.
 #
 # The model is pinned by package version and by name; /version reports the
-# PaddleOCR and PaddlePaddle versions, which enter the execution cache key.
+# PaddleOCR, PaddlePaddle and tokenizers versions, which enter the execution
+# cache key.
 
 FROM python:3.11-slim
 

@@ -25,7 +25,9 @@ logging.basicConfig(level=logging.INFO)
 
 SERVER_VERSION = "0.1.0"
 MODEL_NAME = os.getenv("PP_FORMULANET_MODEL", "PP-FormulaNet_plus-M")
-DEVICE = os.getenv("PP_FORMULANET_DEVICE", "cpu")
+# CPU-only: the image ships the CPU PaddlePaddle build, so no device knob is
+# exposed until a GPU variant actually exists.
+DEVICE = "cpu"
 # Respiro around the crop: the model truncates glyphs that touch the border.
 PADDING = 20
 
@@ -84,6 +86,9 @@ def version():
         "model": MODEL_NAME,
         "paddleocr": _package_version("paddleocr"),
         "paddlepaddle": _package_version("paddlepaddle"),
+        # The UniMERNet decoder runs on it; a pin bump changes output and must
+        # invalidate the execution cache key like the Paddle versions above.
+        "tokenizers": _package_version("tokenizers"),
     }
 
 
