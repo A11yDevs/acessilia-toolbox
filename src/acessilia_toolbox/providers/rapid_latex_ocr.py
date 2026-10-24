@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 
@@ -25,7 +25,14 @@ PREDICT_PATH = "/predict"
 
 
 class RapidLatexOcrProvider:
-    """Calls rapid-latex-ocr service to extract LaTeX from formula images."""
+    """Calls a formula OCR service to extract LaTeX from formula images.
+
+    Subclasses that reach a different service over the same ``/predict``,
+    ``/health`` and ``/version`` API only override :attr:`backend`.
+    """
+
+    #: Identity reported in the extraction and in error messages.
+    backend: ClassVar[str] = "rapid-latex-ocr"
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -70,13 +77,13 @@ class RapidLatexOcrProvider:
 
         return ExtractionResult(
             document=document_payload,
-            backend="rapid-latex-ocr",
+            backend=self.backend,
             started_at=started_at,
             completed_at=completed_at,
             duration_ms=round((perf_counter() - started_clock) * 1000),
             version=server_version,
             configuration={
-                "extractor": "rapid-latex-ocr",
+                "extractor": self.backend,
                 "base_url": self.base_url,
                 "capability": capability_id,
                 **dict(parameters or {}),
@@ -140,25 +147,25 @@ class RapidLatexOcrProvider:
             response.raise_for_status()
         except httpx.TimeoutException as exc:
             raise ProviderTimeoutError(
-                f"rapid-latex-ocr timed out after {self.descriptor.timeout_seconds}s",
+                f"{self.backend} timed out after {self.descriptor.timeout_seconds}s",
                 provider=self.descriptor.id,
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                f"rapid-latex-ocr rejected: HTTP {exc.response.status_code}",
+                f"{self.backend} rejected: HTTP {exc.response.status_code}",
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc
         except httpx.HTTPError as exc:
             raise ProviderUnavailableError(
-                f"rapid-latex-ocr unreachable at {self.base_url}",
+                f"{self.backend} unreachable at {self.base_url}",
                 provider=self.descriptor.id,
             ) from exc
 
         result = response.json()
         if not isinstance(result, dict):
             raise ProviderExecutionError(
-                "rapid-latex-ocr returned unexpected payload",
+                f"{self.backend} returned unexpected payload",
                 provider=self.descriptor.id,
             )
         return result

@@ -58,6 +58,7 @@ def providers() -> ProviderRegistry:
             "NOUGAT_SERVE_URL",
             "AUDIVERIS_SERVE_URL",
             "RAPID_LATEX_OCR_URL",
+            "PP_FORMULANET_URL",
             "RAPIDOCR_ORIENT_URL",
             "VLM_SERVE_URL",
             "MINIO_URL",

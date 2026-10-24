@@ -24,6 +24,7 @@ services:
       NOUGAT_SERVE_URL: ${NOUGAT_SERVE_URL:-http://nougat-serve:5004}
       AUDIVERIS_SERVE_URL: ${AUDIVERIS_SERVE_URL:-http://audiveris-serve:5003}
       RAPID_LATEX_OCR_URL: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
+      PP_FORMULANET_URL: ${PP_FORMULANET_URL:-http://pp-formulanet:5010}
       RAPIDOCR_ORIENT_URL: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
       PDF_UA_RENDER_URL: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
       VERAPDF_VALIDATE_URL: ${VERAPDF_VALIDATE_URL:-http://verapdf-validate:5008}
@@ -204,6 +205,23 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    restart: unless-stopped
+
+  # PP-FormulaNet_plus-M formula OCR sidecar (PaddleOCR, CPU).
+  pp-formulanet:
+    build:
+      context: .
+      dockerfile: docker/pp-formulanet.Dockerfile
+    image: ${PP_FORMULANET_IMAGE:-pp-formulanet:latest}
+    container_name: pp-formulanet
+    ports:
+      - "${PP_FORMULANET_PORT:-5010}:5010"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5010/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
     restart: unless-stopped
 
   # Lightweight page orientation detection sidecar (RapidOCR).

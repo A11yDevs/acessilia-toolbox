@@ -51,6 +51,7 @@ jobs:
           - { name: math-speech, dockerfile: docker/math-speech.Dockerfile }
           - { name: rapidocr-orient, dockerfile: docker/rapidocr-orient.Dockerfile }
           - { name: rapid-latex-ocr, dockerfile: docker/math-ocr.Dockerfile }
+          - { name: pp-formulanet, dockerfile: docker/pp-formulanet.Dockerfile }
           - { name: audiveris-serve, dockerfile: docker/audiveris-serve.Dockerfile }
           - { name: nougat, dockerfile: docker/nougat-cpu.Dockerfile }
           - { name: mineru, dockerfile: docker/mineru-cpu.Dockerfile }

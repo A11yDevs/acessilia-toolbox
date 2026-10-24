@@ -23,6 +23,7 @@ from acessilia_toolbox.providers.nougat import NougatProvider
 from acessilia_toolbox.providers.openai_vlm import OpenAiCompatibleVlmProvider
 from acessilia_toolbox.providers.pandoc_docx import PandocDocxProvider
 from acessilia_toolbox.providers.pandoc_pdf_ua import PandocPdfUaProvider
+from acessilia_toolbox.providers.pp_formulanet import PPFormulaNetProvider
 from acessilia_toolbox.providers.pure_accessibility import PureAccessibilityProvider
 from acessilia_toolbox.providers.pure_chem import PureChemProvider
 from acessilia_toolbox.providers.pure_code import PureCodeProvider
@@ -88,6 +89,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "nougat": NougatProvider,
     "pandoc-docx": PandocDocxProvider,
     "pandoc-pdf-ua": PandocPdfUaProvider,
+    "pp-formulanet": PPFormulaNetProvider,
     "pure-accessibility": PureAccessibilityProvider,
     "pure-chem": PureChemProvider,
     "pure-code": PureCodeProvider,
@@ -131,6 +133,7 @@ __all__ = [
     "MineruProvider",
     "NougatProvider",
     "OpenAiCompatibleVlmProvider",
+    "PPFormulaNetProvider",
     "PandocDocxProvider",
     "PandocPdfUaProvider",
     "PureAccessibilityProvider",

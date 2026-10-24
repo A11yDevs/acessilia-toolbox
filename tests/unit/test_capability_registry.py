@@ -129,6 +129,17 @@ def test_shipped_capability_manifests_are_valid() -> None:
     ]
 
 
+def test_math_recognize_binds_the_formula_ocr_providers() -> None:
+    registry = CapabilityRegistry.from_directory(CAPABILITIES_DIR)
+
+    recognize = registry.get("math.recognize")
+    assert [binding.id for binding in recognize.providers] == [
+        "rapid-latex-ocr",
+        "docling-math",
+        "pp-formulanet",
+    ]
+
+
 def test_shipped_manifests_never_name_a_provider_in_the_capability_id() -> None:
     registry = CapabilityRegistry.from_directory(CAPABILITIES_DIR)
     provider_names = {
