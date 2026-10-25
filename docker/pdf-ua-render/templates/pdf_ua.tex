@@ -14,7 +14,8 @@
 % Math from the core is LaTeX written by recognizers and vision models, which
 % use amsmath environments (aligned) and amssymb symbols (\mathbb). Without
 % them one formula fails the render and the core degrades every formula of the
-% document to literal text. Loaded before fontspec, as amssymb expects.
+% document to literal text. Loaded before fontspec by convention (content
+% packages before font setup); the order is not required.
 \usepackage{amsmath,amssymb}
 
 \usepackage{fontspec}
