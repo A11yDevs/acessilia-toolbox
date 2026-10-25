@@ -11,6 +11,13 @@
   \errmessage{The PDF/UA template requires LuaLaTeX or XeLaTeX}
 \fi
 
+% Math from the core is LaTeX written by recognizers and vision models, which
+% use amsmath environments (aligned) and amssymb symbols (\mathbb). Without
+% them one formula fails the render and the core degrades every formula of the
+% document to literal text. Loaded before fontspec by convention (content
+% packages before font setup); the order is not required.
+\usepackage{amsmath,amssymb}
+
 \usepackage{fontspec}
 \defaultfontfeatures{Ligatures=TeX}
 \setmainfont{DejaVu Sans}

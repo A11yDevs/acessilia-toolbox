@@ -78,15 +78,20 @@ RUN chown -R appuser:appuser /app
 USER appuser
 WORKDIR /app
 
-# Smoke test: the image only builds if the pinned toolchain renders the template.
+# Smoke test: the image only builds if the pinned toolchain renders the template,
+# math included. The formula uses what recognizers and vision models write
+# (\mathbb, \frac, \lim, aligned): one unrenderable formula makes the core
+# degrade every formula of a document to literal text. The PDF command mirrors
+# the one /render runs in server.py, so a change to either shows up here.
+COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json /tmp/smoke.json
 RUN luaotfload-tool --update && \
-    printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
-        | pandoc --from json --to pdf --pdf-engine=lualatex \
-            --template=/app/templates/pdf_ua.tex -o /tmp/smoke.pdf && \
+    pandoc --from json --to pdf --standalone --syntax-highlighting=none \
+        --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
+        -V lang=pt-BR -o /tmp/smoke.pdf /tmp/smoke.json && \
     printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
         | pandoc --from json --to docx --standalone --sandbox --metadata lang=pt-BR \
             -o /tmp/smoke.docx && \
-    rm /tmp/smoke.pdf /tmp/smoke.docx
+    rm /tmp/smoke.json /tmp/smoke.pdf /tmp/smoke.docx
 
 EXPOSE 5007
 
