@@ -5,8 +5,8 @@
 # model cache and a missing model fails the build instead of the first request.
 #
 # The model is pinned by package version and by name; /version reports the
-# PaddleOCR, PaddlePaddle and tokenizers versions, which enter the execution
-# cache key.
+# PaddleOCR, PaddlePaddle, tokenizers and ftfy versions, which enter the
+# execution cache key.
 
 FROM python:3.11-slim
 
@@ -37,21 +37,27 @@ RUN pip install --no-cache-dir \
     "Pillow>=10.0" \
     "numpy<3" \
     "tokenizers==0.19.1" \
+    "ftfy==6.3.1" \
     "paddlepaddle==3.3.1" \
     "paddleocr==3.7.0" && \
     pip cache purge
 
-# Load the pinned weights now. FormulaRecognition downloads them on first use,
-# which the non-root runtime user could not do. tokenizers is an optional
-# paddleocr dependency that the UniMERNet decoder (PP-FormulaNet) requires but
-# the base install does not pull in, so it is pinned above.
-RUN python -c "from paddleocr import FormulaRecognition; FormulaRecognition(model_name='${PP_FORMULANET_MODEL}', device='cpu')"
+# tokenizers and ftfy are optional paddleocr dependencies (PaddleX's "ocr"
+# extra) that the formula decoder requires but the base install does not pull
+# in, so they are pinned above. Loading the model does not import ftfy: only
+# the post-processing of a prediction does, so an image that merely loads the
+# model passes the build and /health and fails every /predict with HTTP 500.
+# build_check.py downloads the pinned weights (the non-root runtime user could
+# not) and recognizes a drawn formula, failing the build when the result is
+# empty or a pinned dependency is missing. It is not kept in the image.
+COPY docker/pp-formulanet/formula_result.py /app/formula_result.py
+COPY docker/pp-formulanet/build_check.py /tmp/build_check.py
+RUN PYTHONPATH=/app python /tmp/build_check.py && rm /tmp/build_check.py
 
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
 
 COPY docker/pp-formulanet/server.py /app/server.py
-COPY docker/pp-formulanet/formula_result.py /app/formula_result.py
 RUN chown appuser:appuser /app/server.py /app/formula_result.py
 
 USER appuser
