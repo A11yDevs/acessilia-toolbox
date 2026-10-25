@@ -37,15 +37,20 @@ RUN pip install --no-cache-dir \
     "Pillow>=10.0" \
     "numpy<3" \
     "tokenizers==0.19.1" \
+    "ftfy==6.3.1" \
     "paddlepaddle==3.3.1" \
     "paddleocr==3.7.0" && \
     pip cache purge
 
-# Load the pinned weights now. FormulaRecognition downloads them on first use,
-# which the non-root runtime user could not do. tokenizers is an optional
-# paddleocr dependency that the UniMERNet decoder (PP-FormulaNet) requires but
-# the base install does not pull in, so it is pinned above.
-RUN python -c "from paddleocr import FormulaRecognition; FormulaRecognition(model_name='${PP_FORMULANET_MODEL}', device='cpu')"
+# Load the pinned weights now and run one inference on a blank image.
+# FormulaRecognition downloads the weights on first use, which the non-root
+# runtime user could not do. tokenizers and ftfy are optional paddleocr
+# dependencies (PaddleX's "ocr" extra) that the formula decoder requires but
+# the base install does not pull in, so they are pinned above. Loading the
+# model does not import them: ftfy is only imported by the post-processing of
+# the first prediction, so without the inference here a missing one passes the
+# build and /health and fails every /predict with HTTP 500.
+RUN python -c "import numpy as np; from paddleocr import FormulaRecognition; m = FormulaRecognition(model_name='${PP_FORMULANET_MODEL}', device='cpu'); list(m.predict(input=np.full((64, 256, 3), 255, np.uint8), batch_size=1))"
 
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app

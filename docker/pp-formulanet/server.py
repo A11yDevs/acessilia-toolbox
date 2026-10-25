@@ -89,6 +89,9 @@ def version():
         # The UniMERNet decoder runs on it; a pin bump changes output and must
         # invalidate the execution cache key like the Paddle versions above.
         "tokenizers": _package_version("tokenizers"),
+        # The decoder's post-processing passes every result through
+        # ftfy.fix_text, so its version changes output too.
+        "ftfy": _package_version("ftfy"),
     }
 
 
