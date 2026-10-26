@@ -109,7 +109,11 @@ class CapabilityExecutor:
         preprocessing: dict[str, Any] | None = None
         auto_rotate = bool(parameters and parameters.get("auto_rotate", False))
         if auto_rotate and is_supported_image(media_type):
-            preprocessing = {"version": 1, "provider": None}
+            preprocessing = {
+                "version": 1,
+                "provider": None,
+                "original_input_fingerprint": input_fingerprint,
+            }
             orient_adapter = None
             try:
                 orient_desc = self._providers.resolve("image.page.orient")

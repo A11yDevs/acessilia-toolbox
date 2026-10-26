@@ -69,6 +69,8 @@ the execution cache lookup. The key includes the effective image fingerprint
 and an explicit preprocessing context containing:
 
 - The preprocessing identity version.
+- The original image fingerprint, keeping source provenance distinct even
+  when two different images yield identical oriented bytes and metadata.
 - The orientation provider ID and descriptor version.
 - Provider and model versions reported by the orientation adapter.
 - A fingerprint of the provider endpoint and configuration.
