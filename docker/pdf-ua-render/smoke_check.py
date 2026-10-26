@@ -13,11 +13,49 @@ from pathlib import Path
 EXPECTED = "conjunto dos h reais com h maior ou igual a menos 2 e h diferente de 0"
 
 
+_ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f"}
+
+
+def _decode(raw: bytes) -> str:
+    return raw.decode("utf-16") if raw.startswith(b"\xfe\xff") else raw.decode("latin-1")
+
+
+def _literal(pdf: bytes, start: int) -> bytes:
+    """A PDF literal string from just after its "(": balanced parentheses and escapes."""
+    out, depth, i = bytearray(), 1, start
+    while i < len(pdf):
+        char = pdf[i : i + 1]
+        if char == b"\\":
+            following = pdf[i + 1 : i + 2]
+            octal = re.match(rb"[0-7]{1,3}", pdf[i + 1 : i + 4])
+            if octal:
+                out.append(int(octal.group(0), 8) & 0xFF)
+                i += 1 + len(octal.group(0))
+                continue
+            out += _ESCAPES.get(following, following)
+            i += 2
+            continue
+        if char == b"(":
+            depth += 1
+        elif char == b")":
+            depth -= 1
+            if depth == 0:
+                break
+        out += char
+        i += 1
+    return bytes(out)
+
+
 def alternate_texts(pdf: bytes) -> list[str]:
+    """Every /Alt of the file, written as a hex or as a literal string."""
     texts = []
-    for match in re.finditer(rb"/Alt\s*<([0-9A-Fa-f]+)>", pdf):
-        raw = bytes.fromhex(match.group(1).decode())
-        texts.append(raw.decode("utf-16") if raw.startswith(b"\xfe\xff") else raw.decode("latin-1"))
+    for match in re.finditer(rb"/Alt\s*(?:<([0-9A-Fa-f\s]*)>|\()", pdf):
+        if match.group(1) is not None:
+            digits = re.sub(rb"\s", b"", match.group(1)).decode()
+            # An odd number of digits ends with an implicit 0 (PDF 7.3.4.3).
+            texts.append(_decode(bytes.fromhex(digits + "0" * (len(digits) % 2))))
+        else:
+            texts.append(_decode(_literal(pdf, match.end())))
     return texts
 
 
