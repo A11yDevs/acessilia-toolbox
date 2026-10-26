@@ -58,6 +58,9 @@ EXEMPT_STRINGS: list[tuple[str, str]] = [
     ("src/acessilia_toolbox/providers/pure_chem.py", "gasoso"),
     ("src/acessilia_toolbox/providers/pure_chem.py", "aquoso"),
     # Chemistry capability description (pt-BR is not used here; docs only)
+    # docs/pdf-ua-export.md shows a formula's spoken form in the alt attribute;
+    # the spoken form is pt-BR product output (math.verbalize), not prose.
+    ("docs/pdf-ua-export.md", "a fração com numerador"),
 ]
 
 # Files with known fixture or generated content that may contain Portuguese.
