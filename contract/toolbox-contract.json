@@ -170,6 +170,13 @@
       ]
     },
     {
+      "id": "document.text.spans",
+      "version": 1,
+      "providers": [
+        "pymupdf-pdf"
+      ]
+    },
+    {
       "id": "image.page.orient",
       "version": 1,
       "providers": [
@@ -422,6 +429,7 @@
     {
       "id": "pymupdf-pdf",
       "capabilities": [
+        "document.text.spans",
         "pdf.render",
         "pdf.split"
       ]

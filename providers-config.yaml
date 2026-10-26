@@ -39,6 +39,7 @@ providers:
     capabilities:
       - pdf.split
       - pdf.render
+      - document.text.spans
     media_types:
       - application/pdf
       # pdf.render@2 also renders raster inputs.

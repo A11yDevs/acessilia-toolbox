@@ -27,6 +27,7 @@ toolbox.
 | [testing.md](testing.md)                             | Testing strategy                                                    |
 | [media-inspect.md](media-inspect.md)                 | Deterministic media triage before heavy extraction                  |
 | [pdf-render.md](pdf-render.md)                       | Page rendering: `pdf.render` v1 and v2 (clip, size bound, raster inputs) |
+| [text-spans.md](text-spans.md)                       | Text layer with fonts and geometry: `document.text.spans`           |
 | [contribution.md](contribution.md)                   | Contribution workflow                                               |
 | [uml/architecture.md](uml/architecture.md)           | Architecture diagrams                                               |
 | [uml/use_cases.md](uml/use_cases.md)                 | Use cases                                                           |
