@@ -18,6 +18,16 @@
 % packages before font setup); the order is not required.
 \usepackage{amsmath,amssymb}
 
+% Alternate text of the next formula, for its Formula structure element.
+% latex-lab builds /Alt from \l__math_content_template_tl ("LaTeX formula
+% starts ... ends"); filters/formula_alt.lua wraps a formula in a group that
+% calls this command, so the override ends with the group and the following
+% formulas keep the default. The argument comes with TeX specials removed.
+\ExplSyntaxOn
+\NewDocumentCommand \AccessiliaFormulaAlt { m }
+  { \tl_set:Nn \l__math_content_template_tl { \exp_not:n {#1} } }
+\ExplSyntaxOff
+
 \usepackage{fontspec}
 \defaultfontfeatures{Ligatures=TeX}
 \setmainfont{DejaVu Sans}

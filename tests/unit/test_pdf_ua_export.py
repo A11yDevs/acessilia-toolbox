@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -392,3 +394,55 @@ def test_template_defines_what_recent_pandoc_and_longtable_need() -> None:
     assert "\\newcounter{none}" in template
     assert "calc" in template
     assert "pdfstandard=ua-1" in template
+
+
+# ── Formula alternate text (filters/formula_alt.lua) ────────────────────
+
+
+def test_server_renders_through_the_formula_alt_filter(
+    server: Any, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server, "_missing_components", lambda: [])
+    commands: list[list[str]] = []
+
+    def capture(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 43, b"", b"stop here")
+
+    monkeypatch.setattr(server.subprocess, "run", capture)
+    post_ast(client, AST_BYTES)
+
+    assert f"--lua-filter={server.FORMULA_ALT_FILTER_PATH}" in commands[0]
+
+
+def test_toolchain_reports_the_formula_alt_filter_digest(server: Any) -> None:
+    server.toolchain.cache_clear()
+    try:
+        digest = server.toolchain()["formula_alt_filter_sha256"]
+    finally:
+        server.toolchain.cache_clear()
+    assert digest == hashlib.sha256(server.FORMULA_ALT_FILTER_PATH.read_bytes()).hexdigest()
+
+
+def test_server_health_fails_without_the_formula_alt_filter(
+    server: Any, client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(server, "FORMULA_ALT_FILTER_PATH", tmp_path / "missing.lua")
+    monkeypatch.setattr(server.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert any("filter" in item for item in server._missing_components())
+
+
+def test_formula_alt_filter_drops_every_tex_special() -> None:
+    """The alternate text is the filter's only raw TeX: no special may survive."""
+    source = (SERVER_PATH.parent / "filters" / "formula_alt.lua").read_text(encoding="utf-8")
+    literal = re.search(r'TEX_SPECIALS = "(.*)"', source).group(1)
+    # Undo the Lua string escape (\\ -> \) and the pattern escape (%% -> %).
+    pattern_class = literal.replace("\\\\", "\\").replace("%%", "%")
+    for char in "\\{}$&#^_%~":
+        assert char in pattern_class, char
+
+
+def test_template_defines_the_formula_alt_command() -> None:
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    assert "\\NewDocumentCommand \\AccessiliaFormulaAlt" in template
+    assert "\\l__math_content_template_tl" in template

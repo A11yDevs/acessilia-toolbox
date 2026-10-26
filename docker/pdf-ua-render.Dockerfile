@@ -73,6 +73,7 @@ ENV TEXMFVAR=/home/appuser/.texlive/texmf-var
 
 COPY docker/pdf-ua-render/server.py /app/server.py
 COPY docker/pdf-ua-render/templates /app/templates
+COPY docker/pdf-ua-render/filters /app/filters
 RUN chown -R appuser:appuser /app
 
 USER appuser
@@ -83,15 +84,19 @@ WORKDIR /app
 # (\mathbb, \frac, \lim, aligned): one unrenderable formula makes the core
 # degrade every formula of a document to literal text. The PDF command mirrors
 # the one /render runs in server.py, so a change to either shows up here.
-COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json /tmp/smoke.json
+# smoke_check.py then checks that the formula marked with an alternate text got
+# it as /Alt (filters/formula_alt.lua + \AccessiliaFormulaAlt).
+COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
 RUN luaotfload-tool --update && \
     pandoc --from json --to pdf --standalone --syntax-highlighting=none \
         --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
+        --lua-filter=/app/filters/formula_alt.lua \
         -V lang=pt-BR -o /tmp/smoke.pdf /tmp/smoke.json && \
+    python /tmp/smoke_check.py /tmp/smoke.pdf && \
     printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
         | pandoc --from json --to docx --standalone --sandbox --metadata lang=pt-BR \
             -o /tmp/smoke.docx && \
-    rm /tmp/smoke.json /tmp/smoke.pdf /tmp/smoke.docx
+    rm /tmp/smoke.json /tmp/smoke_check.py /tmp/smoke.pdf /tmp/smoke.docx
 
 EXPOSE 5007
 

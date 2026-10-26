@@ -43,6 +43,11 @@ SERVER_VERSION = "1.1.0"
 TEMPLATE_PATH = Path(
     os.environ.get("PDF_UA_TEMPLATE", Path(__file__).parent / "templates" / "pdf_ua.tex")
 )
+FORMULA_ALT_FILTER_PATH = Path(
+    os.environ.get(
+        "PDF_UA_FORMULA_ALT_FILTER", Path(__file__).parent / "filters" / "formula_alt.lua"
+    )
+)
 ENGINE = os.environ.get("PDF_UA_ENGINE", "lualatex")
 RENDER_TIMEOUT_SECONDS = int(os.environ.get("PDF_UA_TIMEOUT_SECONDS", "150"))
 MAX_AST_BYTES = int(os.environ.get("PDF_UA_MAX_AST_BYTES", str(20 * 1024 * 1024)))
@@ -97,12 +102,19 @@ def toolchain() -> dict[str, str]:
     template_sha256 = (
         hashlib.sha256(TEMPLATE_PATH.read_bytes()).hexdigest() if TEMPLATE_PATH.is_file() else ""
     )
+    # The filter writes the formulas' alternate text, so it shapes the PDF too.
+    formula_alt_filter_sha256 = (
+        hashlib.sha256(FORMULA_ALT_FILTER_PATH.read_bytes()).hexdigest()
+        if FORMULA_ALT_FILTER_PATH.is_file()
+        else ""
+    )
     return {
         "pandoc": pandoc,
         "engine": ENGINE,
         "engine_version": engine,
         "latex_kernel": _latex_kernel(),
         "template_sha256": template_sha256,
+        "formula_alt_filter_sha256": formula_alt_filter_sha256,
     }
 
 
@@ -110,6 +122,8 @@ def _missing_components() -> list[str]:
     missing = [name for name in ("pandoc", ENGINE) if shutil.which(name) is None]
     if not TEMPLATE_PATH.is_file():
         missing.append(f"template {TEMPLATE_PATH}")
+    if not FORMULA_ALT_FILTER_PATH.is_file():
+        missing.append(f"filter {FORMULA_ALT_FILTER_PATH}")
     return missing
 
 
@@ -233,6 +247,7 @@ def render(
             "--syntax-highlighting=none",
             f"--pdf-engine={ENGINE}",
             f"--template={TEMPLATE_PATH}",
+            f"--lua-filter={FORMULA_ALT_FILTER_PATH}",
             "-V",
             f"lang={lang}",
             "-o",
