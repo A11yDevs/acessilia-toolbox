@@ -19,7 +19,7 @@
       "additionalProperties": false,
       "required": ["text", "font", "size", "flags", "bbox", "origin"],
       "properties": {
-        "text": {"type": "string"},
+        "text": {"type": "string", "minLength": 1, "description": "The PDF's character mapping, trimmed: an OT1-encoded TeX font gives an accented letter as the bare letter and a separate spacing accent."},
         "font": {
           "type": "string",
           "description": "Font name as embedded, without the subset prefix (CMMI12, CMR8, MSBM10)."
@@ -46,7 +46,7 @@
       "required": ["bbox", "spans"],
       "properties": {
         "bbox": {"$ref": "#/definitions/bbox"},
-        "spans": {"type": "array", "items": {"$ref": "#/definitions/span"}}
+        "spans": {"type": "array", "minItems": 1, "items": {"$ref": "#/definitions/span"}}
       }
     }
   },

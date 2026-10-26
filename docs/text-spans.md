@@ -12,7 +12,7 @@ It exists for what layout models do not report. In a typeset PDF, inline math is
 |---|---|---|---|
 | `pages` | list of 1-based integers | every page | Pages to read. Duplicates are dropped and the pages come back in order. A page out of range is refused. |
 
-A call reads at most 1000 pages. A longer document must name its pages. At about 45 KiB of JSON per page of dense text, requesting pages in batches also keeps each response small.
+A call reads at most 200 pages. A longer document must name its pages, in batches. A page of dense text costs about 0.1 s and 50 KiB of JSON, so a full call takes about 20 s and returns about 10 MiB, which also goes to the cache and the store.
 
 ## Result (`artifact/text-spans@1`)
 
@@ -45,5 +45,6 @@ The `s₀` of `s₀ ∈ ℝ` on page 1 of the Acessilia math reference case (oth
 - **`origin`.** The start of the span's baseline. A subscript has a larger `y` than the text around it, and a superscript a smaller one.
 - **`flags`.** PyMuPDF's style bits: 1 superscript, 2 italic, 4 serif, 8 monospaced, 16 bold.
 - **`font`.** The font name without the subset prefix (`ABCDEF+CMMI12` becomes `CMMI12`).
+- **`text`.** The PDF's character mapping, which is not always the visible text. A TeX font in the OT1 encoding draws accents as glyphs of their own, so an accented letter comes back as the bare letter next to a spacing accent (a cedilla, a tilde, an acute). Do not compare `text` with the text of a layout element in accented words; math fonts (`CMMI`, `CMSY`, `MSBM`) are not affected.
 - **Whitespace.** Spans made only of whitespace are dropped, and the other spans are trimmed. TeX writes inter-word glue as spans of its own, and PyMuPDF adds spaces where it sees a gap. One such space at the start of a subscript would otherwise report the body's baseline. The gaps are still visible in the boxes.
 - **Image blocks** are skipped.

@@ -47,7 +47,7 @@ MAX_SIDE_RANGE = (16, 10_000)
 RENDER_FILETYPES = {"application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpeg"}
 CLIP_ORIGINS = {"TOPLEFT", "BOTTOMLEFT"}
 #: document.text.spans reads at most this many pages per call.
-MAX_SPAN_PAGES = 1000
+MAX_SPAN_PAGES = 200
 
 
 def _positive_integer(params: dict[str, Any], name: str, default: int, maximum: int) -> int:
@@ -86,8 +86,14 @@ class PyMuPDFProvider:
 
         if capability_id == "pdf.split":
             document = self._split(payload, filename, params)
-        elif capability_id == "document.text.spans":
+        elif capability_id == "document.text.spans" and capability_version == 1:
             document = self._text_spans(payload, params)
+        elif capability_id == "document.text.spans":
+            raise ProviderExecutionError(
+                f"document.text.spans@{capability_version} is not implemented "
+                "by the PyMuPDF provider",
+                provider=self.descriptor.id,
+            )
         elif capability_id == "pdf.render" and capability_version == 1:
             document = self._render(payload, filename, params)
         elif capability_id == "pdf.render" and capability_version == 2:
@@ -186,15 +192,32 @@ class PyMuPDFProvider:
         Coordinates are the unrotated page space PyMuPDF extracts in (top-left
         origin, points); a rotated page reports its rotation. Image blocks and
         whitespace-only spans are skipped and spans are trimmed (``_span``):
-        TeX writes inter-word glue as spans of its own, about half of a
+        TeX writes inter-word glue as spans of its own, about a third of a
         page's spans, and the gap they leave is still in the boxes around it.
         """
         requested = params.get("pages")
-        doc = fitz.open(stream=payload, filetype="pdf")
+        try:
+            doc = fitz.open(stream=payload, filetype="pdf")
+        except Exception as error:
+            raise InvalidInputError(
+                f"cannot open the input as application/pdf: {error}",
+                provider=self.descriptor.id,
+            ) from error
         try:
             page_count = len(doc)
             numbers = self._span_page_numbers(requested, page_count)
-            pages = [_page_spans(doc[number - 1], number) for number in numbers]
+            try:
+                # A password-protected PDF opens but fails on its first page.
+                loaded = [doc[number - 1] for number in numbers]
+            except Exception as error:
+                raise InvalidInputError(
+                    f"cannot open the input as application/pdf: {error}",
+                    provider=self.descriptor.id,
+                ) from error
+            pages = [
+                _page_spans(page, number)
+                for page, number in zip(loaded, numbers, strict=True)
+            ]
         finally:
             doc.close()
         return {"page_count": page_count, "coord_origin": "TOPLEFT", "pages": pages}
@@ -407,6 +430,10 @@ def _span(span: Mapping[str, Any]) -> dict[str, Any] | None:
     of the next span, with the line's baseline: a lowered subscript would
     report the body's origin. The origin and box are therefore taken from the
     characters themselves, without the whitespace at either end.
+
+    The text is the PDF's character mapping, not always what a reader sees: an
+    OT1-encoded TeX font draws accents as glyphs of their own, so an accented
+    letter comes back as the letter and a separate spacing accent.
     """
     chars = list(span["chars"])
     while chars and not chars[0]["c"].strip():
