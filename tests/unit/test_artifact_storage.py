@@ -6,17 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from acessilia_toolbox.api.app import _store_from, create_app
+from acessilia_toolbox.api.app import _store_from
 from acessilia_toolbox.core.artifact import ArtifactRef, NullCache, shards
 from acessilia_toolbox.core.errors import (
     ArtifactNotFoundError,
     ConfigurationError,
-    ProviderUnavailableError,
 )
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers.storage import (
-    FailoverArtifactStore,
     FilesystemArtifactStore,
     S3ArtifactStore,
     create_artifact_store,
@@ -118,139 +116,8 @@ def test_factory_requires_a_root_for_filesystem_storage() -> None:
         create_artifact_store(descriptor)
 
 
-class FakeS3Client:
-    def __init__(self) -> None:
-        self.available = True
-        self.objects: dict[str, tuple[bytes, str, dict[str, str]]] = {}
-
-    def put_object(self, **kwargs: object) -> None:
-        if not self.available:
-            raise ConnectionError("MinIO offline")
-        self.objects[str(kwargs["Key"])] = (
-            bytes(kwargs["Body"]),
-            str(kwargs["ContentType"]),
-            dict(kwargs["Metadata"]),
-        )
-
-    def get_object(self, **kwargs: object) -> dict[str, object]:
-        if not self.available:
-            raise ConnectionError("MinIO offline")
-        key = str(kwargs["Key"])
-        if key not in self.objects:
-            raise MissingObjectError()
-        return {"Body": ByteBody(self.objects[key][0])}
-
-    def head_object(self, **kwargs: object) -> dict[str, object]:
-        if not self.available:
-            raise ConnectionError("MinIO offline")
-        key = str(kwargs["Key"])
-        if key not in self.objects:
-            raise MissingObjectError()
-        payload, media_type, metadata = self.objects[key]
-        return {
-            "ContentLength": len(payload),
-            "ContentType": media_type,
-            "Metadata": metadata,
-        }
-
-
-class MissingObjectError(Exception):
-    def __init__(self) -> None:
-        self.response = {"Error": {"Code": "NoSuchKey"}}
-
-
-class ByteBody:
-    def __init__(self, payload: bytes) -> None:
-        self.payload = payload
-
-    def read(self) -> bytes:
-        return self.payload
-
-
-def test_runtime_failover_preserves_artifacts_after_recovery(tmp_path: Path) -> None:
-    client = FakeS3Client()
-    primary = object.__new__(S3ArtifactStore)
-    primary.bucket = "test"
-    primary._client = client
-    backup = FilesystemArtifactStore(tmp_path / "backup")
-    store = FailoverArtifactStore(primary, backup)
-
-    original = store.put(b"before outage", media_type="text/plain")
-    assert original.storage_backend == "s3"
-
-    client.available = False
-    saved = store.put(PAYLOAD, media_type="application/pdf", filename="saved.pdf")
-    assert saved.storage_backend == "filesystem"
-    assert store.get(saved.artifact_id) == PAYLOAD
-    assert store.stat(saved.artifact_id).filename == "saved.pdf"
-    assert store.exists(saved.artifact_id)
-    with pytest.raises(ProviderUnavailableError):
-        store.get(original.artifact_id)
-    with pytest.raises(ProviderUnavailableError):
-        store.exists(fingerprint_bytes(b"unknown"))
-
-    client.available = True
-    assert store.get(original.artifact_id) == b"before outage"
-    assert store.get(saved.artifact_id) == PAYLOAD
-    assert store.stat(saved.artifact_id).storage_backend == "filesystem"
-    with pytest.raises(ArtifactNotFoundError):
-        store.get(fingerprint_bytes(b"unknown"))
-
-
-def test_store_factory_keeps_filesystem_as_runtime_backup(tmp_path: Path) -> None:
-    providers = ProviderRegistry(
-        [
-            ProviderDescriptor.model_validate(
-                {
-                    "id": "minio",
-                    "transport": "s3",
-                    "endpoint": "http://127.0.0.1:1",
-                    "capabilities": ["artifact.store"],
-                    "config": {"access_key": "test", "secret_key": "test"},
-                }
-            ),
-            ProviderDescriptor.model_validate(
-                {
-                    "id": "filesystem",
-                    "transport": "in_process",
-                    "capabilities": ["artifact.store"],
-                    "config": {"root": str(tmp_path / "backup")},
-                }
-            ),
-        ]
-    )
-
-    selected = _store_from(providers)
-
-    assert isinstance(selected, FailoverArtifactStore)
-    assert isinstance(selected.primary, S3ArtifactStore)
-    assert isinstance(selected.fallback, FilesystemArtifactStore)
-
-
-@pytest.mark.parametrize(
-    "failure", [PermissionError("read-only mount"), FileExistsError("not a directory")]
-)
-def test_unusable_fallback_does_not_prevent_app_startup(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-    failure: OSError,
-) -> None:
-    import boto3
-
-    client = FakeS3Client()
-    monkeypatch.setattr(boto3, "client", lambda *args, **kwargs: client)
-    root = tmp_path / "unusable"
-    original_mkdir = Path.mkdir
-
-    def mkdir(path: Path, *args: object, **kwargs: object) -> None:
-        if path == root:
-            raise failure
-        original_mkdir(path, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "mkdir", mkdir)
-    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
-    providers = ProviderRegistry(
+def storage_providers(tmp_path: Path) -> ProviderRegistry:
+    return ProviderRegistry(
         [
             ProviderDescriptor(
                 id="minio",
@@ -263,17 +130,46 @@ def test_unusable_fallback_does_not_prevent_app_startup(
                 id="filesystem",
                 transport="in_process",
                 capabilities=["artifact.store", "artifact.retrieve"],
-                config={"root": str(root)},
+                config={"root": str(tmp_path / "backup")},
             ),
         ]
     )
 
-    app = create_app(providers=providers)
 
-    assert isinstance(app.state.store, S3ArtifactStore)
-    ref = app.state.store.put(PAYLOAD)
-    assert app.state.store.get(ref.artifact_id) == PAYLOAD
-    assert "artifact store provider filesystem disabled" in caplog.text
+def test_central_store_never_initializes_local_backup(tmp_path: Path) -> None:
+    selected = _store_from(storage_providers(tmp_path))
+    assert isinstance(selected, S3ArtifactStore)
+    assert not (tmp_path / "backup").exists()
+
+
+@pytest.mark.parametrize("failure", [ConfigurationError("unusable S3"), OSError("unusable S3")])
+def test_broken_central_configuration_does_not_select_local_storage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    def fail(*args: object) -> None:
+        raise failure
+
+    monkeypatch.setattr("acessilia_toolbox.api.app._create_store", fail)
+    with pytest.raises(ConfigurationError, match="central artifact storage"):
+        _store_from(storage_providers(tmp_path))
+    assert not (tmp_path / "backup").exists()
+
+
+def test_unresolved_central_configuration_does_not_select_local_storage(tmp_path: Path) -> None:
+    providers = storage_providers(tmp_path)
+    providers.get("minio").endpoint = "${MINIO_URL}"
+    with pytest.raises(ConfigurationError, match="central artifact storage"):
+        _store_from(providers)
+    assert not (tmp_path / "backup").exists()
+
+
+def test_filesystem_only_configuration_still_supports_local_development(tmp_path: Path) -> None:
+    providers = storage_providers(tmp_path)
+    local = ProviderRegistry([providers.get("filesystem")])
+    store = _store_from(local)
+    assert isinstance(store, FilesystemArtifactStore)
+    ref = store.put(PAYLOAD)
+    assert store.get(ref.artifact_id) == PAYLOAD
 
 
 def test_null_cache_never_reports_a_hit() -> None:

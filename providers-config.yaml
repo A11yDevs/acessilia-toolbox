@@ -360,8 +360,8 @@ providers:
       access_key: ${MINIO_ACCESS_KEY}
       secret_key: ${MINIO_SECRET_KEY}
 
-  # Backup for missing MinIO configuration and runtime outages. Docker mounts
-  # a persistent volume here; replicas on different hosts need shared storage.
+  # Explicit local-development alternative, used only when no S3 store is
+  # configured. Never selected as a backup for unavailable or misconfigured S3.
   - id: filesystem
     version: "1.0"
     transport: in_process

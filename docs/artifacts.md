@@ -60,31 +60,52 @@ artifact.presign
 The same contract could later be implemented by S3, Ceph, or local
 filesystem storage.
 
-If MinIO is unavailable during a write, the Toolbox stores the artifact
-on the filesystem. Reads check both stores. If MinIO is unavailable and
-the artifact is absent from the filesystem, report provider unavailability.
-Artifacts stored on the filesystem are not copied back to MinIO automatically.
+When S3/MinIO is configured, it is the only artifact store used by the
+application. A runtime outage returns `503 provider_unavailable`; uploads are
+not redirected to a host-local filesystem. An upload is confirmed only after
+the object store accepts the write. Replicas must use the same S3 endpoint and
+bucket. Separate S3 deployments do not automatically share artifacts.
 
-The S3 client uses a 3-second connection timeout, a 5-second read timeout,
-and one attempt per operation, so an unresponsive primary can yield to the
-filesystem before the client's 30-second request timeout. These are socket
-timeouts, not a total deadline for transferring large artifacts. If the
-filesystem cannot be initialized, the Toolbox logs a warning and continues
-with the available S3 store.
+If configured S3 storage cannot be initialized (including unresolved environment
+variables or a missing storage client), application startup fails rather than
+silently selecting local storage. Runtime outages keep the API available but
+reject artifact operations. Upload failures have an actionable public message
+without provider exception details. The S3 client retains its 3-second connection
+and 5-second read timeouts with one attempt per operation; these are socket
+timeouts, not a total deadline for large transfers.
 
-The filesystem root is `/tmp/acessilia-toolbox-artifacts`. Docker Compose
-mounts a named volume there to retain artifacts across container recreation.
-Without a mount, files in `/tmp` are temporary. Replicas on different hosts
-need the same persistent shared filesystem at this path. Set
-`ARTIFACT_FALLBACK_SOURCE` to the host path of that shared mount in each
-Compose deployment; the default named volume only covers one host.
+### Local development
 
-For a multi-host deployment, both Compose files offer the opt-in
-`artifact-shared` NFS volume. See [shared artifact storage](shared-artifact-storage.md)
-for configuration, migration and cross-host acceptance checks. A filesystem
-write failure returns `503 provider_unavailable` without an upload success
-reference; a blocked NFS mount still requires client timeouts and operational
-monitoring.
+Filesystem storage remains available when the provider configuration declares
+**no S3 artifact store**. Copy `providers-config.yaml` to the gitignored
+`var/providers-config.local.yaml` (create `var/` first), remove its `minio`
+provider, and retain the existing `filesystem` provider. Set
+`TOOLBOX_PROVIDERS_CONFIG=var/providers-config.local.yaml` when running locally.
+The local root is `/tmp/acessilia-toolbox-artifacts` by default. A filesystem
+write failure returns 503; local mode is intended for single-host development,
+not independent replicas in production. If both S3 and filesystem are declared,
+only S3 is selected, and the filesystem store is not initialized.
+
+### Migrating existing fallback artifacts
+
+The old release accepted filesystem writes during MinIO outages. Those objects
+are **not** copied to S3 by this change. Before rolling out central-only storage:
+
+1. Pause uploads/jobs and back up every existing fallback volume and its metadata.
+2. Inventory the content-addressed objects on every host and upload them to the
+   common MinIO bucket through the artifact API or S3 adapter. Preserve each
+   object's media type and filename from its `.meta.json` file. Confirm that
+   every accepted migration write reports `storage_backend: s3`. The S3 adapter
+   derives the existing object key and ID from the same content hash.
+3. Verify every returned artifact ID against its original ID, then download and
+   compare hashes through each replica. Preserve old volumes until verified.
+4. Switch all replicas to the new release. Test that an isolated MinIO outage
+   rejects uploads with 503 and that a retry after recovery is readable through
+   any replica. Do not stop production MinIO to perform this test.
+
+Existing Compose filesystem volumes are retained for migration and explicit
+local-only configurations; they are not runtime fallbacks for configured S3.
+No NFS server or shared filesystem is required by the central-only policy.
 
 ## Cache
 

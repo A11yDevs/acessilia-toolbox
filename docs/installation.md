@@ -116,7 +116,7 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 | `MINIO_CONSOLE_PORT` | `9001` | MinIO web console port |
 | `MINIO_ACCESS_KEY` | `change-me` | **Replace** with a real key |
 | `MINIO_SECRET_KEY` | `change-me-too` | **Replace** with a real secret |
-| `ARTIFACT_FALLBACK_SOURCE` | `artifact-fallback` | Named volume or host path for filesystem failover; use a shared mount for replicas on different hosts |
+| `ARTIFACT_FALLBACK_SOURCE` | `artifact-fallback` | Legacy/local-only filesystem volume source; unused when S3 is configured (see [storage policy](artifacts.md#minio)) |
 | `VALKEY_URL` | `redis://localhost:6379` | Valkey cache endpoint |
 | `VALKEY_PORT` | `6379` | Valkey port |
 | `TOOLBOX_HOST` | `0.0.0.0` | uvicorn listen address |

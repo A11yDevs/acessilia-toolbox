@@ -10,9 +10,10 @@ import pytest
 from botocore.handlers import validate_ascii_metadata
 
 from acessilia_toolbox.api.app import create_app
-from acessilia_toolbox.core.errors import InvalidInputError
+from acessilia_toolbox.core.errors import InvalidInputError, ProviderUnavailableError
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.preprocessing.orient import detect_and_orient_image
+from acessilia_toolbox.core.provider import ProviderRegistry
 from acessilia_toolbox.providers.dataset import DatasetAdapter
 from acessilia_toolbox.providers.mineru_document import _ItemProxy
 from acessilia_toolbox.providers.pymupdf_pdf import PyMuPDFProvider
@@ -56,7 +57,7 @@ def test_atomic_publish_failure_leaves_old_object_and_no_temporary_file(tmp_path
         return original_replace(source, destination)
 
     monkeypatch.setattr(Path, "replace", fail_publish)
-    with pytest.raises(OSError):
+    with pytest.raises(ProviderUnavailableError):
         store.put(payload)
     assert not list(target.parent.iterdir())
     monkeypatch.setattr(Path, "replace", original_replace)
@@ -148,7 +149,7 @@ def test_pdf_invalid_parameters_are_client_errors(name, value):
 
 def test_openapi_exposes_bearer_only_for_protected_routes(monkeypatch):
     monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
-    schema = create_app().openapi()
+    schema = create_app(providers=ProviderRegistry([])).openapi()
     assert schema["components"]["securitySchemes"]["ApiKeyAuth"]["scheme"] == "bearer"
     assert schema["paths"]["/v1/capabilities/{capability_id}:execute"]["post"]["security"] == [
         {"ApiKeyAuth": []}

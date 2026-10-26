@@ -11,12 +11,11 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 from urllib.parse import quote, unquote
 
-from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactStore, shards
+from acessilia_toolbox.core.artifact import ArtifactRef, shards
 from acessilia_toolbox.core.errors import (
     ArtifactNotFoundError,
     ConfigurationError,
@@ -27,7 +26,6 @@ from acessilia_toolbox.core.provider import ProviderDescriptor
 
 METADATA_SUFFIX = ".meta.json"
 LOG = logging.getLogger(__name__)
-T = TypeVar("T")
 
 
 def _atomic_write(target: Path, payload: bytes) -> None:
@@ -179,7 +177,10 @@ class S3ArtifactStore:
                 Metadata=metadata,
             )
         except Exception as exc:
-            raise ProviderUnavailableError(f"object storage write failed: {exc}") from exc
+            LOG.exception("object storage write failed")
+            raise ProviderUnavailableError(
+                "The document could not be stored. Please try again later."
+            ) from exc
 
         return ArtifactRef(
             artifact_id=artifact_id,
@@ -249,61 +250,6 @@ class S3ArtifactStore:
                 f"unknown artifact {artifact_id}", artifact_id=artifact_id
             ) from exc
         raise ProviderUnavailableError(f"object storage read failed: {exc}") from exc
-
-
-class FailoverArtifactStore:
-    """Write to a local backup during S3 outages; read from either backend."""
-
-    backend = "failover"
-
-    def __init__(self, primary: ArtifactStore, fallback: ArtifactStore) -> None:
-        self.primary = primary
-        self.fallback = fallback
-
-    def put(
-        self,
-        payload: bytes,
-        *,
-        media_type: str = "application/octet-stream",
-        filename: str | None = None,
-    ) -> ArtifactRef:
-        try:
-            return self.primary.put(payload, media_type=media_type, filename=filename)
-        except ProviderUnavailableError as exc:
-            LOG.warning("primary artifact store unavailable; writing to fallback: %s", exc)
-            return self.fallback.put(payload, media_type=media_type, filename=filename)
-
-    def get(self, artifact_id: str) -> bytes:
-        return self._read(self.primary.get, self.fallback.get, artifact_id)
-
-    def stat(self, artifact_id: str) -> ArtifactRef:
-        return self._read(self.primary.stat, self.fallback.stat, artifact_id)
-
-    def exists(self, artifact_id: str) -> bool:
-        try:
-            if self.primary.exists(artifact_id):
-                return True
-        except ProviderUnavailableError as exc:
-            if self.fallback.exists(artifact_id):
-                return True
-            raise exc from None
-        return self.fallback.exists(artifact_id)
-
-    def _read(
-        self,
-        primary_read: Callable[[str], T],
-        fallback_read: Callable[[str], T],
-        artifact_id: str,
-    ) -> T:
-        try:
-            return primary_read(artifact_id)
-        except (ArtifactNotFoundError, ProviderUnavailableError) as exc:
-            try:
-                return fallback_read(artifact_id)
-            except ArtifactNotFoundError:
-                if isinstance(exc, ProviderUnavailableError):
-                    raise exc from None
-                raise
 
 
 def create_artifact_store(descriptor: ProviderDescriptor) -> Any:

@@ -294,15 +294,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  # Opt in with ARTIFACT_FALLBACK_SOURCE=artifact-shared. This volume mounts
-  # the same external NFS export on each host; it never uses a local directory.
-  # Missing/invalid NFS settings fail the mount when this volume is selected.
-  artifact-shared:
-    driver: local
-    driver_opts:
-      type: nfs
-      o: addr=${ARTIFACT_NFS_SERVER:-},nfsvers=4,rw,hard
-      device: :${ARTIFACT_NFS_EXPORT:-}
   artifact-fallback:
   docling-models:
   mineru-models:

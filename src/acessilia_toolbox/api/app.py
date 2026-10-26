@@ -21,7 +21,6 @@ from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers import configure_dataset_mirroring, create_adapter
 from acessilia_toolbox.providers.cache import create_cache
-from acessilia_toolbox.providers.storage import FailoverArtifactStore
 from acessilia_toolbox.providers.storage import create_artifact_store as _create_store
 
 LOG = logging.getLogger(__name__)
@@ -64,11 +63,19 @@ def create_app(
 
     app.add_middleware(UploadLimitMiddleware, max_bytes=MAX_UPLOAD_BYTES + 1024 * 1024)
 
-    app.state.capabilities = capabilities or CapabilityRegistry.from_directory(
-        Path(os.getenv("TOOLBOX_CAPABILITIES_DIR", DEFAULT_CAPABILITIES_DIR))
+    app.state.capabilities = (
+        capabilities
+        if capabilities is not None
+        else CapabilityRegistry.from_directory(
+            Path(os.getenv("TOOLBOX_CAPABILITIES_DIR", DEFAULT_CAPABILITIES_DIR))
+        )
     )
-    app.state.providers = providers or ProviderRegistry.from_file(
-        Path(os.getenv("TOOLBOX_PROVIDERS_CONFIG", DEFAULT_PROVIDERS_CONFIG))
+    app.state.providers = (
+        providers
+        if providers is not None
+        else ProviderRegistry.from_file(
+            Path(os.getenv("TOOLBOX_PROVIDERS_CONFIG", DEFAULT_PROVIDERS_CONFIG))
+        )
     )
     app.state.store = store if store is not None else _store_from(app.state.providers)
     app.state.cache = cache if cache is not None else _cache_from(app.state.providers)
@@ -123,11 +130,16 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
                 return store
         return None
 
-    primary = first_available([d for d in candidates if d.transport == "s3"])
-    fallback = first_available([d for d in candidates if d.transport != "s3"])
-    if primary is not None and fallback is not None:
-        return FailoverArtifactStore(primary, fallback)
-    return primary or fallback
+    central = [d for d in candidates if d.transport == "s3"]
+    if central:
+        store = first_available(central)
+        if store is None:
+            raise ConfigurationError(
+                "Configured central artifact storage could not be initialized. "
+                "Check the S3 endpoint, credentials and storage dependencies."
+            )
+        return store
+    return first_available(candidates)
 
 
 def _cache_from(providers: ProviderRegistry) -> ExecutionCache | None:

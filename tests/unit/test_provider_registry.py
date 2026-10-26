@@ -114,8 +114,7 @@ def test_expand_env_prefers_the_environment_over_the_default(
 ) -> None:
     monkeypatch.setenv("RAPIDOCR_ORIENT_URL", "http://localhost:5006")
     assert (
-        expand_env("${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}")
-        == "http://localhost:5006"
+        expand_env("${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}") == "http://localhost:5006"
     )
 
 
@@ -148,13 +147,7 @@ def test_shipped_provider_topology_loads(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_shipped_config_declares_each_storage_backend_once() -> None:
-    """Artifact storage is resolved by transport, not by provider id.
-
-    ``_store_from`` picks the S3 descriptor as primary and any other transport as
-    the failover, so a second S3 descriptor adds nothing but a duplicate entry in
-    ``GET /providers``. A vestigial ``artifact-store`` descriptor once did exactly
-    that, and it also made ``artifact.store`` look ambiguous.
-    """
+    """Keep central storage and the explicit local-development alternative registered."""
     registry = ProviderRegistry.from_file(PROJECT_ROOT / "providers-config.yaml")
 
     storage = [
@@ -168,4 +161,4 @@ def test_shipped_config_declares_each_storage_backend_once() -> None:
         f"duplicate storage transports in providers-config.yaml: {transports}"
     )
     assert "s3" in transports, "the S3 artifact store must stay configured"
-    assert "in_process" in transports, "the filesystem failover must stay configured"
+    assert "in_process" in transports, "keep the explicit filesystem-only development option"
