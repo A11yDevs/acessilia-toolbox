@@ -104,38 +104,25 @@ class CapabilityExecutor:
         input_fingerprint = fingerprint_bytes(payload)
         versions = _versions_of(adapter)
         provider_version = versions.pop("provider", descriptor.version)
-        cache_key = compute_cache_key(
-            capability_id=manifest.id,
-            capability_version=manifest.version,
-            provider_id=descriptor.id,
-            provider_version=provider_version,
-            input_fingerprints=[input_fingerprint],
-            parameters=parameters,
-            model_versions=versions,
-            filename=filename,
-            media_type=media_type,
-            language=language,
-        )
-
-        if manifest.execution.cacheable and not no_cache:
-            cached = self._cache.get(cache_key)
-            if cached is not None:
-                try:
-                    restored = _restore(cached, cache_key)
-                except ValidationError:
-                    # Cached results from an older contract must not block execution.
-                    restored = None
-                if restored is not None and self._outputs_available(restored):
-                    return restored
-
         execution_payload = payload
         orientation: OrientationResult | None = None
+        preprocessing: dict[str, Any] | None = None
         auto_rotate = bool(parameters and parameters.get("auto_rotate", False))
         if auto_rotate and is_supported_image(media_type):
+            preprocessing = {"version": 1, "provider": None}
             orient_adapter = None
             try:
                 orient_desc = self._providers.resolve("image.page.orient")
                 orient_adapter = self._adapter_factory(orient_desc)
+                preprocessing.update(
+                    provider=orient_desc.id,
+                    provider_version=orient_desc.version,
+                    model_versions=_versions_of(orient_adapter),
+                    configuration_hash=fingerprint_parameters(
+                        {"endpoint": orient_desc.endpoint, "config": orient_desc.config}
+                    ),
+                    parameters={"return_image": True},
+                )
             except ToolboxError as exc:
                 # Orientation is an optional preprocessing step: a deployment
                 # without the provider still extracts, just without rotating.
@@ -155,6 +142,34 @@ class CapabilityExecutor:
                 # The rotated bytes are the real input, so they replace the
                 # fingerprint; otherwise the cache could serve a stale result.
                 input_fingerprint = fingerprint_bytes(execution_payload)
+            preprocessing["orientation"] = _orientation_payload(orientation)
+
+        # Cache the effective input and preprocessing context. Running orientation
+        # first also lets a recovered provider replace a degraded cached result.
+        cache_key = compute_cache_key(
+            capability_id=manifest.id,
+            capability_version=manifest.version,
+            provider_id=descriptor.id,
+            provider_version=provider_version,
+            input_fingerprints=[input_fingerprint],
+            parameters=parameters,
+            model_versions=versions,
+            filename=filename,
+            media_type=media_type,
+            language=language,
+            preprocessing=preprocessing,
+        )
+
+        if manifest.execution.cacheable and not no_cache:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                try:
+                    restored = _restore(cached, cache_key)
+                except ValidationError:
+                    # Cached results from an older contract must not block execution.
+                    restored = None
+                if restored is not None and self._outputs_available(restored):
+                    return restored
 
         # Only adapters of capabilities with more than one version need to
         # know which contract they serve; version 1 keeps the original call.
@@ -252,24 +267,19 @@ class CapabilityExecutor:
         return store.get(artifact_id), ref
 
     def _outputs_available(self, result: CapabilityResult) -> bool:
-        """Whether every stored binary output of a cached result still exists.
+        """Check every stored reference, including the inline document's JSON.
 
-        The JSON document travels inline, but a binary output is reachable only
-        through the store; serving a cached reference to a deleted object would
-        hand the consumer an id it cannot download.
-
-        `execute` always records the inline document first, so every later
-        artifact is a binary output. This costs one `exists` per binary on each
-        cache hit, which is cheap for the local store; a slow or failing-over
-        backend would call for a short-lived cache of these checks.
+        Missing artifacts invalidate the cached result so execution recreates
+        them. Without a store, only the first, inline JSON reference is allowed;
+        it identifies content without promising a stored download.
         """
-        binaries = result.artifacts[1:]
-        if not binaries:
-            return True
         if self._store is None:
-            return False
+            return len(result.artifacts) <= 1 and all(
+                artifact.storage_backend is None and artifact.uri is None
+                for artifact in result.artifacts
+            )
         try:
-            return all(self._store.exists(artifact.artifact_id) for artifact in binaries)
+            return all(self._store.exists(artifact.artifact_id) for artifact in result.artifacts)
         except ToolboxError as exc:
             LOG.info("cached outputs could not be verified; executing again: %s", exc.message)
             return False

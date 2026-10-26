@@ -6,8 +6,10 @@ provenance — testable without Docker or ML models.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -27,6 +29,7 @@ from acessilia_toolbox.core.provider import (
     ProviderHealth,
     ProviderRegistry,
 )
+from acessilia_toolbox.providers.storage import FilesystemArtifactStore
 
 PDF = "application/pdf"
 PAYLOAD = b"%PDF-test"
@@ -234,3 +237,40 @@ def test_incompatible_cached_result_is_replaced(executor, provider) -> None:
     second = run(executor)
     assert second.provenance.cache_hit is True
     assert len(provider.calls) == 1
+
+
+@pytest.mark.parametrize("with_store", [False, True], ids=["inline", "stored-json"])
+def test_cached_json_remains_usable(
+    executor: CapabilityExecutor, provider: StubProvider, tmp_path: Path, with_store: bool
+) -> None:
+    class MemoryCache:
+        def __init__(self):
+            self.data = {}
+
+        def get(self, key):
+            return self.data.get(key)
+
+        def put(self, key, value):
+            self.data[key] = value
+
+    executor._cache = MemoryCache()
+    store = FilesystemArtifactStore(tmp_path) if with_store else None
+    executor._store = store
+    first = run(executor)
+    assert run(executor).provenance.cache_hit
+    assert len(provider.calls) == 1
+
+    if store is not None:
+        store._path(first.artifacts[0].artifact_id).unlink()
+        refreshed = run(executor)
+        assert not refreshed.provenance.cache_hit
+        assert len(provider.calls) == 2
+        payload, ref = executor.retrieve_artifact(refreshed.artifacts[0].artifact_id)
+        assert fingerprint_bytes(payload) == ref.artifact_id
+        assert json.loads(payload) == refreshed.document
+        assert run(executor).provenance.cache_hit
+        assert len(provider.calls) == 2
+    else:
+        assert first.artifacts[0].storage_backend is None
+        assert run(executor).document == first.document
+        assert len(provider.calls) == 1

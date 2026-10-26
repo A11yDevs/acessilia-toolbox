@@ -34,6 +34,7 @@ services:
       MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      TOOLBOX_ARTIFACT_FALLBACK_MODE: ${TOOLBOX_ARTIFACT_FALLBACK_MODE:-disabled}
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
       TOOLBOX_API_KEY: ${TOOLBOX_API_KEY:-}
       # The toolbox refuses to start without TOOLBOX_API_KEY; 1 here starts it

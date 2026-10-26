@@ -117,12 +117,53 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 | `MINIO_ACCESS_KEY` | `change-me` | **Replace** with a real key |
 | `MINIO_SECRET_KEY` | `change-me-too` | **Replace** with a real secret |
 | `ARTIFACT_FALLBACK_SOURCE` | `artifact-fallback` | Named volume or host path for filesystem failover; use a shared mount for replicas on different hosts |
+| `TOOLBOX_ARTIFACT_FALLBACK_MODE` | `disabled` | `disabled` propagates S3 write failures; `local` permits single-instance fallback; `shared` declares a filesystem accessible by all replicas |
 | `VALKEY_URL` | `redis://localhost:6379` | Valkey cache endpoint |
 | `VALKEY_PORT` | `6379` | Valkey port |
 | `TOOLBOX_HOST` | `0.0.0.0` | uvicorn listen address |
 | `TOOLBOX_PORT` | `8002` | Toolbox HTTP port |
 | `TOOLBOX_API_KEY` | *(empty)* | Bearer token for REST API auth. Required: without it the application refuses to start. |
 | `TOOLBOX_ALLOW_UNAUTHENTICATED` | *(empty)* | `1` starts without `TOOLBOX_API_KEY`, every endpoint open. Local development only. |
+
+#### Artifact fallback and multiple replicas
+
+The default `TOOLBOX_ARTIFACT_FALLBACK_MODE=disabled` returns HTTP 503 when
+an S3 write fails. It does not acknowledge an upload stored only on one
+replica's private disk. Existing backup objects remain readable when an S3
+store is configured. If no S3 store can be configured, filesystem-only storage
+also requires an explicit `local` or `shared` mode; otherwise storage is disabled.
+
+For a single instance, set `TOOLBOX_ARTIFACT_FALLBACK_MODE=local` to retain
+the former behavior. Files saved during an outage are tied to that disk and
+may become unavailable when the instance or its host is replaced.
+
+For replicas on different hosts, mount the same distributed filesystem on
+every host, then configure both Compose deployments with, for example:
+
+```dotenv
+TOOLBOX_ARTIFACT_FALLBACK_MODE=shared
+ARTIFACT_FALLBACK_SOURCE=/mnt/toolbox-shared
+```
+
+`/mnt/toolbox-shared` must already be an actual shared mount, writable by the
+container user on every host, supporting atomic file replacement. Setting
+`shared` is an operator declaration: the Toolbox cannot verify the topology or
+provision a distributed filesystem. A Docker named volume with the same name
+on two hosts is still two independent volumes. Check that the mount is present
+before starting containers; a missing mount must not silently become a local
+directory. Monitor its availability and capacity.
+
+Before rollout, stop S3, upload through replica A and download the returned ID
+through replica B, verifying its SHA-256. Stop A and repeat the download from B.
+After S3 recovery, confirm that backup objects remain readable. No automatic
+replication back to S3 is performed. If the shared filesystem is unavailable,
+the write must fail; private local disks must not be substituted for it.
+
+Existing deployments that depended on automatic local fallback must explicitly
+choose `local` for one instance or provision and verify shared storage before
+choosing `shared`. Python callers constructing `FailoverArtifactStore` directly
+must pass the same choice as `fallback_mode="local"` or `fallback_mode="shared"`.
+The constructor defaults to disabled fallback writes, like the REST factory.
 
 ### 4. Load the configuration
 

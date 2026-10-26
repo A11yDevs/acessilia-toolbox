@@ -13,6 +13,7 @@ from PIL import Image
 
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.executor import CapabilityExecutor
+from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.preprocessing.orient import (
     detect_and_orient_image,
@@ -279,3 +280,71 @@ def test_executor_ignores_auto_rotate_for_non_image_media() -> None:
     )
 
     assert passed_payloads == [pdf]
+
+
+@pytest.mark.parametrize("change", ["version", "model", "payload", "recovery", "config"])
+def test_orientation_changes_invalidate_execution_cache(change: str) -> None:
+    executor, passed_payloads = _executor_fixture()
+
+    class Cache:
+        def __init__(self):
+            self.data = {}
+
+        def get(self, key):
+            return self.data.get(key)
+
+        def put(self, key, value):
+            self.data[key] = value
+
+    executor._cache = Cache()
+    original_factory = executor._adapter_factory
+    state = {"version": "1", "model": "1", "image": ROTATED_PNG, "failed": change == "recovery"}
+
+    class Orient:
+        def versions(self):
+            return {"provider": state["version"], "model": state["model"]}
+
+        def execute(self, *args, **kwargs):
+            if state["failed"]:
+                raise RuntimeError("temporarily unavailable")
+            return SimpleNamespace(
+                document={
+                    "angle": 90,
+                    "confidence": 0.95,
+                    "stage": "provider",
+                    "image_base64": state["image"],
+                }
+            )
+
+    executor._adapter_factory = lambda desc: (
+        Orient() if desc.id == "rapidocr-orient" else original_factory(desc)
+    )
+    image = make_test_image(200, 100)
+
+    def run():
+        return executor.execute(
+            "document.structure.extract",
+            image,
+            filename="test.png",
+            media_type="image/png",
+            parameters={"auto_rotate": True},
+        )
+
+    first = run()
+    assert run().provenance.cache_hit
+    assert len(passed_payloads) == 1
+    if change == "recovery":
+        state["failed"] = False
+    elif change == "payload":
+        state["image"] = UPRIGHT_PNG
+    elif change == "config":
+        executor._providers.get("rapidocr-orient").config["threshold"] = 0.9
+    else:
+        state[change] = "2"
+    second = run()
+    assert not second.provenance.cache_hit
+    assert first.provenance.cache_key != second.provenance.cache_key
+    assert len(passed_payloads) == 2
+    assert second.provenance.input_fingerprints == [fingerprint_bytes(passed_payloads[-1])]
+    assert run().provenance.cache_hit
+    assert len(passed_payloads) == 2
