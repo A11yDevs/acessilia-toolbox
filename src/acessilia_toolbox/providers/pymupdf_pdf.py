@@ -9,6 +9,9 @@ returns it inline as base64. Version 2 also takes PNG and JPEG inputs, an
 optional ``clip`` region and a ``max_side`` bound, and returns the PNG as a
 binary output that the executor stores as an artifact, together with the
 transformation actually applied (see docs/pdf-render.md).
+
+``document.text.spans`` reads the text layer as lines of spans with their
+font, size, style flags and geometry (see docs/text-spans.md).
 """
 
 from __future__ import annotations
@@ -43,6 +46,8 @@ MAX_SIDE_RANGE = (16, 10_000)
 #: Input media types pdf.render@2 opens, mapped to the PyMuPDF file type.
 RENDER_FILETYPES = {"application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpeg"}
 CLIP_ORIGINS = {"TOPLEFT", "BOTTOMLEFT"}
+#: document.text.spans reads at most this many pages per call.
+MAX_SPAN_PAGES = 1000
 
 
 def _positive_integer(params: dict[str, Any], name: str, default: int, maximum: int) -> int:
@@ -81,6 +86,8 @@ class PyMuPDFProvider:
 
         if capability_id == "pdf.split":
             document = self._split(payload, filename, params)
+        elif capability_id == "document.text.spans":
+            document = self._text_spans(payload, params)
         elif capability_id == "pdf.render" and capability_version == 1:
             document = self._render(payload, filename, params)
         elif capability_id == "pdf.render" and capability_version == 2:
@@ -172,6 +179,52 @@ class PyMuPDFProvider:
             "page_count": total,
             "source_filename": filename,
         }
+
+    def _text_spans(self, payload: bytes, params: dict[str, Any]) -> dict[str, Any]:
+        """The text layer of the requested pages as lines of styled spans.
+
+        Coordinates are the unrotated page space PyMuPDF extracts in (top-left
+        origin, points); a rotated page reports its rotation. Image blocks and
+        whitespace-only spans are skipped and spans are trimmed (``_span``):
+        TeX writes inter-word glue as spans of its own, about half of a
+        page's spans, and the gap they leave is still in the boxes around it.
+        """
+        requested = params.get("pages")
+        doc = fitz.open(stream=payload, filetype="pdf")
+        try:
+            page_count = len(doc)
+            numbers = self._span_page_numbers(requested, page_count)
+            pages = [_page_spans(doc[number - 1], number) for number in numbers]
+        finally:
+            doc.close()
+        return {"page_count": page_count, "coord_origin": "TOPLEFT", "pages": pages}
+
+    def _span_page_numbers(self, requested: Any, page_count: int) -> list[int]:
+        if requested is None:
+            if page_count > MAX_SPAN_PAGES:
+                raise InvalidInputError(
+                    f"the document has {page_count} pages; request at most "
+                    f"{MAX_SPAN_PAGES} with the pages parameter",
+                    provider=self.descriptor.id,
+                )
+            return list(range(1, page_count + 1))
+        if (
+            not isinstance(requested, list)
+            or not requested
+            or len(requested) > MAX_SPAN_PAGES
+            or any(type(number) is not int for number in requested)
+        ):
+            raise InvalidInputError(
+                f"pages must be a list of 1 to {MAX_SPAN_PAGES} page numbers",
+                provider=self.descriptor.id,
+            )
+        out_of_range = [n for n in requested if not 1 <= n <= page_count]
+        if out_of_range:
+            raise InvalidInputError(
+                f"pages {out_of_range} out of range (1-{page_count})",
+                provider=self.descriptor.id,
+            )
+        return sorted(set(requested))
 
     def _render(
         self, payload: bytes, filename: str, params: dict[str, Any]
@@ -323,3 +376,62 @@ def _clip_rect(page_rect: Any, clip: Any, provider: str) -> Any:
 
 def _b64encode(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
+
+
+def _page_spans(page: Any, page_number: int) -> dict[str, Any]:
+    """One page of document.text.spans@1."""
+    text = page.get_text("rawdict")
+    lines = [
+        {
+            "bbox": _rounded(line["bbox"]),
+            "spans": spans,
+        }
+        for block in text["blocks"]
+        if block.get("type") == 0
+        for line in block["lines"]
+        if (spans := [out for span in line["spans"] if (out := _span(span))])
+    ]
+    return {
+        "page_number": page_number,
+        "width": round(text["width"], 2),
+        "height": round(text["height"], 2),
+        "rotation": page.rotation,
+        "lines": lines,
+    }
+
+
+def _span(span: Mapping[str, Any]) -> dict[str, Any] | None:
+    """A span trimmed to its visible characters, or None when it has none.
+
+    PyMuPDF synthesizes a space where it sees a gap and puts it at the start
+    of the next span, with the line's baseline: a lowered subscript would
+    report the body's origin. The origin and box are therefore taken from the
+    characters themselves, without the whitespace at either end.
+    """
+    chars = list(span["chars"])
+    while chars and not chars[0]["c"].strip():
+        chars.pop(0)
+    while chars and not chars[-1]["c"].strip():
+        chars.pop()
+    if not chars:
+        return None
+    return {
+        "text": "".join(char["c"] for char in chars),
+        # A subset font is embedded as ABCDEF+CMMI12; the name is what matters.
+        "font": str(span["font"]).split("+", 1)[-1],
+        "size": round(span["size"], 2),
+        "flags": int(span["flags"]),
+        "bbox": _rounded(
+            (
+                min(char["bbox"][0] for char in chars),
+                min(char["bbox"][1] for char in chars),
+                max(char["bbox"][2] for char in chars),
+                max(char["bbox"][3] for char in chars),
+            )
+        ),
+        "origin": _rounded(chars[0]["origin"]),
+    }
+
+
+def _rounded(values: Any) -> list[float]:
+    return [round(float(value), 2) for value in values]

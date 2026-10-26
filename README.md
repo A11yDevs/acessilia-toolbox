@@ -196,7 +196,7 @@ flowchart TB
 | `document.structure.extract` | docling, nougat, mineru (teleocr: opt-in) | ✅ |
 | `document.layout.analyze` | docling-layout, mineru-layout | ✅ |
 | `document.ocr` | docling-ocr, mineru-ocr | ✅ |
-| `pdf.split`, `pdf.render` (v1, v2) | pymupdf-pdf (in-process) | ✅ |
+| `pdf.split`, `pdf.render` (v1, v2), `document.text.spans` | pymupdf-pdf (in-process) | ✅ |
 | `math.recognize` | docling-math, rapid-latex-ocr, pp-formulanet | ✅ |
 | `math.convert`, `math.verbalize` | math-speech (MathJax + MathCAT sidecar) | ✅ |
 | `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
@@ -303,6 +303,7 @@ pages: 1; elements: 7; obligations: 0
 | [PDF/UA Export](docs/pdf-ua-export.md) | `document.export.pdf_ua` sidecar with a pinned Pandoc and TeX Live |
 | [DOCX Export](docs/docx-export.md) | `document.export.docx` on the same sidecar, with Pandoc sandboxed |
 | [Page rendering](docs/pdf-render.md) | `pdf.render` v2: clip, size bound and raster inputs, PNG by reference |
+| [Text spans](docs/text-spans.md) | `document.text.spans`: the text layer with fonts, sizes and baselines |
 | [PDF/UA Validation](docs/pdf-ua-validation.md) | `pdf.validate.pdf_ua` sidecar with a pinned veraPDF |
 | [TeleOCR Adapter](docs/teleocr.md) | Optional image extraction, configuration and HTTP contract |
 | [TeleOCR Evaluation](docs/teleocr-evaluation.md) | Local gains, failure cases, coverage and remaining service validation |
