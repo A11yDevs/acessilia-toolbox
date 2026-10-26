@@ -40,7 +40,7 @@ Raw TeX nodes (`RawBlock`/`RawInline` in `latex`, `tex` or `context`) are
 rejected anywhere in the AST, metadata included: the sidecar answers `422`,
 which the API reports as `400`. Every string therefore reaches LaTeX escaped
 by Pandoc, except the formula alternate text below, which the sidecar's own
-filter writes after removing every TeX special character. Shell escape
+filter writes after replacing every TeX special character with a space. Shell escape
 is off and TeX may only write below its working directory.
 
 ### Formula alternate text
@@ -58,8 +58,9 @@ a formula its spoken form, wrap the `Math` in a span with the class
 
 `filters/formula_alt.lua` turns the span into a TeX group that calls
 `\AccessiliaFormulaAlt{…}` (defined in `pdf_ua.tex`) before the formula, so
-only that formula's `/Alt` changes. The filter removes `\ { } $ & # ^ _ % ~`
-from the text first, so it can neither inject commands nor unbalance the
+only that formula's `/Alt` changes. The filter first replaces each of
+`\ { } $ & # ^ _ % ~` in the text with a space and collapses the spaces
+(`a}b` reads `a b`), so the text can neither inject commands nor unbalance the
 group. A span without the class, or with an empty `alt`, renders its content
 as before, and other writers (`document.export.docx`) ignore the span.
 

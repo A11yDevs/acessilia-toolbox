@@ -446,3 +446,28 @@ def test_template_defines_the_formula_alt_command() -> None:
     template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
     assert "\\NewDocumentCommand \\AccessiliaFormulaAlt" in template
     assert "\\l__math_content_template_tl" in template
+
+
+def test_smoke_check_reads_hex_and_literal_alternate_texts() -> None:
+    """The build-time /Alt check must not miss an /Alt the writer encodes differently."""
+    spec = importlib.util.spec_from_file_location(
+        "pdf_ua_smoke_check", SERVER_PATH.parent / "smoke_check.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    utf16 = "<FEFF" + "x pertence".encode("utf-16-be").hex().upper() + ">"
+    pdf = f"/Alt {utf16} /Alt (a \\(b\\) (c) \\101) /Alt <41424>".encode()
+
+    assert module.alternate_texts(pdf) == ["x pertence", "a (b) (c) A", "AB@"]
+    # A hex string the writer wraps across lines.
+    assert module.alternate_texts(b"/Alt <FEFF 0061\n 0062>") == ["ab"]
+    # UTF-16 little-endian, by its byte order mark.
+    assert module.alternate_texts(b"/Alt <FFFE6100>") == ["a"]
+    # Backslash-EOL continues the line; a bare EOL of any kind reads as LF.
+    assert module.alternate_texts(b"/Alt (a\\\nb) /Alt (c\\\r\nd) /Alt (e\r\nf\rg)") == [
+        "ab",
+        "cd",
+        "e\nf\ng",
+    ]
