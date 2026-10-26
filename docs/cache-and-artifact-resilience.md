@@ -1,10 +1,10 @@
-# Cache and artifact resilience: B02, B03 and B08
+# Cache and artifact resilience
 
 This document describes three fixes developed from `release/0.2.0` at
 `8f33ea6`. The changes address cached artifact references, image orientation
 cache identity, and storage behavior during S3 outages.
 
-## B02 — Cached results can reference a missing JSON artifact
+## Cached results can reference a missing JSON artifact
 
 ### Problem
 
@@ -46,7 +46,7 @@ The existence check is not a storage transaction: deletion after verification
 can still race with a later download. Storage retention policies remain
 responsible for the lifetime of published objects.
 
-## B03 — Cache lookup precedes automatic image orientation
+## Cache lookup precedes automatic image orientation
 
 ### Problem
 
@@ -94,7 +94,7 @@ changes, different oriented bytes and recovery after a provider failure. They
 also verify stable cache reuse and that provenance fingerprints describe the
 bytes actually delivered to the extractor.
 
-## B08 — Local fallback storage is not shared across replicas
+## Local fallback storage is not shared across replicas
 
 ### Problem
 
@@ -166,8 +166,8 @@ integration: **214 passed, 4 skipped**. The skipped integration tests depend
 on unavailable external tools. Subsequent focused checks passed the added
 backup-read regression and both two-replica REST scenarios.
 
-The original B02 and B03 regressions failed before their corrections. The B08
-default-policy test also failed before the change because a private local
+The cached-artifact and orientation regressions failed before their corrections.
+The fallback default-policy test also failed before the change because a private local
 write succeeded during the simulated S3 outage.
 
 Ruff checks passed for all changed Python files, and `git diff --check` passed.
