@@ -396,6 +396,12 @@ def test_template_defines_what_recent_pandoc_and_longtable_need() -> None:
     assert "pdfstandard=ua-1" in template
 
 
+def test_template_leaves_headings_unnumbered_by_default() -> None:
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    # Without this the article class tags "1", "1.1" inside each heading.
+    assert "\\setcounter{secnumdepth}{-\\maxdimen}" in template
+
+
 # ── Formula alternate text (filters/formula_alt.lua) ────────────────────
 
 
