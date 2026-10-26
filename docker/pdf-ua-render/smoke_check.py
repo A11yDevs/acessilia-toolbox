@@ -17,11 +17,12 @@ _ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f"}
 
 
 def _decode(raw: bytes) -> str:
-    return raw.decode("utf-16") if raw.startswith(b"\xfe\xff") else raw.decode("latin-1")
+    # "utf-16" honours the byte order mark of either endianness.
+    return raw.decode("utf-16") if raw[:2] in (b"\xfe\xff", b"\xff\xfe") else raw.decode("latin-1")
 
 
 def _literal(pdf: bytes, start: int) -> bytes:
-    """A PDF literal string from just after its "(": balanced parentheses and escapes."""
+    """A PDF literal string from just after its "(": balanced parentheses, escapes, EOLs."""
     out, depth, i = bytearray(), 1, start
     while i < len(pdf):
         char = pdf[i : i + 1]
@@ -32,6 +33,10 @@ def _literal(pdf: bytes, start: int) -> bytes:
                 out.append(int(octal.group(0), 8) & 0xFF)
                 i += 1 + len(octal.group(0))
                 continue
+            if following in (b"\r", b"\n"):
+                # A backslash before an end of line continues the line (PDF 7.3.4.2).
+                i += 3 if pdf[i + 1 : i + 3] == b"\r\n" else 2
+                continue
             out += _ESCAPES.get(following, following)
             i += 2
             continue
@@ -41,6 +46,11 @@ def _literal(pdf: bytes, start: int) -> bytes:
             depth -= 1
             if depth == 0:
                 break
+        elif char == b"\r":
+            # Any unescaped end of line reads as a single LF (PDF 7.3.4.2).
+            char = b"\n"
+            if pdf[i + 1 : i + 2] == b"\n":
+                i += 1
         out += char
         i += 1
     return bytes(out)

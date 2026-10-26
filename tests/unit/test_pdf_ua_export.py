@@ -461,3 +461,13 @@ def test_smoke_check_reads_hex_and_literal_alternate_texts() -> None:
     pdf = f"/Alt {utf16} /Alt (a \\(b\\) (c) \\101) /Alt <41424>".encode()
 
     assert module.alternate_texts(pdf) == ["x pertence", "a (b) (c) A", "AB@"]
+    # A hex string the writer wraps across lines.
+    assert module.alternate_texts(b"/Alt <FEFF 0061\n 0062>") == ["ab"]
+    # UTF-16 little-endian, by its byte order mark.
+    assert module.alternate_texts(b"/Alt <FFFE6100>") == ["a"]
+    # Backslash-EOL continues the line; a bare EOL of any kind reads as LF.
+    assert module.alternate_texts(b"/Alt (a\\\nb) /Alt (c\\\r\nd) /Alt (e\r\nf\rg)") == [
+        "ab",
+        "cd",
+        "e\nf\ng",
+    ]
