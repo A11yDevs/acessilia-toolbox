@@ -59,6 +59,21 @@ class FilesystemArtifactStore:
         media_type: str = "application/octet-stream",
         filename: str | None = None,
     ) -> ArtifactRef:
+        try:
+            return self._put(payload, media_type=media_type, filename=filename)
+        except OSError as exc:
+            LOG.exception("filesystem artifact write failed")
+            raise ProviderUnavailableError(
+                "The document could not be stored. Please try again later."
+            ) from exc
+
+    def _put(
+        self,
+        payload: bytes,
+        *,
+        media_type: str,
+        filename: str | None,
+    ) -> ArtifactRef:
         artifact_id = fingerprint_bytes(payload)
         target = self._path(artifact_id)
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -79,6 +79,13 @@ need the same persistent shared filesystem at this path. Set
 `ARTIFACT_FALLBACK_SOURCE` to the host path of that shared mount in each
 Compose deployment; the default named volume only covers one host.
 
+For a multi-host deployment, both Compose files offer the opt-in
+`artifact-shared` NFS volume. See [shared artifact storage](shared-artifact-storage.md)
+for configuration, migration and cross-host acceptance checks. A filesystem
+write failure returns `503 provider_unavailable` without an upload success
+reference; a blocked NFS mount still requires client timeouts and operational
+monitoring.
+
 ## Cache
 
 Cache should be external and replaceable.

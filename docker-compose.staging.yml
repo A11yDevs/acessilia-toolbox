@@ -279,6 +279,13 @@ services:
     restart: "no"
 
 volumes:
+  # Shared fallback for multi-host deployments; see docs/shared-artifact-storage.md.
+  artifact-shared:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${ARTIFACT_NFS_SERVER:-},nfsvers=4,rw,hard
+      device: :${ARTIFACT_NFS_EXPORT:-}
   artifact-fallback:
   docling-models:
   mineru-models:
