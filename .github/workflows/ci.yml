@@ -93,16 +93,21 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/unit/ -v --junitxml=test-results.xml
 
+      - name: Test artifact failover and replica replacement
+        run: >-
+          python -m pytest tests/integration/test_artifact_failover.py
+          tests/statelessness/ -v --junitxml=artifact-test-results.xml
+
       - name: Reject unexpected skipped tests
         run: |
           python - <<'PY'
           from pathlib import Path
           from xml.etree import ElementTree
 
-          report = Path("test-results.xml")
-          root = ElementTree.parse(report).getroot()
           skipped = sum(
               int(suite.attrib.get("skipped", "0"))
+              for report in (Path("test-results.xml"), Path("artifact-test-results.xml"))
+              for root in (ElementTree.parse(report).getroot(),)
               for suite in root.iter("testsuite")
           )
           if skipped:
