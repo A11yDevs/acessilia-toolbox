@@ -39,8 +39,29 @@ curl -H "Authorization: Bearer $TOOLBOX_API_KEY" \
 Raw TeX nodes (`RawBlock`/`RawInline` in `latex`, `tex` or `context`) are
 rejected anywhere in the AST, metadata included: the sidecar answers `422`,
 which the API reports as `400`. Every string therefore reaches LaTeX escaped
-by Pandoc. Shell escape
+by Pandoc, except the formula alternate text below, which the sidecar's own
+filter writes after removing every TeX special character. Shell escape
 is off and TeX may only write below its working directory.
+
+### Formula alternate text
+
+Each formula becomes a `Formula` structure element whose `/Alt` is what a
+screen reader announces. By default `latex-lab` fills it with the LaTeX source
+(`LaTeX formula starts \begin {math} \frac {…} … LaTeX formula ends`). To give
+a formula its spoken form, wrap the `Math` in a span with the class
+`accessilia-formula` and the text in an `alt` attribute:
+
+``` json
+{"t": "Span", "c": [["", ["accessilia-formula"], [["alt", "a fração com numerador s de 4 menos s de 2 …"]]],
+                    [{"t": "Math", "c": [{"t": "DisplayMath"}, "\\frac{s(4)-s(2)}{4-2}"]}]]}
+```
+
+`filters/formula_alt.lua` turns the span into a TeX group that calls
+`\AccessiliaFormulaAlt{…}` (defined in `pdf_ua.tex`) before the formula, so
+only that formula's `/Alt` changes. The filter removes `\ { } $ & # ^ _ % ~`
+from the text first, so it can neither inject commands nor unbalance the
+group. A span without the class, or with an empty `alt`, renders its content
+as before, and other writers (`document.export.docx`) ignore the span.
 
 ## Response
 
@@ -67,8 +88,8 @@ bytes, so a consumer that already holds that id can skip the download.
 ## Cache
 
 The capability is cacheable. The key covers the AST, `lang` and everything the
-sidecar reports on `/version`: Pandoc, engine, LaTeX kernel and the template
-digest. Rendering the same document again returns the stored PDF without running
+sidecar reports on `/version`: Pandoc, engine, LaTeX kernel, the template
+digest and the formula alt filter digest. Rendering the same document again returns the stored PDF without running
 LaTeX; upgrading any component produces a new key. Valkey holds only the small
 JSON result, never the PDF.
 
