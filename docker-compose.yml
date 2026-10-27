@@ -183,8 +183,10 @@ services:
       - "${MINERU_SERVE_PORT:-5002}:8000"
     environment:
       MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+      HF_HOME: /home/mineru/.cache/huggingface
     volumes:
       - mineru-models:/home/mineru/.cache/modelscope
+      - mineru-huggingface:/home/mineru/.cache/huggingface
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')"]
       interval: 15s
@@ -299,6 +301,7 @@ volumes:
   artifact-fallback:
   docling-models:
   mineru-models:
+  mineru-huggingface:
   minio-data:
   nougat-models:
   nougat-torch-models:

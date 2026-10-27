@@ -283,6 +283,13 @@ while its sidecar is not running:
 | `verapdf-validate` | `verapdf-validate` | `docker/verapdf-validate.Dockerfile` | `pdf.validate.pdf_ua` |
 | `math-speech` | `math-speech` | `docker/math-speech.Dockerfile` | `math.convert`, `math.verbalize` (provider pending, see #64) |
 
+The MinerU Compose service persists ModelScope and Hugging Face caches in separate
+volumes. Its first extraction can download model weights, including layoutreader;
+keep both volumes across restarts and provision network access and disk space for
+the initial download. The `/openapi.json` health check verifies that the API is
+running, not that models are loaded. Verify readiness with an extraction after
+provisioning the cache; cold starts may exceed request timeouts.
+
 The `pdf-ua-render` build renders a smoke-test PDF and DOCX, the
 `verapdf-validate` build validates a smoke-test PDF, and the `math-speech`
 build converts, speaks and brailles test formulas, so a broken toolchain
