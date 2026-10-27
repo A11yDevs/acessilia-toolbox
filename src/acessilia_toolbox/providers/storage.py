@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -161,20 +162,26 @@ class S3ArtifactStore:
         artifact_id = fingerprint_bytes(payload)
         key = self._key(artifact_id)
         metadata = {"filename-utf8": quote(filename, safe="")} if filename else {}
-        try:
-            self._client.put_object(
-                Bucket=self.bucket,
-                Key=key,
-                Body=payload,
-                ContentType=media_type,
-                Metadata=metadata,
-                IfNoneMatch="*",
-            )
-        except Exception as exc:
-            response = getattr(exc, "response", None) or {}
-            if response.get("Error", {}).get("Code") in {"PreconditionFailed", "412"}:
-                return self.stat(artifact_id)
-            raise ProviderUnavailableError(f"object storage write failed: {exc}") from exc
+        for attempt in range(3):
+            try:
+                self._client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=payload,
+                    ContentType=media_type,
+                    Metadata=metadata,
+                    IfNoneMatch="*",
+                )
+                break
+            except Exception as exc:
+                response = getattr(exc, "response", None) or {}
+                code = response.get("Error", {}).get("Code")
+                if code in {"PreconditionFailed", "412"}:
+                    return self.stat(artifact_id)
+                if code in {"ConditionalRequestConflict", "409"} and attempt < 2:
+                    time.sleep(0.05 * (attempt + 1))
+                    continue
+                raise ProviderUnavailableError(f"object storage write failed: {exc}") from exc
 
         return ArtifactRef(
             artifact_id=artifact_id,
