@@ -75,10 +75,13 @@ since it conflicts with `unicode-math`.
 
 Recognizers write the `amssymb` names, so the template keeps all of them
 working. `unicode-math` defines most, and `pdf_ua.tex` maps the rest
-(`\lozenge`, `\varpropto`, `\nleqslant`, …) to their Unicode-named
-equivalents: one undefined command fails the render. The symbols TeX Gyre DejaVu
-Math has no glyph for (`\bigstar`, `\subseteqq`, `\pitchfork`, …) fall back to
-STIX Two Math instead of rendering as nothing.
+(`\lozenge`, `\varpropto`, …) to their Unicode-named equivalents: one
+undefined command fails the render. The negations Unicode has no single
+character for (`\nleqq`, `\nleqslant`, `\nsubseteqq`, …) map to the closest
+one it has, so the text layer reads `≰` for `\nleqq`, not `≦` negated; the
+`/Alt` is unaffected. The symbols TeX Gyre DejaVu Math has no glyph for
+(`\bigstar`, `\subseteqq`, `\pitchfork`, …) fall back to STIX Two Math
+instead of rendering as nothing.
 
 ### Heading numbers
 

@@ -464,7 +464,11 @@ def test_template_defines_the_formula_alt_command() -> None:
 def test_template_sets_math_with_unicode_math_after_fontspec() -> None:
     template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
     # unicode-math needs fontspec first, and conflicts with amssymb.
-    assert template.index("\\usepackage{fontspec}") < template.index("\\usepackage{unicode-math}")
+    assert "\\usepackage{fontspec}" in template
+    assert "\\usepackage{unicode-math}" in template
+    assert template.index("\\usepackage{fontspec}") < template.index(
+        "\\usepackage{unicode-math}"
+    ), "unicode-math must load after fontspec"
     assert "\\setmathfont{texgyredejavu-math.otf}" in template
     assert "\\usepackage{amsmath}" in template
     assert not re.search(r"\\usepackage(\[[^]]*\])?\{[^}]*amssymb", template)
@@ -518,3 +522,18 @@ def test_smoke_check_reads_the_tounicode_text_layer() -> None:
     )
 
     assert module.text_layer(pdf) == {"\u2260", "\U0001d460", "A", "B", "C", "c", "=\u0338"}
+
+
+def test_smoke_check_skips_malformed_tounicode_targets() -> None:
+    """A target with no UTF-16 text is skipped, not a traceback in the image build."""
+    module = _smoke_check()
+    pdf = (
+        b"begincmap\n"
+        b"2 beginbfchar\n<0001> <D835>\n<0002> <260>\nendbfchar\n"
+        # FFFE, FFFF, then 10000: five digits, odd length.
+        b"1 beginbfrange\n<0010> <0012> <FFFE>\nendbfrange\n"
+        b"1 beginbfchar\n<0003> <2260>\nendbfchar\n"
+        b"endcmap\n"
+    )
+
+    assert module.text_layer(pdf) == {"￾", "￿", "≠"}

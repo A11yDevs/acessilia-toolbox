@@ -76,8 +76,16 @@ def alternate_texts(pdf: bytes) -> list[str]:
     return texts
 
 
-def _hex_text(digits: bytes) -> str:
-    return bytes.fromhex(digits.decode()).decode("utf-16-be")
+def _hex_text(digits: bytes) -> str | None:
+    """The UTF-16BE text of a CMap target, or None for a malformed one.
+
+    An odd number of digits, a lone surrogate or a range that carries its last
+    code unit past FFFF has no text; skipping it keeps the check's own message.
+    """
+    try:
+        return bytes.fromhex(digits.decode()).decode("utf-16-be")
+    except ValueError:
+        return None
 
 
 def text_layer(pdf: bytes) -> set[str]:
@@ -104,6 +112,7 @@ def text_layer(pdf: bytes) -> set[str]:
                 for offset in range(int(high, 16) - int(low, 16) + 1):
                     unit = int(first[-4:], 16) + offset
                     texts.add(_hex_text(first[:-4] + b"%04X" % unit))
+    texts.discard(None)
     return texts
 
 
@@ -114,6 +123,9 @@ if __name__ == "__main__":
         sys.exit(f"formula alternate text missing; /Alt found: {texts}")
     if MATH_FONT not in pdf:
         sys.exit(f"math font {MATH_FONT.decode()} not embedded: unicode-math did not take effect")
+    # Document-wide: the U+0338 check reads every font's CMap, text fonts
+    # included, so a smoke or alt text with a decomposed combining sequence
+    # would trip it too.
     layer = text_layer(pdf)
     if NOT_EQUAL not in layer or any(COMBINING_NOT in text for text in layer):
         sys.exit("\\neq is not U+2260 in the text layer (legacy \\not overlay?)")
