@@ -17,7 +17,9 @@ ARG TEXLIVE_REPOSITORY=https://ftp.math.utah.edu/pub/tex/historic/systems/texliv
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
 # perl and xz drive install-tl; fontconfig lets luaotfload find DejaVu Sans,
-# the template's font; curl serves the healthcheck.
+# the template's text font (its math fonts, TeX Gyre DejaVu Math and the STIX
+# Two Math fallback, come from tex-gyre-math and stix2-otf below); curl serves
+# the healthcheck.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -57,8 +59,12 @@ RUN export TL_DOWNLOAD_PROGRAM=curl \
         fontspec \
         geometry \
         latex-lab \
+        lualatex-math \
         pdfmanagement-testphase \
-        tagpdf && \
+        stix2-otf \
+        tagpdf \
+        tex-gyre-math \
+        unicode-math && \
     rm -rf /tmp/install-tl /tmp/texlive.profile
 
 RUN pip install --no-cache-dir \
@@ -81,11 +87,13 @@ WORKDIR /app
 
 # Smoke test: the image only builds if the pinned toolchain renders the template,
 # math included. The formula uses what recognizers and vision models write
-# (\mathbb, \frac, \lim, aligned): one unrenderable formula makes the core
+# (\mathbb, \frac, \lim, aligned, amssymb names such as \varpropto that
+# pdf_ua.tex maps for unicode-math): one unrenderable formula makes the core
 # degrade every formula of a document to literal text. The PDF command mirrors
 # the one /render runs in server.py, so a change to either shows up here.
 # smoke_check.py then checks that the formula marked with an alternate text got
-# it as /Alt (filters/formula_alt.lua + \AccessiliaFormulaAlt).
+# it as /Alt (filters/formula_alt.lua + \AccessiliaFormulaAlt), and that the
+# math font is embedded with \neq as U+2260 in the text layer.
 COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
 RUN luaotfload-tool --update && \
     pandoc --from json --to pdf --standalone --syntax-highlighting=none \

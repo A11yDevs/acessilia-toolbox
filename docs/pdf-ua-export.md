@@ -64,6 +64,25 @@ only that formula's `/Alt` changes. The filter first replaces each of
 group. A span without the class, or with an empty `alt`, renders its content
 as before, and other writers (`document.export.docx`) ignore the span.
 
+### Math font
+
+Formulas are set with `unicode-math` in TeX Gyre DejaVu Math, the OpenType
+math font that matches the DejaVu Sans text. Each symbol is written with its
+own code point, so the text layer (copy and paste, search, a reader that falls
+back from `/Alt`) reads `≠` for `\neq`, not `=` followed by a detached U+0338.
+`amsmath` provides the environments (`aligned`); `amssymb` is not loaded,
+since it conflicts with `unicode-math`.
+
+Recognizers write the `amssymb` names, so the template keeps all of them
+working. `unicode-math` defines most, and `pdf_ua.tex` maps the rest
+(`\lozenge`, `\varpropto`, …) to their Unicode-named equivalents: one
+undefined command fails the render. The negations Unicode has no single
+character for (`\nleqq`, `\nleqslant`, `\nsubseteqq`, …) map to the closest
+one it has, so the text layer reads `≰` for `\nleqq`, not `≦` negated; the
+`/Alt` is unaffected. The symbols TeX Gyre DejaVu Math has no glyph for
+(`\bigstar`, `\subseteqq`, `\pitchfork`, …) fall back to STIX Two Math
+instead of rendering as nothing.
+
 ### Heading numbers
 
 Headings render unnumbered: the rebuilt document already carries its own
