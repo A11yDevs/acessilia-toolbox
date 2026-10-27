@@ -11,6 +11,7 @@ import io
 import os
 from collections.abc import Sequence
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -185,7 +186,8 @@ class GitHubDatasetProvider:
         repo = ddef["repo"]
         ref = revision or ddef["default_revision"]
 
-        url = f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{artifact_path}"
+        encoded_path = quote(artifact_path, safe="/")
+        url = f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{encoded_path}"
         headers: dict[str, str] = {}
         if self._github_token:
             headers["Authorization"] = f"Bearer {self._github_token}"
