@@ -241,6 +241,10 @@ class CapabilityExecutor:
     ) -> ArtifactRef:
         return self._require_store().put(payload, media_type=media_type, filename=filename)
 
+    def stat_artifact(self, artifact_id: str) -> ArtifactRef:
+        shards(artifact_id)
+        return self._require_store().stat(artifact_id)
+
     def retrieve_artifact(
         self, artifact_id: str, *, max_bytes: int | None = None
     ) -> tuple[bytes, ArtifactRef]:

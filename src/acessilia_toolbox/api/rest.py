@@ -233,7 +233,7 @@ def artifact_metadata(
     artifact_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
 ) -> ArtifactRef:
-    return runner.retrieve_artifact(artifact_id)[1]
+    return runner.stat_artifact(artifact_id)
 
 
 @router.get("/providers", tags=["providers"])

@@ -7,6 +7,7 @@ core install light.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -30,7 +31,7 @@ LOG = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-def _atomic_write(target: Path, payload: bytes) -> None:
+def _atomic_write(target: Path, payload: bytes, *, exclusive: bool = False) -> None:
     fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.")
     temporary = Path(name)
     try:
@@ -38,7 +39,11 @@ def _atomic_write(target: Path, payload: bytes) -> None:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-        temporary.replace(target)
+        if exclusive:
+            with contextlib.suppress(FileExistsError):
+                os.link(temporary, target)
+        else:
+            temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -78,8 +83,9 @@ class FilesystemArtifactStore:
         _atomic_write(
             target.with_suffix(target.suffix + METADATA_SUFFIX),
             ref.model_dump_json().encode("utf-8"),
+            exclusive=True,
         )
-        return ref
+        return self.stat(artifact_id)
 
     def get(self, artifact_id: str) -> bytes:
         target = self._path(artifact_id)
@@ -162,8 +168,12 @@ class S3ArtifactStore:
                 Body=payload,
                 ContentType=media_type,
                 Metadata=metadata,
+                IfNoneMatch="*",
             )
         except Exception as exc:
+            response = getattr(exc, "response", None) or {}
+            if response.get("Error", {}).get("Code") in {"PreconditionFailed", "412"}:
+                return self.stat(artifact_id)
             raise ProviderUnavailableError(f"object storage write failed: {exc}") from exc
 
         return ArtifactRef(
