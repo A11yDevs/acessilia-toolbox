@@ -64,6 +64,18 @@ only that formula's `/Alt` changes. The filter first replaces each of
 group. A span without the class, or with an empty `alt`, renders its content
 as before, and other writers (`document.export.docx`) ignore the span.
 
+### Heading numbers
+
+Headings render unnumbered: the rebuilt document already carries its own
+numbering in the heading text, so `pdf_ua.tex` sets `secnumdepth` to
+`-\maxdimen` as Pandoc's default template does. A document that wants LaTeX
+to number its sections can opt in through the AST metadata, with
+`numbersections` set to `true` and, optionally, `secnumdepth` (default `5`):
+
+``` json
+{"meta": {"numbersections": {"t": "MetaBool", "c": true}}, …}
+```
+
 ## Response
 
 The PDF is never inlined. The executor stores it in the artifact store and the
