@@ -5,11 +5,19 @@ from fastapi.testclient import TestClient
 from tests.integration.test_artifacts_api import client as client_fixture
 from tests.integration.test_artifacts_api import store as store_fixture
 
+from acessilia_toolbox.api import auth
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.providers.storage import FilesystemArtifactStore
 
 client = client_fixture
 store = store_fixture
+
+
+@pytest.fixture(autouse=True)
+def _configure_test_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    # This module reuses an integration fixture outside its conftest scope.
+    monkeypatch.setattr(auth, "TOOLBOX_API_KEY", "")
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
 
 
 class BoundedStream(BytesIO):
