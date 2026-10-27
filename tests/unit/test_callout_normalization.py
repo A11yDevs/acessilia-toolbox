@@ -42,7 +42,7 @@ def _element(
     )
 
 
-def _callout_ids(elements: list[ManifestElement]) -> list[object]:
+def _callout_ids(elements: list[ManifestElement]) -> list[str | None]:
     return [element.metadata.get("callout_id") for element in elements]
 
 
@@ -113,3 +113,19 @@ def test_an_indented_group_without_a_title_is_not_a_callout() -> None:
     _normalize_callout_groups(elements)
 
     assert _callout_ids(elements) == [None] * len(elements)
+
+
+def test_a_list_inside_a_titled_box_stays_in_the_callout() -> None:
+    elements = [
+        _element(1, LONG, 65, 100),
+        _element(2, LONG, 65, 120),
+        _element(3, "BEFORE YOU START", 90, 140, right=500),
+        _element(4, "Make sure the tools are installed.", 90, 155, right=500),
+        _element(5, "A compiler.", 90, 170, right=500, kind="list_item"),
+        _element(6, "A text editor.", 90, 185, right=500, kind="list_item"),
+        _element(7, "Then open the first exercise.", 90, 200, right=500),
+    ]
+
+    _normalize_callout_groups(elements)
+
+    assert _callout_ids(elements) == [None, None] + ["callout-auto-000003"] * 5
