@@ -70,6 +70,8 @@ providers:
       - image/png
       - image/jpeg
       - image/tiff
+    config:
+      vlm_pipeline_preset: granite_docling
   - id: rapid-latex-ocr
     version: "0.1"
     transport: http
