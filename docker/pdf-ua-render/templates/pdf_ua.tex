@@ -12,11 +12,10 @@
 \fi
 
 % Math from the core is LaTeX written by recognizers and vision models, which
-% use amsmath environments (aligned) and amssymb symbols (\mathbb). Without
-% them one formula fails the render and the core degrades every formula of the
-% document to literal text. Loaded before fontspec by convention (content
-% packages before font setup); the order is not required.
-\usepackage{amsmath,amssymb}
+% use amsmath environments (aligned). Without them one formula fails the render
+% and the core degrades every formula of the document to literal text. The
+% symbols (\mathbb, \neq, ...) come from unicode-math, loaded after fontspec.
+\usepackage{amsmath}
 
 % Alternate text of the next formula, for its Formula structure element.
 % latex-lab builds /Alt from \l__math_content_template_tl ("LaTeX formula
@@ -33,6 +32,62 @@
 \setmainfont{DejaVu Sans}
 \setsansfont{DejaVu Sans}
 \setmonofont{DejaVu Sans Mono}
+
+% unicode-math sets formulas in TeX Gyre DejaVu Math, the OpenType math font
+% matching the DejaVu Sans text (the default, Latin Modern, is serif), and gives
+% each symbol its own code point: without it \neq is \not overlaid on =, and
+% the text layer reads "=" plus an orphan U+0338 instead of U+2260. It conflicts
+% with amssymb, so amssymb is not loaded.
+\usepackage{unicode-math}
+\setmathfont{texgyredejavu-math.otf}
+% Symbols amssymb draws that TeX Gyre DejaVu Math has no glyph for (\bigstar,
+% \subseteqq, \pitchfork, ...): without a fallback they render as nothing.
+\setmathfont{STIXTwoMath-Regular.otf}[range={"03DD,"03F6,"2132,"2141,"22D4,
+  "25B4,"25B5,"25BE,"25BF,"2605,"27CB,"27CD,"2A5E,"2AB5-"2ABA,"2AC5,"2AC6,
+  "29EB,"2ACB,"2ACC}]
+% amssymb names unicode-math does not define. One undefined command fails the
+% render, and the core then degrades every formula of the document to text.
+\providecommand\square{\mdlgwhtsquare}
+\providecommand\blacksquare{\mdlgblksquare}
+\providecommand\lozenge{\mdlgwhtlozenge}
+\providecommand\blacklozenge{\mdlgblklozenge}
+\providecommand\centerdot{\cdot}
+\providecommand\circlearrowleft{\acwopencirclearrow}
+\providecommand\circlearrowright{\cwopencirclearrow}
+% Neither font has a math Ⓢ; STIX Two Math has it as a text glyph.
+\newfontfamily\AccessiliaCircledFont{STIXTwoMath-Regular.otf}
+\providecommand\circledS{\text{\AccessiliaCircledFont\char"24C8}}
+\providecommand\doteqdot{\Doteq}
+\providecommand\shortmid{\mid}
+\providecommand\nshortmid{\nmid}
+\providecommand\shortparallel{\parallel}
+\providecommand\nshortparallel{\nparallel}
+\providecommand\smallfrown{\frown}
+\providecommand\smallsmile{\smile}
+\providecommand\thickapprox{\approx}
+\providecommand\thicksim{\sim}
+\providecommand\varpropto{\propto}
+\providecommand\ntriangleleft{\nvartriangleleft}
+\providecommand\ntriangleright{\nvartriangleright}
+\providecommand\lvertneqq{\lneqq}
+\providecommand\gvertneqq{\gneqq}
+\providecommand\varsubsetneq{\subsetneq}
+\providecommand\varsupsetneq{\supsetneq}
+\providecommand\varsubsetneqq{\subsetneqq}
+\providecommand\varsupsetneqq{\supsetneqq}
+% Negations Unicode has no single character for take the closest one that it
+% has: \not\leqq would look \nleqq up again (a loop), and a negation slash
+% would reach the text layer as an orphan U+0338.
+\providecommand\nleqq{\nleq}
+\providecommand\ngeqq{\ngeq}
+\providecommand\nleqslant{\nleq}
+\providecommand\ngeqslant{\ngeq}
+\providecommand\npreceq{\nprec}
+\providecommand\nsucceq{\nsucc}
+\providecommand\nsubseteqq{\nsubseteq}
+\providecommand\nsupseteqq{\nsupseteq}
+% unicode-math draws \smallsetminus by rotating a glyph, which needs graphicx.
+\AtBeginDocument{\let\smallsetminus\setminus}
 
 \usepackage{tagpdf}
 \tagpdfsetup{activate-all,uncompress}

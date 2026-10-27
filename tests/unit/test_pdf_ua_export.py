@@ -461,14 +461,37 @@ def test_template_defines_the_formula_alt_command() -> None:
     assert "\\l__math_content_template_tl" in template
 
 
-def test_smoke_check_reads_hex_and_literal_alternate_texts() -> None:
-    """The build-time /Alt check must not miss an /Alt the writer encodes differently."""
+def test_template_sets_math_with_unicode_math_after_fontspec() -> None:
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    # unicode-math needs fontspec first, and conflicts with amssymb.
+    assert "\\usepackage{fontspec}" in template
+    assert "\\usepackage{unicode-math}" in template
+    assert template.index("\\usepackage{fontspec}") < template.index(
+        "\\usepackage{unicode-math}"
+    ), "unicode-math must load after fontspec"
+    assert "\\setmathfont{texgyredejavu-math.otf}" in template
+    assert "\\usepackage{amsmath}" in template
+    assert not re.search(r"\\usepackage(\[[^]]*\])?\{[^}]*amssymb", template)
+    # amssymb names unicode-math lacks: undefined, one would fail the whole render.
+    for name in ("square", "lozenge", "varpropto", "nleqslant", "thicksim"):
+        assert f"\\providecommand\\{name}{{" in template, name
+    assert "\\let\\smallsetminus\\setminus" in template
+    assert "\\setmathfont{STIXTwoMath-Regular.otf}[range=" in template
+
+
+def _smoke_check() -> Any:
     spec = importlib.util.spec_from_file_location(
         "pdf_ua_smoke_check", SERVER_PATH.parent / "smoke_check.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def test_smoke_check_reads_hex_and_literal_alternate_texts() -> None:
+    """The build-time /Alt check must not miss an /Alt the writer encodes differently."""
+    module = _smoke_check()
 
     utf16 = "<FEFF" + "x pertence".encode("utf-16-be").hex().upper() + ">"
     pdf = f"/Alt {utf16} /Alt (a \\(b\\) (c) \\101) /Alt <41424>".encode()
@@ -484,3 +507,33 @@ def test_smoke_check_reads_hex_and_literal_alternate_texts() -> None:
         "cd",
         "e\nf\ng",
     ]
+
+
+def test_smoke_check_reads_the_tounicode_text_layer() -> None:
+    """The build-time \\neq check reads bfchar and both bfrange forms of a CMap."""
+    module = _smoke_check()
+    pdf = (
+        b"/CIDInit /ProcSet findresource begin begincmap\n"
+        b"2 beginbfchar\n<0F38> <2260>\n<01D5> <D835DC60>\nendbfchar\n"
+        b"2 beginbfrange\n<0010> <0012> <0041>\n<0020> <0021> [<0063> <003D0338>]\nendbfrange\n"
+        b"endcmap\n"
+        # Outside a CMap, a hex pair is not a mapping (e.g. a content stream).
+        b"beginbfchar <0001> <0338> endbfchar"
+    )
+
+    assert module.text_layer(pdf) == {"\u2260", "\U0001d460", "A", "B", "C", "c", "=\u0338"}
+
+
+def test_smoke_check_skips_malformed_tounicode_targets() -> None:
+    """A target with no UTF-16 text is skipped, not a traceback in the image build."""
+    module = _smoke_check()
+    pdf = (
+        b"begincmap\n"
+        b"2 beginbfchar\n<0001> <D835>\n<0002> <260>\nendbfchar\n"
+        # FFFE, FFFF, then 10000: five digits, odd length.
+        b"1 beginbfrange\n<0010> <0012> <FFFE>\nendbfrange\n"
+        b"1 beginbfchar\n<0003> <2260>\nendbfchar\n"
+        b"endcmap\n"
+    )
+
+    assert module.text_layer(pdf) == {"￾", "￿", "≠"}

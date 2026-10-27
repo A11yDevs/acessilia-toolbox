@@ -258,19 +258,28 @@ def _normalize_page_callouts(page_elements: list[ManifestElement]) -> None:
         return
 
     groups: list[list[ManifestElement]] = []
-    current_group: list[ManifestElement] = [candidates[0]]
-    for candidate in candidates[1:]:
-        if _is_same_callout_cluster(current_group[-1], candidate):
+    current_group: list[ManifestElement] = []
+    for candidate in candidates:
+        if (
+            current_group
+            and _is_same_callout_cluster(current_group[-1], candidate)
+            and (not _is_list_item(candidate) or _is_strong_callout_title(current_group[0]))
+        ):
             current_group.append(candidate)
-        else:
-            if len(current_group) >= CALL_OUT_MIN_GROUP_SIZE:
-                groups.append(current_group)
-            current_group = [candidate]
+            continue
+        if len(current_group) >= CALL_OUT_MIN_GROUP_SIZE:
+            groups.append(current_group)
+        # Lists are indented as a matter of course: an indented list is a list,
+        # so it neither starts a group nor joins one, unless a strong title
+        # already opened the box it sits in.
+        current_group = [] if _is_list_item(candidate) else [candidate]
     if len(current_group) >= CALL_OUT_MIN_GROUP_SIZE:
         groups.append(current_group)
 
     for group in groups:
         if any(element.metadata.get("callout_id") for element in group):
+            continue
+        if not _is_callout_title_candidate(group[0]):
             continue
         callout_id = f"callout-auto-{group[0].reading_order:06d}"
         _apply_callout_group(group[0], group, callout_id=callout_id)
@@ -387,6 +396,10 @@ def _element_bbox(element: ManifestElement) -> tuple[float, float, float, float]
     return (bbox.left, bbox.top, bbox.right, bbox.bottom)
 
 
+def _is_list_item(element: ManifestElement) -> bool:
+    return element.type == "list_item" or bool(element.metadata.get("enumerated"))
+
+
 def _is_callout_title_candidate(element: ManifestElement) -> bool:
     if element.type == "heading":
         return True
@@ -405,6 +418,18 @@ def _is_callout_title_candidate(element: ManifestElement) -> bool:
     return text.endswith(("?", ":"))
 
 
+def _is_strong_callout_title(element: ManifestElement) -> bool:
+    """A title that opens a box on its own, unlike an intro line ending in ':'."""
+    if element.type == "heading":
+        return True
+    if element.type != "paragraph":
+        return False
+    text = (element.text or "").strip()
+    if _is_known_callout_title(text):
+        return True
+    return len(text) <= 95 and _uppercase_ratio(text) >= 0.55
+
+
 def _uppercase_ratio(text: str) -> float:
     letters = [ch for ch in text if ch.isalpha()]
     if not letters:
@@ -420,21 +445,6 @@ def _normalize_text_key(text: str) -> str:
 
 def _is_known_callout_title(text: str) -> bool:
     return _normalize_text_key(text) in KNOWN_CALLOUT_TITLES
-
-
-def _is_known_callout_body_candidate(
-    element: ManifestElement,
-    main_left: float,
-    main_right: float,
-    indent_threshold: float,
-) -> bool:
-    bbox = _element_bbox(element)
-    if bbox is None:
-        return False
-    left, _top, right, _bottom = bbox
-    if left < main_left + indent_threshold:
-        return False
-    return right <= main_right + 10
 
 
 def _build_pages(document: Any, elements: list[ManifestElement]) -> list[PageDescriptor]:

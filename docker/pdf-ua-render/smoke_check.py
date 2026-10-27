@@ -1,9 +1,14 @@
-"""Build-time check: the smoke PDF carries the formula's alternate text.
+"""Build-time check: the smoke PDF carries the formula's alternate text and math text layer.
 
 smoke.json marks its first formula with an ``accessilia-formula`` span; the
 image only builds if filters/formula_alt.lua and \\AccessiliaFormulaAlt in
 pdf_ua.tex turned it into that Formula's /Alt. A latex-lab update that renames
 the alt template would otherwise silently bring back "LaTeX formula starts ...".
+
+The same formula has ``\\neq``. Set in TeX Gyre DejaVu Math by unicode-math, its
+glyph maps to U+2260 in the font's ToUnicode CMap; with the legacy math fonts
+it is ``\\not`` over "=" and the text layer reads "=" plus an orphan U+0338.
+tagpdf's ``uncompress`` leaves the CMaps readable as plain text.
 """
 
 import re
@@ -11,6 +16,8 @@ import sys
 from pathlib import Path
 
 EXPECTED = "conjunto dos h reais com h maior ou igual a menos 2 e h diferente de 0"
+MATH_FONT = b"TeXGyreDejaVuMath"
+NOT_EQUAL, COMBINING_NOT = "\u2260", "\u0338"
 
 
 _ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f"}
@@ -69,8 +76,57 @@ def alternate_texts(pdf: bytes) -> list[str]:
     return texts
 
 
+def _hex_text(digits: bytes) -> str | None:
+    """The UTF-16BE text of a CMap target, or None for a malformed one.
+
+    An odd number of digits, a lone surrogate or a range that carries its last
+    code unit past FFFF has no text; skipping it keeps the check's own message.
+    """
+    try:
+        return bytes.fromhex(digits.decode()).decode("utf-16-be")
+    except ValueError:
+        return None
+
+
+def text_layer(pdf: bytes) -> set[str]:
+    """Every text a glyph maps to in the file's uncompressed ToUnicode CMaps."""
+    texts = set()
+    for cmap in re.finditer(rb"begincmap(.*?)endcmap", pdf, re.S):
+        body = cmap.group(1)
+        for block in re.finditer(rb"beginbfchar(.*?)endbfchar", body, re.S):
+            for _, target in re.findall(rb"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>", block.group(1)):
+                texts.add(_hex_text(target))
+        for block in re.finditer(rb"beginbfrange(.*?)endbfrange", body, re.S):
+            ranges = re.findall(
+                rb"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(<[0-9A-Fa-f]+>|\[[^\]]*\])",
+                block.group(1),
+            )
+            for low, high, target in ranges:
+                if target.startswith(b"["):
+                    texts.update(
+                        _hex_text(item) for item in re.findall(rb"<([0-9A-Fa-f]+)>", target)
+                    )
+                    continue
+                # A range target increments its last code unit (PDF 9.10.3).
+                first = target[1:-1]
+                for offset in range(int(high, 16) - int(low, 16) + 1):
+                    unit = int(first[-4:], 16) + offset
+                    texts.add(_hex_text(first[:-4] + b"%04X" % unit))
+    texts.discard(None)
+    return texts
+
+
 if __name__ == "__main__":
-    texts = alternate_texts(Path(sys.argv[1]).read_bytes())
+    pdf = Path(sys.argv[1]).read_bytes()
+    texts = alternate_texts(pdf)
     if EXPECTED not in texts:
         sys.exit(f"formula alternate text missing; /Alt found: {texts}")
-    print("smoke: formula alternate text present")
+    if MATH_FONT not in pdf:
+        sys.exit(f"math font {MATH_FONT.decode()} not embedded: unicode-math did not take effect")
+    # Document-wide: the U+0338 check reads every font's CMap, text fonts
+    # included, so a smoke or alt text with a decomposed combining sequence
+    # would trip it too.
+    layer = text_layer(pdf)
+    if NOT_EQUAL not in layer or any(COMBINING_NOT in text for text in layer):
+        sys.exit("\\neq is not U+2260 in the text layer (legacy \\not overlay?)")
+    print("smoke: formula alternate text present, math text layer has U+2260")
