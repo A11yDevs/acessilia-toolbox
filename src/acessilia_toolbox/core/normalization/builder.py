@@ -258,9 +258,15 @@ def _normalize_page_callouts(page_elements: list[ManifestElement]) -> None:
         return
 
     groups: list[list[ManifestElement]] = []
-    current_group: list[ManifestElement] = [candidates[0]]
-    for candidate in candidates[1:]:
-        if _is_same_callout_cluster(current_group[-1], candidate):
+    current_group: list[ManifestElement] = []
+    for candidate in candidates:
+        if _is_list_item(candidate):
+            # Lists are indented as a matter of course: an indented list is a
+            # list, so it ends the group instead of joining it.
+            if len(current_group) >= CALL_OUT_MIN_GROUP_SIZE:
+                groups.append(current_group)
+            current_group = []
+        elif current_group and _is_same_callout_cluster(current_group[-1], candidate):
             current_group.append(candidate)
         else:
             if len(current_group) >= CALL_OUT_MIN_GROUP_SIZE:
@@ -271,6 +277,8 @@ def _normalize_page_callouts(page_elements: list[ManifestElement]) -> None:
 
     for group in groups:
         if any(element.metadata.get("callout_id") for element in group):
+            continue
+        if not _is_callout_title_candidate(group[0]):
             continue
         callout_id = f"callout-auto-{group[0].reading_order:06d}"
         _apply_callout_group(group[0], group, callout_id=callout_id)
@@ -385,6 +393,10 @@ def _element_bbox(element: ManifestElement) -> tuple[float, float, float, float]
     if bbox is None:
         return None
     return (bbox.left, bbox.top, bbox.right, bbox.bottom)
+
+
+def _is_list_item(element: ManifestElement) -> bool:
+    return element.type == "list_item" or bool(element.metadata.get("enumerated"))
 
 
 def _is_callout_title_candidate(element: ManifestElement) -> bool:
