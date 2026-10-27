@@ -6,7 +6,7 @@ manifests so REST, MCP and PDDL keep describing the same contract.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +20,21 @@ class HealthResponse(BaseModel):
     version: str
     git_commit: str = ""
     image_tag: str = ""
+
+
+class ReadinessChecks(BaseModel):
+    catalog: bool
+    structure: bool
+    storage: bool
+
+
+class ReadinessResponse(BaseModel):
+    status: Literal["ready", "unavailable"]
+    checks: ReadinessChecks
+
+
+class UploadLimitResponse(BaseModel):
+    detail: str
 
 
 class CapabilitySummary(BaseModel):

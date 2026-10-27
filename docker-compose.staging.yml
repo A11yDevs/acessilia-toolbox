@@ -46,6 +46,9 @@ services:
       - .env
     volumes:
       - ${ARTIFACT_FALLBACK_SOURCE:-artifact-fallback}:/tmp/acessilia-toolbox-artifacts
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8002/v1/health"]

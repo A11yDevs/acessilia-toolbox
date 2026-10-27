@@ -27,6 +27,65 @@
                 }
             }
         },
+        "/v1/ready": {
+            "get": {
+                "tags": [
+                    "health"
+                ],
+                "summary": "Ready",
+                "operationId": "ready_v1_ready_get",
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Provider"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReadinessResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReadinessResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/capabilities": {
             "get": {
                 "tags": [
@@ -303,6 +362,24 @@
                         },
                         "description": "Gateway Timeout"
                     },
+                    "413": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ErrorResponse"
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/UploadLimitResponse"
+                                        }
+                                    ],
+                                    "title": "Response 413 Execute Capability V1 Capabilities  Capability Id  Execute Post"
+                                }
+                            }
+                        },
+                        "description": "Request Entity Too Large"
+                    },
                     "422": {
                         "description": "Validation Error",
                         "content": {
@@ -410,6 +487,24 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ErrorResponse"
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/UploadLimitResponse"
+                                        }
+                                    ],
+                                    "title": "Response 413 Store Artifact V1 Artifacts Post"
                                 }
                             }
                         }
@@ -2250,6 +2345,63 @@
                     "checked_at"
                 ],
                 "title": "ProviderHealth"
+            },
+            "ReadinessChecks": {
+                "properties": {
+                    "catalog": {
+                        "type": "boolean",
+                        "title": "Catalog"
+                    },
+                    "structure": {
+                        "type": "boolean",
+                        "title": "Structure"
+                    },
+                    "storage": {
+                        "type": "boolean",
+                        "title": "Storage"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "catalog",
+                    "structure",
+                    "storage"
+                ],
+                "title": "ReadinessChecks"
+            },
+            "ReadinessResponse": {
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "ready",
+                            "unavailable"
+                        ],
+                        "title": "Status"
+                    },
+                    "checks": {
+                        "$ref": "#/components/schemas/ReadinessChecks"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "status",
+                    "checks"
+                ],
+                "title": "ReadinessResponse"
+            },
+            "UploadLimitResponse": {
+                "properties": {
+                    "detail": {
+                        "type": "string",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "detail"
+                ],
+                "title": "UploadLimitResponse"
             },
             "ValidationError": {
                 "properties": {

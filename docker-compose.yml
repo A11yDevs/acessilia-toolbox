@@ -48,6 +48,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
       valkey:
         condition: service_healthy
     restart: unless-stopped

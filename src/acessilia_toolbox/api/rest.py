@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from typing import Annotated, Any
 from urllib.parse import quote
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from acessilia_toolbox import __version__
@@ -19,6 +21,8 @@ from acessilia_toolbox.api.schemas import (
     ErrorResponse,
     ExecutionResponse,
     HealthResponse,
+    ReadinessResponse,
+    UploadLimitResponse,
 )
 from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityRegistry
@@ -26,6 +30,7 @@ from acessilia_toolbox.core.errors import (
     DatasetNotFoundError,
     InvalidInputError,
     ProviderUnavailableError,
+    UploadTooLargeError,
 )
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.pddl import (
@@ -59,6 +64,11 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     504: {"model": ErrorResponse},
 }
 
+UPLOAD_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **ERROR_RESPONSES,
+    413: {"model": ErrorResponse | UploadLimitResponse},
+}
+
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 
@@ -84,6 +94,39 @@ def health() -> HealthResponse:
         version=__version__,
         git_commit=os.getenv("GIT_COMMIT", ""),
         image_tag=os.getenv("IMAGE_TAG", ""),
+    )
+
+
+@public_router.get(
+    "/ready",
+    response_model=ReadinessResponse,
+    responses={503: {"model": ReadinessResponse, "description": "Service unavailable"}},
+    tags=["health"],
+)
+def ready(request: Request, provider: str | None = None) -> JSONResponse:
+    from acessilia_toolbox.providers.storage import storage_ready
+
+    checks = {"catalog": False, "structure": False, "storage": False}
+    try:
+        request.app.state.capabilities.get("document.structure.extract")
+        checks["catalog"] = True
+        descriptor = request.app.state.providers.resolve(
+            "document.structure.extract",
+            provider or os.getenv("TOOLBOX_READY_PROVIDER", "docling")
+        )
+        if descriptor.transport == "http" and descriptor.endpoint:
+            with httpx.Client(base_url=descriptor.endpoint, timeout=2.0) as client:
+                checks["structure"] = client.get(descriptor.health_path).status_code == 200
+        else:
+            checks["structure"] = create_adapter(descriptor).health().healthy
+    except Exception:
+        pass
+    with contextlib.suppress(Exception):
+        checks["storage"] = storage_ready(request.app.state.store)
+    healthy = all(checks.values())
+    return JSONResponse(
+        {"status": "ready" if healthy else "unavailable", "checks": checks},
+        status_code=200 if healthy else 503,
     )
 
 
@@ -131,7 +174,7 @@ def _registered(registry: ProviderRegistry, capability_id: str) -> list[str]:
 @router.post(
     "/capabilities/{capability_id}:execute",
     response_model=ExecutionResponse,
-    responses=ERROR_RESPONSES,
+    responses=UPLOAD_ERROR_RESPONSES,
     tags=["capabilities"],
 )
 async def execute_capability(
@@ -184,24 +227,29 @@ async def execute_capability(
 @router.post(
     "/artifacts",
     response_model=ArtifactRef,
-    responses=ERROR_RESPONSES,
+    responses=UPLOAD_ERROR_RESPONSES,
     tags=["artifacts"],
 )
 async def store_artifact(
     runner: Annotated[CapabilityExecutor, Depends(executor)],
     file: Annotated[UploadFile, File(description="Content to store")],
+    request: Request,
 ) -> ArtifactRef:
-    payload = await _read_upload(file)
-    if not payload:
-        raise InvalidInputError("empty payload")
-    if len(payload) > MAX_UPLOAD_BYTES:
-        raise InvalidInputError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
-    return await run_in_threadpool(
-        runner.store_artifact,
-        payload,
-        media_type=file.content_type or "application/octet-stream",
-        filename=file.filename,
-    )
+    slots = request.app.state.execution_slots
+    if not slots.acquire(blocking=False):
+        raise ProviderUnavailableError("execution capacity exhausted")
+    try:
+        payload = await _read_upload(file)
+        if not payload:
+            raise InvalidInputError("empty payload")
+        return await run_in_threadpool(
+            runner.store_artifact,
+            payload,
+            media_type=file.content_type or "application/octet-stream",
+            filename=file.filename,
+        )
+    finally:
+        slots.release()
 
 
 @router.get("/artifacts/{artifact_id}", responses=ERROR_RESPONSES, tags=["artifacts"])
@@ -277,14 +325,12 @@ def _parse_parameters(raw: str | None) -> dict[str, Any]:
 
 
 async def _read_upload(file: UploadFile) -> bytes:
-    chunks: list[bytes] = []
-    total = 0
-    while chunk := await file.read(min(1024 * 1024, MAX_UPLOAD_BYTES + 1 - total)):
-        total += len(chunk)
-        if total > MAX_UPLOAD_BYTES:
-            raise InvalidInputError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
-        chunks.append(chunk)
-    return b"".join(chunks)
+    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
+        raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    payload = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    return payload
 
 
 async def _resolve_input(

@@ -316,3 +316,27 @@ def create_artifact_store(descriptor: ProviderDescriptor) -> Any:
 
 def load_metadata(path: Path) -> dict[str, Any]:
     return dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def storage_ready(store: ArtifactStore | None) -> bool:
+    """Check mandatory storage without loading any artifact payload."""
+    if isinstance(store, FailoverArtifactStore):
+        for backend in (store.primary, store.fallback):
+            try:
+                if storage_ready(backend):
+                    return True
+            except Exception:
+                continue
+        return False
+    if isinstance(store, FilesystemArtifactStore):
+        fd, path = tempfile.mkstemp(dir=store.root)
+        os.close(fd)
+        os.unlink(path)
+        return True
+    if isinstance(store, S3ArtifactStore):
+        store._client.head_bucket(Bucket=store.bucket)
+        # A fixed, immutable probe checks write permission on every call without
+        # accumulating objects or requiring DeleteObject permission.
+        store.put(b"acessilia-toolbox readiness probe\n")
+        return True
+    return False
