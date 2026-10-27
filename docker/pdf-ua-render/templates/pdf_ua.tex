@@ -66,6 +66,15 @@ $endif$
 \usepackage{caption}
 \captionsetup[table]{position=above}
 
+% The article class numbers every \section, but the documents we rebuild carry
+% their own heading text, so an extra "1", "1.1" would be read before each
+% heading. Pandoc's default template does the same unless --number-sections.
+$if(numbersections)$
+\setcounter{secnumdepth}{$if(secnumdepth)$$secnumdepth$$else$5$endif$}
+$else$
+\setcounter{secnumdepth}{-\maxdimen}
+$endif$
+
 $if(title)$
 \title{$title$}
 $endif$
