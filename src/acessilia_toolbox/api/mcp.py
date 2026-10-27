@@ -13,6 +13,11 @@ from typing import Any
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
+from acessilia_toolbox.core.errors import (
+    CapabilityNotFoundError,
+    ConfigurationError,
+    InvalidInputError,
+)
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.pddl import domain_fragment, predicates_list
 from acessilia_toolbox.core.provider import ProviderRegistry
@@ -31,35 +36,37 @@ def _tool_from_capability(manifest: dict[str, Any], registered: list[str]) -> di
     action = manifest["id"].replace(".", "_")
 
     properties: dict[str, Any] = {
-        "file": {
-            "type": "string",
-            "description": "File path to the document (or artifact_id for stored content)",
-        },
-        "media_type": {
-            "type": "string",
-            "description": "MIME type of the file (e.g., 'application/pdf')",
-        },
-    }
-    if manifest["execution"].get("deterministic", True):
-        properties["provider"] = {
+        "provider": {
             "type": "string",
             "description": "Provider ID: " + ", ".join(registered),
-        }
-        properties["parameters"] = {
+        },
+        "parameters": {
             "type": "object",
             "description": "Provider-specific parameters as a JSON object",
-        }
-        properties["no_cache"] = {
+        },
+        "no_cache": {
             "type": "boolean",
             "description": "Skip execution cache and force re-processing",
-        }
+        },
+    }
+    if not manifest["id"].startswith("dataset."):
+        properties.update({
+            "file": {
+                "type": "string",
+                "description": "File path to the document (or artifact_id for stored content)",
+            },
+            "media_type": {
+                "type": "string",
+                "description": "MIME type of the file (e.g., 'application/pdf')",
+            },
+        })
 
     return {
         "name": action,
         "description": manifest.get("description", ""),
         "inputSchema": {
             "type": "object",
-            "properties": {k: v for k, v in properties.items() if v is not None},
+            "properties": properties,
         },
     }
 
@@ -88,7 +95,7 @@ class ToolboxMCPServer:
     def list_tools(self) -> list[dict[str, Any]]:
         tools = []
         # One tool per capability: call_tool executes the latest version.
-        for manifest in self._capabilities.latest():
+        for manifest in self._tool_manifests().values():
             tools.append(
                 _tool_from_capability(
                     manifest.model_dump(mode="json", by_alias=True),
@@ -96,6 +103,15 @@ class ToolboxMCPServer:
                 )
             )
         return tools
+
+    def _tool_manifests(self) -> dict[str, CapabilityManifest]:
+        manifests: dict[str, CapabilityManifest] = {}
+        for manifest in self._capabilities.latest():
+            name = manifest.id.replace(".", "_")
+            if name in manifests:
+                raise ConfigurationError(f"ambiguous MCP tool name: {name}", tool=name)
+            manifests[name] = manifest
+        return manifests
 
     def _registered(self, capability_id: str) -> list[str]:
         """Providers registered here for a capability; what an agent can execute."""
@@ -114,12 +130,14 @@ class ToolboxMCPServer:
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
         """Execute a tool and return the results."""
-        capability_id = name.replace("_", ".")
-        manifest = self._capabilities.get(capability_id)
+        manifest = self._tool_manifests().get(name)
+        if manifest is None:
+            raise CapabilityNotFoundError(f"unknown MCP tool {name}", tool=name)
+        capability_id = manifest.id
 
         # Dataset capabilities use parameters, not file uploads.
         if capability_id.startswith("dataset."):
-            return self._call_dataset_tool(capability_id, manifest, arguments)
+            return self._call_dataset_tool(manifest, arguments)
 
         file_path = arguments.get("file", "")
         media_type = arguments.get("media_type", "application/pdf")
@@ -129,13 +147,13 @@ class ToolboxMCPServer:
         if not os.path.exists(file_path):
             return [{"content": [{"type": "text", "text": f"File not found: {file_path}"}]}]
 
-        parameters = None
-        if isinstance(raw_params, str):
-            parameters = json.loads(raw_params) if raw_params else None
-        elif isinstance(raw_params, dict):
-            parameters = raw_params
-
         try:
+            if isinstance(raw_params, str):
+                parameters = json.loads(raw_params) if raw_params else None
+            else:
+                parameters = raw_params
+            if parameters is not None and not isinstance(parameters, dict):
+                raise InvalidInputError("parameters must be a JSON object")
             result = self._executor.execute(
                 manifest.id,
                 Path(file_path).read_bytes(),
@@ -162,22 +180,32 @@ class ToolboxMCPServer:
 
     def _call_dataset_tool(
         self,
-        capability_id: str,
-        manifest: Any,
+        manifest: CapabilityManifest,
         arguments: dict[str, Any],
     ) -> list[dict[str, Any]]:
         """Execute a dataset capability via parameters (no file upload)."""
-        provider = arguments.get("provider", "dataset-github")
-        params = {k: v for k, v in arguments.items() if k != "provider"}
-
         try:
+            controls = {"provider", "parameters", "no_cache"}
+            params = {k: v for k, v in arguments.items() if k not in controls}
+            nested = arguments.get("parameters")
+            if isinstance(nested, str):
+                nested = json.loads(nested) if nested else None
+            if nested is not None:
+                if not isinstance(nested, dict):
+                    raise InvalidInputError("parameters must be a JSON object")
+                if params.keys() & nested.keys():
+                    raise InvalidInputError(
+                        "duplicate flat and nested dataset parameters"
+                    )
+                params.update(nested)
             result = self._executor.execute(
                 manifest.id,
                 b"{}",
                 filename="query.json",
                 media_type="application/json",
-                provider_id=provider,
+                provider_id=arguments.get("provider"),
                 parameters=params,
+                no_cache=arguments.get("no_cache", False),
             )
             return [
                 {
@@ -277,14 +305,23 @@ class ToolboxMCPServer:
             return capability_action(manifest)
 
         if uri == f"{TOOLBOX_PREFIX}datasets":
-            result = self._executor.execute(
-                "dataset.list",
-                b"{}",
-                filename="query.json",
-                media_type="application/json",
-                provider_id="dataset-github",
-            )
-            return json.dumps(result.document, indent=2, ensure_ascii=False)
+            datasets: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            # Match REST discovery: all registered providers in sorted order,
+            # one entry per dataset ID, first provider wins duplicate IDs.
+            for provider in self._providers.for_capability("dataset.list"):
+                result = self._executor.execute(
+                    "dataset.list",
+                    b"{}",
+                    filename="query.json",
+                    media_type="application/json",
+                    provider_id=provider.id,
+                )
+                for dataset in result.document:
+                    if dataset["id"] not in seen:
+                        seen.add(dataset["id"])
+                        datasets.append(dataset)
+            return json.dumps(datasets, indent=2, ensure_ascii=False)
 
         return f"Unknown resource: {uri}"
 
