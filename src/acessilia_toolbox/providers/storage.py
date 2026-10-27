@@ -11,25 +11,38 @@ import contextlib
 import json
 import logging
 import os
+import shutil
 import tempfile
 import time
 from collections.abc import Callable
+from io import BytesIO
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, BinaryIO, TypeVar, cast
 from urllib.parse import quote, unquote
 
 from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactStore, shards
 from acessilia_toolbox.core.errors import (
     ArtifactNotFoundError,
     ConfigurationError,
+    InvalidInputError,
     ProviderUnavailableError,
 )
-from acessilia_toolbox.core.fingerprint import fingerprint_bytes
+from acessilia_toolbox.core.fingerprint import fingerprint_bytes, fingerprint_stream
+from acessilia_toolbox.core.input_memory import check_in_memory_size, read_in_memory
 from acessilia_toolbox.core.provider import ProviderDescriptor
 
 METADATA_SUFFIX = ".meta.json"
 LOG = logging.getLogger(__name__)
 T = TypeVar("T")
+
+
+def _copy_bounded(source: BinaryIO, destination: BinaryIO, max_bytes: int) -> None:
+    total = 0
+    while chunk := source.read(1024 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+        destination.write(chunk)
 
 
 def _atomic_write(target: Path, payload: bytes, *, exclusive: bool = False) -> None:
@@ -65,28 +78,45 @@ class FilesystemArtifactStore:
         media_type: str = "application/octet-stream",
         filename: str | None = None,
     ) -> ArtifactRef:
-        artifact_id = fingerprint_bytes(payload)
+        return self.put_stream(BytesIO(payload), media_type=media_type, filename=filename)
+
+    def put_stream(
+        self, stream: BinaryIO, *, media_type: str = "application/octet-stream",
+        filename: str | None = None,
+    ) -> ArtifactRef:
+        stream.seek(0)
+        artifact_id = fingerprint_stream(stream)
+        size = stream.tell()
         target = self._path(artifact_id)
         target.parent.mkdir(parents=True, exist_ok=True)
-
-        # Repair objects left by older, interrupted non-atomic writes.
-        if not target.exists() or fingerprint_bytes(target.read_bytes()) != artifact_id:
-            _atomic_write(target, payload)
-
-        ref = ArtifactRef(
-            artifact_id=artifact_id,
-            media_type=media_type,
-            size=len(payload),
-            uri=target.as_uri(),
-            storage_backend=self.backend,
-            filename=filename,
-        )
-        _atomic_write(
-            target.with_suffix(target.suffix + METADATA_SUFFIX),
-            ref.model_dump_json().encode("utf-8"),
-            exclusive=True,
-        )
+        valid = False
+        if target.exists():
+            with target.open("rb") as existing:
+                valid = fingerprint_stream(existing) == artifact_id
+        if not valid:
+            fd, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.")
+            temporary = Path(name)
+            try:
+                stream.seek(0)
+                with os.fdopen(fd, "wb") as out:
+                    shutil.copyfileobj(stream, out, length=1024 * 1024)
+                    out.flush()
+                    os.fsync(out.fileno())
+                temporary.replace(target)
+            finally:
+                temporary.unlink(missing_ok=True)
+        ref = ArtifactRef(artifact_id=artifact_id, media_type=media_type, size=size,
+                          uri=target.as_uri(), storage_backend=self.backend, filename=filename)
+        _atomic_write(target.with_suffix(target.suffix + METADATA_SUFFIX),
+                      ref.model_dump_json().encode("utf-8"), exclusive=True)
         return self.stat(artifact_id)
+
+    def copy_to(self, artifact_id: str, destination: BinaryIO, *, max_bytes: int) -> None:
+        target = self._path(artifact_id)
+        if not target.is_file():
+            raise ArtifactNotFoundError(f"unknown artifact {artifact_id}", artifact_id=artifact_id)
+        with target.open("rb") as source:
+            _copy_bounded(source, destination, max_bytes)
 
     def get(self, artifact_id: str) -> bytes:
         target = self._path(artifact_id)
@@ -159,11 +189,26 @@ class S3ArtifactStore:
         media_type: str = "application/octet-stream",
         filename: str | None = None,
     ) -> ArtifactRef:
-        artifact_id = fingerprint_bytes(payload)
+        return self._put(payload, fingerprint_bytes(payload), len(payload), media_type, filename)
+
+    def put_stream(
+        self, stream: BinaryIO, *, media_type: str = "application/octet-stream",
+        filename: str | None = None,
+    ) -> ArtifactRef:
+        stream.seek(0)
+        artifact_id = fingerprint_stream(stream)
+        return self._put(stream, artifact_id, stream.tell(), media_type, filename)
+
+    def _put(
+        self, payload: bytes | BinaryIO, artifact_id: str, size: int,
+        media_type: str, filename: str | None,
+    ) -> ArtifactRef:
         key = self._key(artifact_id)
         metadata = {"filename-utf8": quote(filename, safe="")} if filename else {}
         for attempt in range(3):
             try:
+                if not isinstance(payload, bytes):
+                    payload.seek(0)
                 self._client.put_object(
                     Bucket=self.bucket,
                     Key=key,
@@ -171,6 +216,7 @@ class S3ArtifactStore:
                     ContentType=media_type,
                     Metadata=metadata,
                     IfNoneMatch="*",
+                    **({"ContentLength": size} if not isinstance(payload, bytes) else {}),
                 )
                 break
             except Exception as exc:
@@ -182,15 +228,29 @@ class S3ArtifactStore:
                     time.sleep(0.05 * (attempt + 1))
                     continue
                 raise ProviderUnavailableError(f"object storage write failed: {exc}") from exc
-
         return ArtifactRef(
             artifact_id=artifact_id,
             media_type=media_type,
-            size=len(payload),
+            size=size,
             uri=f"s3://{self.bucket}/{key}",
             storage_backend=self.backend,
             filename=filename,
         )
+
+    def copy_to(self, artifact_id: str, destination: BinaryIO, *, max_bytes: int) -> None:
+        try:
+            response = self._client.get_object(Bucket=self.bucket, Key=self._key(artifact_id))
+            source = response["Body"]
+            try:
+                _copy_bounded(source, destination, max_bytes)
+            finally:
+                close = getattr(source, "close", None)
+                if callable(close):
+                    close()
+        except InvalidInputError:
+            raise
+        except Exception as exc:
+            self._raise_read_error(exc, artifact_id)
 
     def get(self, artifact_id: str) -> bytes:
         try:
@@ -274,6 +334,56 @@ class FailoverArtifactStore:
         except ProviderUnavailableError as exc:
             LOG.warning("primary artifact store unavailable; writing to fallback: %s", exc)
             return self.fallback.put(payload, media_type=media_type, filename=filename)
+
+    def put_stream(
+        self, stream: BinaryIO, *, media_type: str = "application/octet-stream",
+        filename: str | None = None,
+    ) -> ArtifactRef:
+        try:
+            put_stream = getattr(self.primary, "put_stream", None)
+            if callable(put_stream):
+                return cast(
+                    ArtifactRef, put_stream(stream, media_type=media_type, filename=filename)
+                )
+            return self.primary.put(
+                read_in_memory(stream), media_type=media_type, filename=filename
+            )
+        except ProviderUnavailableError as exc:
+            LOG.warning("primary artifact store unavailable; writing to fallback: %s", exc)
+            stream.seek(0)
+            put_stream = getattr(self.fallback, "put_stream", None)
+            if callable(put_stream):
+                return cast(
+                    ArtifactRef, put_stream(stream, media_type=media_type, filename=filename)
+                )
+            return self.fallback.put(
+                read_in_memory(stream), media_type=media_type, filename=filename
+            )
+
+    def copy_to(self, artifact_id: str, destination: BinaryIO, *, max_bytes: int) -> None:
+        def copy(store: ArtifactStore) -> None:
+            destination.seek(0)
+            destination.truncate()
+            copy_to = getattr(store, "copy_to", None)
+            if callable(copy_to):
+                copy_to(artifact_id, destination, max_bytes=max_bytes)
+            else:
+                check_in_memory_size(store.stat(artifact_id).size)
+                payload = store.get(artifact_id)
+                check_in_memory_size(len(payload))
+                if len(payload) > max_bytes:
+                    raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+                destination.write(payload)
+
+        try:
+            copy(self.primary)
+        except (ArtifactNotFoundError, ProviderUnavailableError) as exc:
+            try:
+                copy(self.fallback)
+            except ArtifactNotFoundError:
+                if isinstance(exc, ProviderUnavailableError):
+                    raise exc from None
+                raise
 
     def get(self, artifact_id: str) -> bytes:
         return self._read(self.primary.get, self.fallback.get, artifact_id)

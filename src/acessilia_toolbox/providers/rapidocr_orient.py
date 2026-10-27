@@ -32,6 +32,8 @@ VERSION_KEYS = ("version", "engine_version")
 class RapidOcrOrientProvider:
     """Calls out-of-process RapidOCR orientation service to detect/correct page orientation."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")

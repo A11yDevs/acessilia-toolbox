@@ -5,7 +5,8 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-from typing import Annotated, Any
+import tempfile
+from typing import Annotated, Any, BinaryIO
 from urllib.parse import quote
 
 import httpx
@@ -193,27 +194,53 @@ async def execute_capability(
     if not slots.acquire(blocking=False):
         raise ProviderUnavailableError("execution capacity exhausted; retry later")
     try:
-        payload, filename, media_type = await _resolve_input(runner, file, artifact_id)
-        if len(payload) > MAX_UPLOAD_BYTES:
-            raise InvalidInputError(
-                f"upload exceeds {MAX_UPLOAD_BYTES} bytes", capability=capability_id
+        with contextlib.ExitStack() as stack:
+            return await _execute_with_input(
+                runner, stack, capability_id, file, artifact_id, provider, parameters,
+                language, version, no_cache,
             )
-
-        result = await run_in_threadpool(
-            runner.execute,
-            capability_id,
-            payload,
-            filename=filename,
-            media_type=media_type,
-            provider_id=provider,
-            capability_version=version,
-            parameters=_parse_parameters(parameters),
-            language=language,
-            no_cache=no_cache,
-        )
     finally:
         slots.release()
 
+
+async def _execute_with_input(
+    runner: CapabilityExecutor, stack: contextlib.ExitStack, capability_id: str,
+    file: UploadFile | None, artifact_id: str | None, provider: str | None,
+    parameters: str | None, language: str, version: int | None, no_cache: bool,
+) -> ExecutionResponse:
+    payload: bytes | BinaryIO
+    if file is not None and not artifact_id:
+        await _check_upload_stream(file)
+        payload, filename, media_type = (
+            file.file,
+            file.filename or "upload",
+            file.content_type or "application/octet-stream",
+        )
+    elif artifact_id and file is None:
+        payload = stack.enter_context(tempfile.TemporaryFile())  # noqa: SIM115
+        ref = await run_in_threadpool(
+            runner.retrieve_artifact_to, artifact_id, payload, max_bytes=MAX_UPLOAD_BYTES
+        )
+        filename, media_type = ref.filename or "artifact", ref.media_type
+    else:
+        payload, filename, media_type = await _resolve_input(runner, file, artifact_id)
+    if isinstance(payload, bytes) and len(payload) > MAX_UPLOAD_BYTES:
+        raise InvalidInputError(
+            f"upload exceeds {MAX_UPLOAD_BYTES} bytes", capability=capability_id
+        )
+
+    result = await run_in_threadpool(
+        runner.execute,
+        capability_id,
+        payload,
+        filename=filename,
+        media_type=media_type,
+        provider_id=provider,
+        capability_version=version,
+        parameters=_parse_parameters(parameters),
+        language=language,
+        no_cache=no_cache,
+    )
     return ExecutionResponse(
         status=result.status,
         capability=result.capability,
@@ -239,12 +266,10 @@ async def store_artifact(
     if not slots.acquire(blocking=False):
         raise ProviderUnavailableError("execution capacity exhausted")
     try:
-        payload = await _read_upload(file)
-        if not payload:
-            raise InvalidInputError("empty payload")
+        await _check_upload_stream(file)
         return await run_in_threadpool(
-            runner.store_artifact,
-            payload,
+            runner.store_artifact_stream,
+            file.file,
             media_type=file.content_type or "application/octet-stream",
             filename=file.filename,
         )
@@ -322,6 +347,19 @@ def _parse_parameters(raw: str | None) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise InvalidInputError("parameters must be a JSON object")
     return parsed
+
+
+async def _check_upload_stream(file: UploadFile) -> None:
+    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
+        raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    size = 0
+    while chunk := await file.read(1024 * 1024):
+        size += len(chunk)
+        if size > MAX_UPLOAD_BYTES:
+            raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    if not size:
+        raise InvalidInputError("empty payload")
+    await file.seek(0)
 
 
 async def _read_upload(file: UploadFile) -> bytes:

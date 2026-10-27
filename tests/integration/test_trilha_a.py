@@ -117,7 +117,7 @@ def test_cancelled_upload_releases_memory_budget(monkeypatch):
     async def cancelled(*args):
         raise asyncio.CancelledError()
 
-    monkeypatch.setattr(rest, "_read_upload", cancelled)
+    monkeypatch.setattr(rest, "_check_upload_stream", cancelled)
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(execution_slots=slots)))
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(rest.store_artifact(None, None, request))

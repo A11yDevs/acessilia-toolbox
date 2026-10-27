@@ -464,5 +464,7 @@ set in the environment before starting.
 
 ### Upload and capacity errors
 
-- HTTP **413**: the request body exceeds the 201 MiB limit (200 MiB upload plus 1 MiB multipart overhead). Reduce the upload size.
+- HTTP **413**: the request body exceeds the 201 MiB limit (200 MiB upload plus 1 MiB multipart overhead), or an input exceeds the in-memory limit of a provider or storage adapter that requires bytes. Reduce the input or use a streaming provider.
+
+Most remote file providers consume a seekable stream. Some in-process providers, image auto-rotation, and legacy storage adapters require the entire input in memory. These paths accept at most 64 MiB by default; `TOOLBOX_MAX_IN_MEMORY_INPUT_BYTES` changes the limit to a positive number of bytes. Size this value together with the execution concurrency and available memory. The limit bounds the input allocation, not the provider's decoded images, models, outputs, or total process memory. The 200 MiB upload limit still applies separately.
 - HTTP **503**: execution capacity is exhausted or a required provider/dependency is unavailable. Retry capacity failures after load decreases; check provider health and installation for unavailable dependencies.

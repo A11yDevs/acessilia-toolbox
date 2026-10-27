@@ -31,6 +31,8 @@ COMPONENT_KEYS = ("docling-serve", "docling", "docling-core", "docling-ibm-model
 class DoclingMathProvider:
     """Calls docling-serve and extracts LaTeX from formula groups."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")

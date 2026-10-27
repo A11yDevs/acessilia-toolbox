@@ -31,6 +31,8 @@ COMPONENT_KEYS = ("docling-serve", "docling", "docling-core", "docling-ibm-model
 class DoclingOcrProvider:
     """Calls docling-serve with OCR enabled and returns recognized text."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")

@@ -37,6 +37,8 @@ class TeleOCRParameters(BaseModel):
 class TeleOCRProvider:
     """Transport plus validated shape mapping, with explicit provider selection."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")

@@ -46,6 +46,8 @@ COMPONENT_KEYS = ("version", "backend")
 class MineruProvider:
     """Calls mineru-api over REST and returns a raw extraction."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")
