@@ -1,4 +1,4 @@
-﻿"""RapidOCR orientation detection and page correction provider adapter."""
+"""RapidOCR orientation detection and page correction provider adapter."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.http_support import extract_error_detail
 
 LOG = logging.getLogger(__name__)
 
@@ -136,8 +137,12 @@ class RapidOcrOrientProvider:
             ) from exc
 
         if response.status_code != 200:
+            detail = extract_error_detail(response)
+            msg = f"RapidOCR orientation failed with status {response.status_code}"
+            if detail:
+                msg = f"{msg}: {detail}"
             raise ProviderExecutionError(
-                f"RapidOCR orientation failed with status {response.status_code}: {response.text}",
+                msg,
                 provider=self.descriptor.id,
                 status_code=response.status_code,
             )

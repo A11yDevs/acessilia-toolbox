@@ -19,6 +19,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.http_support import format_http_error
 from acessilia_toolbox.providers.teleocr_document import TeleOCRDocument
 
 
@@ -148,7 +149,7 @@ class TeleOCRProvider:
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                "teleocr service rejected the request",
+                format_http_error("teleocr service", exc.response, action="rejected the request"),
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc

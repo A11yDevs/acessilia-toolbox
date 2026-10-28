@@ -21,6 +21,7 @@ from acessilia_toolbox.core.errors import (
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 from acessilia_toolbox.providers.docling_document import DoclingServeDocument
+from acessilia_toolbox.providers.http_support import format_http_error
 
 CONVERT_PATH = "/v1/convert/file"
 
@@ -141,7 +142,11 @@ class DoclingProvider:
                     provider=self.descriptor.id,
                 ) from exc
             raise ProviderExecutionError(
-                f"docling-serve rejected the document: HTTP {exc.response.status_code}",
+                format_http_error(
+                    "docling-serve",
+                    exc.response,
+                    action="rejected the document",
+                ),
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc
