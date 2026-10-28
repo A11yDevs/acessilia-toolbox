@@ -282,7 +282,7 @@ def test_tool_names_preserve_underscores_in_capability_ids(tmp_path, capability)
     assert json.loads(response[0]["content"][0]["text"])["executed"] == capability
 
 
-def test_ambiguous_tool_names_are_not_advertised():
+def test_ambiguous_tool_names_fail_server_startup():
     from types import SimpleNamespace
 
     from acessilia_toolbox.core.errors import ConfigurationError
@@ -291,9 +291,8 @@ def test_ambiguous_tool_names_are_not_advertised():
         CapabilityManifest.model_validate({**MANIFEST, "id": identifier})
         for identifier in ("document.export.pdf_ua", "document.export.pdf.ua")
     ]
-    server = ToolboxMCPServer(CapabilityRegistry(manifests), ProviderRegistry(), SimpleNamespace())
     with pytest.raises(ConfigurationError, match="ambiguous"):
-        server.list_tools()
+        ToolboxMCPServer(CapabilityRegistry(manifests), ProviderRegistry(), SimpleNamespace())
 
 
 @pytest.mark.parametrize("capability", ["math.recognize", "document.ocr.page"])

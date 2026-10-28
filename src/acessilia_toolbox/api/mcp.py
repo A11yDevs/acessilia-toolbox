@@ -83,6 +83,7 @@ class ToolboxMCPServer:
         self._capabilities = capabilities
         self._providers = providers
         self._executor = executor
+        self._tool_manifests_by_name = self._build_tool_manifests()
 
     def get_server_info(self) -> dict[str, Any]:
         """Return server metadata for MCP protocol negotiation."""
@@ -95,7 +96,7 @@ class ToolboxMCPServer:
     def list_tools(self) -> list[dict[str, Any]]:
         tools = []
         # One tool per capability: call_tool executes the latest version.
-        for manifest in self._tool_manifests().values():
+        for manifest in self._tool_manifests_by_name.values():
             tools.append(
                 _tool_from_capability(
                     manifest.model_dump(mode="json", by_alias=True),
@@ -104,7 +105,7 @@ class ToolboxMCPServer:
             )
         return tools
 
-    def _tool_manifests(self) -> dict[str, CapabilityManifest]:
+    def _build_tool_manifests(self) -> dict[str, CapabilityManifest]:
         manifests: dict[str, CapabilityManifest] = {}
         for manifest in self._capabilities.latest():
             name = manifest.id.replace(".", "_")
@@ -130,7 +131,7 @@ class ToolboxMCPServer:
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
         """Execute a tool and return the results."""
-        manifest = self._tool_manifests().get(name)
+        manifest = self._tool_manifests_by_name.get(name)
         if manifest is None:
             raise CapabilityNotFoundError(f"unknown MCP tool {name}", tool=name)
         capability_id = manifest.id
@@ -318,8 +319,9 @@ class ToolboxMCPServer:
                     provider_id=provider.id,
                 )
                 for dataset in result.document:
-                    if dataset["id"] not in seen:
-                        seen.add(dataset["id"])
+                    dataset_id = dataset.get("id")
+                    if dataset_id not in seen:
+                        seen.add(dataset_id)
                         datasets.append(dataset)
             return json.dumps(datasets, indent=2, ensure_ascii=False)
 
