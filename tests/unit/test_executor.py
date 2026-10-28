@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from tests.fixtures.documents import FakeDocument
@@ -19,11 +21,12 @@ from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegi
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
     ProviderNotBoundError,
+    ProviderUnavailableError,
     UnsupportedMediaTypeError,
 )
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
-from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+from acessilia_toolbox.core.normalization.extraction import BinaryOutput, ExtractionResult
 from acessilia_toolbox.core.provider import (
     ProviderDescriptor,
     ProviderHealth,
@@ -274,3 +277,46 @@ def test_cached_json_remains_usable(
         assert first.artifacts[0].storage_backend is None
         assert run(executor).document == first.document
         assert len(provider.calls) == 1
+
+
+def test_json_storage_outage_returns_inline_without_publishing_cache(executor, provider):
+    store = Mock()
+    store.put.side_effect = ProviderUnavailableError("S3 offline")
+    cache = Mock()
+    cache.get.return_value = None
+    executor._store = store
+    executor._cache = cache
+
+    result = run(executor)
+
+    assert result.status == "succeeded"
+    assert result.document["summary"]["element_count"] == 3
+    assert result.artifacts[0].storage_backend is None
+    assert result.artifacts[0].uri is None
+    cache.put.assert_not_called()
+    assert len(provider.calls) == 1
+
+
+def test_permanent_json_storage_failure_is_not_hidden(executor):
+    store = Mock()
+    store.put.side_effect = InvalidInputError("invalid storage request")
+    executor._store = store
+    with pytest.raises(InvalidInputError):
+        run(executor)
+
+
+@pytest.mark.parametrize("by_reference", [False, True])
+def test_storage_outage_does_not_hide_required_outputs(executor, provider, by_reference):
+    store = Mock()
+    store.put.side_effect = ProviderUnavailableError("S3 offline")
+    executor._store = store
+    if by_reference:
+        executor._capabilities.get("document.structure.extract").output.by_reference = True
+    else:
+        execute = provider.execute
+        provider.execute = lambda *args, **kwargs: replace(
+            execute(*args, **kwargs),
+            outputs=(BinaryOutput(b"required", "application/pdf", "result.pdf"),),
+        )
+    with pytest.raises(ProviderUnavailableError):
+        run(executor)

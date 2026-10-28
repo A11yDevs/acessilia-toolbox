@@ -27,6 +27,7 @@ from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegi
 from acessilia_toolbox.core.errors import (
     ConfigurationError,
     InvalidInputError,
+    ProviderUnavailableError,
     ToolboxError,
     UnsupportedMediaTypeError,
 )
@@ -210,14 +211,23 @@ class CapabilityExecutor:
         serialized = json.dumps(document_payload, ensure_ascii=False).encode("utf-8")
 
         artifacts: list[ArtifactRef] = []
+        cacheable_result = True
         if self._store is not None:
-            artifacts.append(
-                self._store.put(
+            try:
+                document_ref = self._store.put(
                     serialized,
                     media_type="application/json",
                     filename=artifact_suffix,
                 )
-            )
+            except ProviderUnavailableError:
+                if manifest.output.by_reference or extraction.outputs:
+                    raise
+                # Inline results remain usable during a storage outage. Never
+                # claim a persisted download or cache an unpersisted result.
+                LOG.warning("JSON artifact storage unavailable; returning inline result")
+                document_ref = ArtifactRef.of(serialized, media_type="application/json")
+                cacheable_result = False
+            artifacts.append(document_ref)
         else:
             artifacts.append(ArtifactRef.of(serialized, media_type="application/json"))
         if extraction.outputs:
@@ -251,7 +261,7 @@ class CapabilityExecutor:
             ),
         )
 
-        if manifest.execution.cacheable:
+        if manifest.execution.cacheable and cacheable_result:
             self._cache.put(cache_key, result.model_dump(mode="json"))
         return result
 

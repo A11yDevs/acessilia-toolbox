@@ -162,6 +162,29 @@ stops. No automatic replication of fallback objects back to S3 was added.
 
 ## Verification
 
+### Inline extraction during storage outages
+
+The Core can bypass an unsuccessful initial artifact upload by sending the
+source directly, but output JSON persistence could still stop extraction.
+For a temporary storage failure, the executor now returns the inline JSON
+when there are no required binary outputs and the capability is not
+by-reference. Its artifact identity has no storage backend or URI, and this
+unpersisted result is not published to the execution cache. Permanent storage
+input errors and unavailable mandatory binary outputs continue to fail.
+
+The cross-project regression in
+`tests/cross_project/test_core_storage_outage.py` runs the actual Core extractor
+and SDK against a local Toolbox HTTP server, with separate Python environments.
+It injects failure in both initial upload and output JSON storage, then checks
+successful inline extraction. The extraction provider and S3 are simulated;
+this is a transport/orchestration check, not a production conversion benchmark.
+CI pins the Core implementation reviewed in
+[acessilia PR #309](https://github.com/A11yDevs/acessilia/pull/309).
+
+To repeat this test locally, set `ACESSILIA_CORE_PYTHON` to the Core virtual
+environment's Python executable and `ACESSILIA_CORE_ROOT` to its checkout,
+then run the cross-project test with the Toolbox environment's pytest.
+
 The broad regression run covered the executor, PDF/UA and DOCX exports,
 artifact storage, orientation, cache identity, statelessness and REST
 integration: **214 passed, 4 skipped**. The skipped integration tests depend

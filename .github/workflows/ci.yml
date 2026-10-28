@@ -21,6 +21,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  core-storage-outage:
+    name: Core extraction during artifact storage outage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: A11yDevs/acessilia
+          # Core implementation reviewed in acessilia#309. Separate environments
+          # preserve the projects' different httpx dependency requirements.
+          ref: d8751d03c5e8eaf55080463a4311893536a3f7f8
+          path: .core-source
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Install isolated project environments
+        run: |
+          python -m venv .toolbox-venv
+          .toolbox-venv/bin/python -m pip install ".[api,storage,cache]" pytest
+          python -m venv .core-venv
+          .core-venv/bin/python -m pip install ./.core-source/libs/docstruct ./.core-source/libs/sdk
+          .core-venv/bin/python -m pip install ./.core-source
+      - name: Test Core, SDK and Toolbox over HTTP
+        env:
+          ACESSILIA_CORE_PYTHON: ${{ github.workspace }}/.core-venv/bin/python
+          ACESSILIA_CORE_ROOT: ${{ github.workspace }}/.core-source
+        run: .toolbox-venv/bin/python -m pytest tests/cross_project/test_core_storage_outage.py -v
+
   # During BHS a release branch only takes bug fixes (CONTRIBUTING.md, 5.1);
   # features, improvements and refactorings keep going to develop.
   release-scope:
