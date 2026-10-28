@@ -130,8 +130,10 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 The default `TOOLBOX_ARTIFACT_FALLBACK_MODE=disabled` returns HTTP 503 when
 an S3 write fails. It does not acknowledge an upload stored only on one
 replica's private disk. Existing backup objects remain readable when an S3
-store is configured. If no S3 store can be configured, filesystem-only storage
-also requires an explicit `local` or `shared` mode; otherwise storage is disabled.
+store is configured. The mode controls S3 failover writes only. Without a
+configured S3 store, the filesystem remains the primary store in every mode,
+including `disabled`. Filesystem-only deployments on multiple hosts still need
+shared storage if requests can reach different replicas.
 
 For a single instance, set `TOOLBOX_ARTIFACT_FALLBACK_MODE=local` to retain
 the former behavior. Files saved during an outage are tied to that disk and
@@ -164,6 +166,46 @@ choose `local` for one instance or provision and verify shared storage before
 choosing `shared`. Python callers constructing `FailoverArtifactStore` directly
 must pass the same choice as `fallback_mode="local"` or `fallback_mode="shared"`.
 The constructor defaults to disabled fallback writes, like the REST factory.
+
+#### Inline extraction and cached artifacts during storage outages
+
+An operation returning only inline JSON can complete during a temporary
+storage outage. Its response identifies the JSON content without a persisted
+URI/backend, and a newly extracted unpersisted result is not written to the
+execution cache. Binary and by-reference outputs still require storage.
+
+For a warm execution cache, the executor checks stored references before
+returning them. This costs one `exists` call per artifact, including an S3
+round trip for the JSON. If storage is temporarily unavailable and the
+contract permits inline-only JSON, the cached document is returned without
+reexecuting the extraction provider or claiming a verified stored download.
+The cache entry is left unchanged so its stored reference can be verified
+again after recovery. An object verified as missing invalidates the cache;
+required binary/by-reference objects cannot use the inline exception.
+
+The Core fallback after an unsuccessful initial upload depends on this inline
+response behavior. Required output persistence failures remain errors; this
+does not guarantee that a complete conversion with mandatory binary exports
+can finish while storage is unavailable.
+
+#### Orientation cache identity and version probes
+
+With `auto_rotate` enabled for a supported image, orientation still runs before
+the extraction cache lookup. The key includes the source and oriented image
+fingerprints, provider/configuration identity and the effective orientation
+decision. Confidence is retained in provenance but excluded from cache identity.
+
+RapidOCR version metadata is memoized per process for 30 seconds, across adapter
+instances, with a bounded cache. Deployment, declared version and configuration
+changes select a different entry. Failed refreshes retain the last successful
+identity and retry after 5 seconds; before any successful probe, the declared
+version is used. Thus model-version changes can take up to the TTL to appear in
+cache identity, and an unavailable version endpoint cannot immediately invalidate
+otherwise usable cached extraction. Effective oriented bytes and decisions are
+still evaluated on every auto-rotate request. Restarting the process clears the
+version cache. No cross-process synchronization is provided.
+
+For release migration details, see [0.2.0 storage changes](release-notes-0.2.0.md).
 
 ### 4. Load the configuration
 

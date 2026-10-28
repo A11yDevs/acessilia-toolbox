@@ -26,6 +26,25 @@ from acessilia_toolbox.providers.storage import (
 pytestmark = pytest.mark.integration
 
 
+def test_filesystem_only_api_keeps_artifact_uploads_available(tmp_path, monkeypatch):
+    from acessilia_toolbox.api import auth
+
+    monkeypatch.setattr(auth, "TOOLBOX_API_KEY", "storage-test")
+    monkeypatch.delenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", raising=False)
+    app = create_app(providers=ProviderRegistry([ProviderDescriptor(
+        id="filesystem", transport="in_process", capabilities=["artifact.store"],
+        config={"root": str(tmp_path)},
+    )]))
+    with TestClient(app, headers={"Authorization": "Bearer storage-test"}) as client:
+        response = client.post(
+            "/v1/artifacts", files={"file": ("sample.txt", b"content", "text/plain")}
+        )
+        assert response.status_code == 200
+        downloaded = client.get(f"/v1/artifacts/{response.json()['artifact_id']}")
+        assert downloaded.status_code == 200
+        assert downloaded.content == b"content"
+
+
 @pytest.mark.parametrize("shared", [False, True], ids=["private-disks", "shared-volume"])
 def test_two_replicas_during_primary_outage(tmp_path: Path, shared: bool) -> None:
     primary = Mock()

@@ -147,7 +147,11 @@ class CapabilityExecutor:
                 # The rotated bytes are the real input, so they replace the
                 # fingerprint; otherwise the cache could serve a stale result.
                 input_fingerprint = fingerprint_bytes(execution_payload)
-            preprocessing["orientation"] = _orientation_payload(orientation)
+            orientation_identity = _orientation_payload(orientation)
+            if orientation_identity is not None:
+                # Confidence is audit metadata, not a change to extraction input.
+                orientation_identity.pop("confidence")
+            preprocessing["orientation"] = orientation_identity
 
         # Cache the effective input and preprocessing context. Running orientation
         # first also lets a recovered provider replace a degraded cached result.
@@ -173,7 +177,9 @@ class CapabilityExecutor:
                 except ValidationError:
                     # Cached results from an older contract must not block execution.
                     restored = None
-                if restored is not None and self._outputs_available(restored):
+                if restored is not None and self._outputs_available(
+                    restored, allow_inline_json=not manifest.output.by_reference
+                ):
                     return restored
 
         # Only adapters of capabilities with more than one version need to
@@ -280,12 +286,17 @@ class CapabilityExecutor:
             raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
         return store.get(artifact_id), ref
 
-    def _outputs_available(self, result: CapabilityResult) -> bool:
+    def _outputs_available(
+        self, result: CapabilityResult, *, allow_inline_json: bool = False
+    ) -> bool:
         """Check every stored reference, including the inline document's JSON.
 
-        Missing artifacts invalidate the cached result so execution recreates
-        them. Without a store, only the first, inline JSON reference is allowed;
-        it identifies content without promising a stored download.
+        Each reference costs an ``exists`` call (potentially an S3 round trip).
+        Verified missing objects invalidate the cache. Temporary unavailability
+        is different: an inline-only contract can still serve its cached JSON,
+        stripping the unverified storage location from this response. Required
+        binary/by-reference outputs must still be verified. Without a store,
+        only an inline JSON reference without storage metadata is allowed.
         """
         if self._store is None:
             return len(result.artifacts) <= 1 and all(
@@ -294,6 +305,19 @@ class CapabilityExecutor:
             )
         try:
             return all(self._store.exists(artifact.artifact_id) for artifact in result.artifacts)
+        except ProviderUnavailableError as exc:
+            if (
+                allow_inline_json
+                and len(result.artifacts) == 1
+                and result.artifacts[0].media_type == "application/json"
+            ):
+                result.artifacts = [result.artifacts[0].model_copy(
+                    update={"storage_backend": None, "uri": None}
+                )]
+                LOG.info("cached JSON storage unavailable; serving inline: %s", exc.message)
+                return True
+            LOG.info("required cached outputs could not be verified: %s", exc.message)
+            return False
         except ToolboxError as exc:
             LOG.info("cached outputs could not be verified; executing again: %s", exc.message)
             return False

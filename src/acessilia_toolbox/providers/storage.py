@@ -28,6 +28,7 @@ from acessilia_toolbox.core.provider import ProviderDescriptor
 METADATA_SUFFIX = ".meta.json"
 LOG = logging.getLogger(__name__)
 T = TypeVar("T")
+FALLBACK_MODES = frozenset({"disabled", "local", "shared"})
 
 
 def _atomic_write(target: Path, payload: bytes) -> None:
@@ -249,7 +250,7 @@ class FailoverArtifactStore:
     def __init__(
         self, primary: ArtifactStore, fallback: ArtifactStore, *, fallback_mode: str = "disabled"
     ) -> None:
-        if fallback_mode not in {"disabled", "local", "shared"}:
+        if fallback_mode not in FALLBACK_MODES:
             raise ConfigurationError("artifact fallback mode must be disabled, local or shared")
         self.primary = primary
         self.fallback = fallback

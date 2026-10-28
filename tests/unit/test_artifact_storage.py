@@ -270,17 +270,24 @@ def test_invalid_fallback_policy_is_rejected(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.parametrize("mode", ["disabled", "local", "shared"])
-def test_filesystem_only_store_requires_explicit_policy(tmp_path, monkeypatch, mode):
+@pytest.mark.parametrize("unresolved_s3", [False, True])
+def test_filesystem_only_store_remains_primary_in_every_fallback_mode(
+    tmp_path, monkeypatch, mode, unresolved_s3
+):
     monkeypatch.setenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", mode)
     registry = ProviderRegistry([ProviderDescriptor(
         id="filesystem", transport="in_process", capabilities=["artifact.store"],
         config={"root": str(tmp_path)},
     )])
+    if unresolved_s3:
+        registry.register(ProviderDescriptor(
+            id="minio", transport="s3", capabilities=["artifact.store"],
+            endpoint="${UNCONFIGURED_MINIO}",
+        ))
     selected = _store_from(registry)
-    if mode == "disabled":
-        assert selected is None
-    else:
-        assert isinstance(selected, FilesystemArtifactStore)
+    assert isinstance(selected, FilesystemArtifactStore)
+    ref = selected.put(PAYLOAD)
+    assert selected.get(ref.artifact_id) == PAYLOAD
 
 
 @pytest.mark.parametrize(

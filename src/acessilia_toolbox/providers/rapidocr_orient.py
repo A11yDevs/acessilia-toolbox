@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from time import perf_counter
+from threading import Lock
+from time import monotonic, perf_counter
 from typing import Any
 
 import httpx
@@ -15,6 +17,7 @@ from acessilia_toolbox.core.errors import (
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
+from acessilia_toolbox.core.fingerprint import fingerprint_parameters
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
@@ -27,6 +30,11 @@ VERSION_PATH = "/version"
 # describe the artifacts that produced a result, so only these enter provenance
 # and the cache key.
 VERSION_KEYS = ("version", "engine_version")
+VERSION_TTL_SECONDS = 30.0
+VERSION_RETRY_SECONDS = 5.0
+_VERSION_CACHE_LIMIT = 128
+_VERSION_CACHE: OrderedDict[tuple[str, str, str, str], tuple[float, dict[str, str]]] = OrderedDict()
+_VERSION_LOCK = Lock()
 
 
 class RapidOcrOrientProvider:
@@ -56,7 +64,7 @@ class RapidOcrOrientProvider:
 
         with self._client() as client:
             raw = self._orient(client, payload, filename, media_type, parameters)
-            reported_versions = self._server_versions(client)
+            reported_versions = self._reported_versions()
 
         completed_at = datetime.now(UTC)
         duration_ms = int((perf_counter() - started_clock) * 1000)
@@ -158,15 +166,7 @@ class RapidOcrOrientProvider:
         return result
 
     def versions(self) -> dict[str, str]:
-        try:
-            with self._client(timeout=5.0) as client:
-                reported = self._server_versions(client)
-        except Exception:
-            # The executor tolerates version failures; the declared version is
-            # then the only identity available for the cache key.
-            LOG.debug("rapidocr-orient version probe failed", exc_info=True)
-            reported = {}
-
+        reported = self._reported_versions()
         server_version = (
             reported.get("engine_version")
             or reported.get("version")
@@ -176,6 +176,40 @@ class RapidOcrOrientProvider:
             "provider": server_version,
             **reported,
         }
+
+    def _reported_versions(self) -> dict[str, str]:
+        """Memoize across adapters; failed refreshes retain the last good identity.
+
+        A lock coalesces concurrent probes. The cache is bounded and keyed by
+        deployment/configuration, so separate deployments cannot share versions.
+        Orientation still runs on every auto-rotate request; only the metadata
+        probe is memoized. Before the first success, declared versions apply.
+        """
+        key = (
+            self.descriptor.id, self.base_url, self.descriptor.version,
+            fingerprint_parameters(self.descriptor.config),
+        )
+        with _VERSION_LOCK:
+            now = monotonic()
+            previous = _VERSION_CACHE.get(key)
+            if previous is not None and now < previous[0]:
+                _VERSION_CACHE.move_to_end(key)
+                return dict(previous[1])
+            try:
+                with self._client(timeout=5.0) as client:
+                    reported = self._server_versions(client)
+            except Exception:
+                LOG.debug("rapidocr-orient version probe failed", exc_info=True)
+                reported = {}
+            ttl = VERSION_TTL_SECONDS
+            if not reported:
+                reported = previous[1] if previous is not None else {}
+                ttl = VERSION_RETRY_SECONDS
+            _VERSION_CACHE[key] = (monotonic() + ttl, dict(reported))
+            _VERSION_CACHE.move_to_end(key)
+            while len(_VERSION_CACHE) > _VERSION_CACHE_LIMIT:
+                _VERSION_CACHE.popitem(last=False)
+            return dict(reported)
 
     def _server_versions(self, client: httpx.Client) -> dict[str, str]:
         """Version fields the server reports, filtered to artifact identity."""

@@ -32,7 +32,11 @@ from acessilia_toolbox.core.provider import (
     ProviderHealth,
     ProviderRegistry,
 )
-from acessilia_toolbox.providers.storage import FilesystemArtifactStore
+from acessilia_toolbox.providers.storage import (
+    FailoverArtifactStore,
+    FilesystemArtifactStore,
+    S3ArtifactStore,
+)
 
 PDF = "application/pdf"
 PAYLOAD = b"%PDF-test"
@@ -320,3 +324,50 @@ def test_storage_outage_does_not_hide_required_outputs(executor, provider, by_re
         )
     with pytest.raises(ProviderUnavailableError):
         run(executor)
+
+
+@pytest.mark.parametrize("by_reference", [False, True], ids=["inline-json", "required-reference"])
+def test_hot_cache_during_s3_outage(executor, provider, tmp_path, by_reference):
+    from tests.unit.test_artifact_storage import FakeS3Client
+
+    class Cache:
+        def __init__(self):
+            self.data = {}
+
+        def get(self, key):
+            return self.data.get(key)
+
+        def put(self, key, value):
+            self.data[key] = value
+
+    primary = object.__new__(S3ArtifactStore)
+    primary.bucket = "test"
+    primary._client = client = FakeS3Client()
+    executor._store = FailoverArtifactStore(primary, FilesystemArtifactStore(tmp_path))
+    executor._cache = cache = Cache()
+    executor._capabilities.get("document.structure.extract").output.by_reference = by_reference
+    first = run(executor)
+    ref = first.artifacts[0]
+    assert ref.storage_backend == "s3"
+    client.available = False
+
+    if by_reference:
+        with pytest.raises(ProviderUnavailableError):
+            run(executor)
+        return
+
+    second = run(executor)
+    assert second.provenance.cache_hit
+    assert second.document == first.document
+    assert len(provider.calls) == 1
+    assert second.artifacts[0].artifact_id == ref.artifact_id
+    assert second.artifacts[0].uri is None
+    assert second.artifacts[0].storage_backend is None
+    # Returning inline must not rewrite the shared cache's persisted reference.
+    assert next(iter(cache.data.values()))["artifacts"][0]["storage_backend"] == "s3"
+    client.available = True
+    recovered = run(executor)
+    assert recovered.provenance.cache_hit
+    assert recovered.artifacts[0].storage_backend == "s3"
+    assert executor.retrieve_artifact(ref.artifact_id)[0]
+    assert len(provider.calls) == 1

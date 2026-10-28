@@ -21,7 +21,7 @@ from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers import configure_dataset_mirroring, create_adapter
 from acessilia_toolbox.providers.cache import create_cache
-from acessilia_toolbox.providers.storage import FailoverArtifactStore
+from acessilia_toolbox.providers.storage import FALLBACK_MODES, FailoverArtifactStore
 from acessilia_toolbox.providers.storage import create_artifact_store as _create_store
 
 LOG = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ def create_app(
 
 def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
     fallback_mode = os.getenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", "disabled")
-    if fallback_mode not in {"disabled", "local", "shared"}:
+    if fallback_mode not in FALLBACK_MODES:
         raise ConfigurationError(
             "TOOLBOX_ARTIFACT_FALLBACK_MODE must be disabled, local or shared"
         )
@@ -132,16 +132,8 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
     fallback = first_available([d for d in candidates if d.transport != "s3"])
     if primary is not None and fallback is not None:
         return FailoverArtifactStore(primary, fallback, fallback_mode=fallback_mode)
-    if primary is not None:
-        return primary
-    if fallback is not None and fallback_mode != "disabled":
-        return fallback
-    if fallback is not None:
-        LOG.warning(
-            "filesystem-only artifact storage disabled; configure S3 or explicitly set "
-            "TOOLBOX_ARTIFACT_FALLBACK_MODE to local or shared"
-        )
-    return None
+    # Without S3, filesystem is the primary store, not an outage fallback.
+    return primary or fallback
 
 
 def _cache_from(providers: ProviderRegistry) -> ExecutionCache | None:
