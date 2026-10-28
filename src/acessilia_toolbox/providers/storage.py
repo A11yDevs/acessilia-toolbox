@@ -7,12 +7,12 @@ core install light.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
 import shutil
 import tempfile
+import threading
 import time
 from collections.abc import Callable
 from io import BytesIO
@@ -34,6 +34,9 @@ from acessilia_toolbox.core.provider import ProviderDescriptor
 METADATA_SUFFIX = ".meta.json"
 LOG = logging.getLogger(__name__)
 T = TypeVar("T")
+_STORAGE_READY_CACHE_TTL_SECONDS = 5.0
+_STORAGE_READY_LOCK = threading.RLock()
+_STORAGE_READY_CACHE: dict[int, tuple[object, float, bool]] = {}
 
 
 def _copy_bounded(source: BinaryIO, destination: BinaryIO, max_bytes: int) -> None:
@@ -54,8 +57,25 @@ def _atomic_write(target: Path, payload: bytes, *, exclusive: bool = False) -> N
             stream.flush()
             os.fsync(stream.fileno())
         if exclusive:
-            with contextlib.suppress(FileExistsError):
+            try:
                 os.link(temporary, target)
+            except FileExistsError:
+                pass
+            except OSError:
+                # Keep the lock file: unlinking it could let concurrent writers
+                # lock different inodes. Closing it releases the advisory lock.
+                try:
+                    import fcntl
+
+                    with target.with_name(target.name + ".lock").open("a+b") as lock:
+                        fcntl.flock(lock, fcntl.LOCK_EX)
+                        if not target.exists():
+                            temporary.replace(target)
+                except (ImportError, OSError) as exc:
+                    raise ProviderUnavailableError(
+                        "filesystem metadata publication requires hard links or "
+                        "shared advisory locks and atomic rename"
+                    ) from exc
         else:
             temporary.replace(target)
     finally:
@@ -436,15 +456,50 @@ def load_metadata(path: Path) -> dict[str, Any]:
 
 
 def storage_ready(store: ArtifactStore | None) -> bool:
-    """Check mandatory storage without loading any artifact payload."""
-    if isinstance(store, FailoverArtifactStore):
-        for backend in (store.primary, store.fallback):
-            try:
-                if storage_ready(backend):
-                    return True
-            except Exception:
-                continue
+    """Check storage without loading payloads, caching results for five seconds.
+
+    A failover store is ready when either backend can serve writes. If only the
+    fallback is available, readiness remains successful and logs the degraded
+    primary so operators can distinguish failover from full health.
+    """
+    if store is None:
+        LOG.warning("storage readiness failed: no artifact store is configured")
         return False
+
+    with _STORAGE_READY_LOCK:
+        now = time.monotonic()
+        cached = _STORAGE_READY_CACHE.get(id(store))
+        if cached is not None and cached[0] is store:
+            checked_at, result = cached[1], cached[2]
+            if now - checked_at < _STORAGE_READY_CACHE_TTL_SECONDS:
+                return result
+
+        try:
+            result = _storage_ready_uncached(store)
+        except Exception:
+            LOG.warning(
+                "storage readiness probe failed for backend %s",
+                getattr(store, "backend", type(store).__name__),
+                exc_info=True,
+            )
+            result = False
+
+        _STORAGE_READY_CACHE[id(store)] = (store, time.monotonic(), result)
+        for key, entry in tuple(_STORAGE_READY_CACHE.items()):
+            if now - entry[1] >= _STORAGE_READY_CACHE_TTL_SECONDS * 12:
+                _STORAGE_READY_CACHE.pop(key, None)
+        return result
+
+
+def _storage_ready_uncached(store: ArtifactStore) -> bool:
+    if isinstance(store, FailoverArtifactStore):
+        primary_ready = storage_ready(store.primary)
+        fallback_ready = storage_ready(store.fallback)
+        if not primary_ready and fallback_ready:
+            LOG.warning(
+                "primary artifact storage is unavailable; readiness is served by fallback"
+            )
+        return primary_ready or fallback_ready
     if isinstance(store, FilesystemArtifactStore):
         fd, path = tempfile.mkstemp(dir=store.root)
         os.close(fd)
@@ -452,8 +507,12 @@ def storage_ready(store: ArtifactStore | None) -> bool:
         return True
     if isinstance(store, S3ArtifactStore):
         store._client.head_bucket(Bucket=store.bucket)
-        # A fixed, immutable probe checks write permission on every call without
-        # accumulating objects or requiring DeleteObject permission.
+        # A fixed, immutable probe checks write permission on a cache miss
+        # without accumulating objects or requiring DeleteObject permission.
         store.put(b"acessilia-toolbox readiness probe\n")
         return True
+    LOG.warning(
+        "storage readiness is unsupported for backend %s",
+        getattr(store, "backend", type(store).__name__),
+    )
     return False

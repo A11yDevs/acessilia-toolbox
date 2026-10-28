@@ -7,8 +7,8 @@ from tests.integration.test_artifacts_api import client as client_fixture
 from tests.integration.test_artifacts_api import store as store_fixture
 from tests.unit.test_artifact_storage import FakeS3Client
 
-from acessilia_toolbox.core.errors import ProviderUnavailableError
 from acessilia_toolbox.core.provider import ProviderHealth
+from acessilia_toolbox.providers import storage
 from acessilia_toolbox.providers.storage import (
     FailoverArtifactStore,
     S3ArtifactStore,
@@ -75,12 +75,22 @@ def test_s3_probe_does_not_accumulate_objects_or_change_existing_metadata():
     assert store._client.objects == before
 
 
-def test_s3_probe_rechecks_write_permission_after_first_success():
+def test_s3_probe_caches_results_then_rechecks_permissions(monkeypatch, caplog):
     store = primary()
+    clock = [100.0]
+    monkeypatch.setattr(storage.time, "monotonic", lambda: clock[0])
     assert storage_ready(store)
     store._client.writable = False
-    with pytest.raises(ProviderUnavailableError):
-        storage_ready(store)
+    clock[0] += 4.9
+    assert storage_ready(store)
+    clock[0] += 0.1
+    assert not storage_ready(store)
+    assert "storage readiness probe failed" in caplog.text
+    assert "read-only policy" in caplog.text
+    store._client.writable = True
+    assert not storage_ready(store)
+    clock[0] += 5.0
+    assert storage_ready(store)
 
 
 def test_readiness_keeps_existing_fallback_policy(store):
