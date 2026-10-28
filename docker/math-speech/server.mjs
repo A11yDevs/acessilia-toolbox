@@ -26,7 +26,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = '1.0.1';
 const PORT = Number(process.env.MATH_SPEECH_PORT ?? 5009);
 const MAX_BODY_BYTES = Number(process.env.MATH_SPEECH_MAX_BODY_BYTES ?? 256 * 1024);
 // A formula, not a document: bounds the synchronous work of one request.
@@ -64,6 +64,8 @@ RegisterHTMLHandler(liteAdaptor());
 const texDocument = mathjax.document('', {
   InputJax: new TeX({
     packages: TEX_PACKAGES,
+    // In pt-BR, `{,}` is a decimal separator; a three-digit group is not required.
+    digits: /^(?:[0-9]+(?:\{,\}[0-9]+)*(?:\.[0-9]*)?|\.[0-9]+)/,
     formatError: (_jax, error) => {
       throw error;
     },
