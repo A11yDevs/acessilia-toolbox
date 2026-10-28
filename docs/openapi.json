@@ -63,6 +63,16 @@
                             }
                         }
                     },
+                    "400": {
+                        "description": "Invalid provider",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
                     "503": {
                         "description": "Service unavailable",
                         "content": {

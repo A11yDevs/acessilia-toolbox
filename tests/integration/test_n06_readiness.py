@@ -31,6 +31,10 @@ def test_readiness_rejects_healthy_unbound_provider(client, monkeypatch, configu
     else:
         params = {"provider": "layout-only"}
     response = client.get("/v1/ready", params=params)
+    if configured_by == "query":
+        assert response.status_code == 400
+        assert response.json()["code"] == "invalid_input"
+        return
     assert response.status_code == 503
     assert response.json()["checks"] == {
         "catalog": True,

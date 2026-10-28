@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import os
 import tempfile
 from typing import Annotated, Any, BinaryIO
@@ -71,6 +72,7 @@ UPLOAD_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 }
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+LOG = logging.getLogger(__name__)
 
 
 def capabilities(request: Request) -> CapabilityRegistry:
@@ -101,29 +103,61 @@ def health() -> HealthResponse:
 @public_router.get(
     "/ready",
     response_model=ReadinessResponse,
-    responses={503: {"model": ReadinessResponse, "description": "Service unavailable"}},
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid provider"},
+        503: {"model": ReadinessResponse, "description": "Service unavailable"},
+    },
     tags=["health"],
 )
 def ready(request: Request, provider: str | None = None) -> JSONResponse:
     from acessilia_toolbox.providers.storage import storage_ready
 
     checks = {"catalog": False, "structure": False, "storage": False}
+    ready_provider = (os.getenv("TOOLBOX_READY_PROVIDER") or "docling").strip() or "docling"
+    if provider is not None and provider != ready_provider:
+        raise InvalidInputError(
+            "the public readiness route only checks TOOLBOX_READY_PROVIDER",
+            provider=ready_provider,
+        )
     try:
         request.app.state.capabilities.get("document.structure.extract")
         checks["catalog"] = True
+    except Exception:
+        LOG.warning("readiness capability catalog check failed", exc_info=True)
+    try:
         descriptor = request.app.state.providers.resolve(
             "document.structure.extract",
-            provider or os.getenv("TOOLBOX_READY_PROVIDER", "docling")
+            ready_provider,
         )
         if descriptor.transport == "http" and descriptor.endpoint:
             with httpx.Client(base_url=descriptor.endpoint, timeout=2.0) as client:
-                checks["structure"] = client.get(descriptor.health_path).status_code == 200
+                response = client.get(descriptor.health_path)
+                checks["structure"] = response.status_code == 200
+                if not checks["structure"]:
+                    LOG.warning(
+                        "readiness structural provider %s returned HTTP %s",
+                        ready_provider,
+                        response.status_code,
+                    )
         else:
-            checks["structure"] = create_adapter(descriptor).health().healthy
+            health = create_adapter(descriptor).health()
+            checks["structure"] = health.healthy
+            if not checks["structure"]:
+                LOG.warning(
+                    "readiness structural provider %s is unhealthy: %s",
+                    ready_provider,
+                    health.detail or "provider reported unhealthy",
+                )
     except Exception:
-        pass
-    with contextlib.suppress(Exception):
+        LOG.warning(
+            "readiness structural provider check failed for %s",
+            ready_provider,
+            exc_info=True,
+        )
+    try:
         checks["storage"] = storage_ready(request.app.state.store)
+    except Exception:
+        LOG.warning("readiness storage check failed", exc_info=True)
     healthy = all(checks.values())
     return JSONResponse(
         {"status": "ready" if healthy else "unavailable", "checks": checks},
@@ -350,8 +384,13 @@ def _parse_parameters(raw: str | None) -> dict[str, Any]:
 
 
 async def _check_upload_stream(file: UploadFile) -> None:
-    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
-        raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    if file.size is not None:
+        if file.size > MAX_UPLOAD_BYTES:
+            raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+        if not file.size:
+            raise InvalidInputError("empty payload")
+        await file.seek(0)
+        return
     size = 0
     while chunk := await file.read(1024 * 1024):
         size += len(chunk)
