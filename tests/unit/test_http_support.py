@@ -55,6 +55,18 @@ class TestHttpSupport:
         msg = format_http_error("pp-formulanet", resp)
         assert msg == "pp-formulanet rejected: HTTP 500 - CUDA out of memory"
 
+    def test_extract_detail_from_nested_error_dict(self) -> None:
+        resp = httpx.Response(500, json={"error": {"message": "Resource exhausted"}})
+        assert extract_error_detail(resp) == "Resource exhausted"
+
+    def test_extract_detail_from_json_list(self) -> None:
+        resp = httpx.Response(400, json=["Invalid token", "Expired session"])
+        assert extract_error_detail(resp) == "Invalid token Expired session"
+
+    def test_extract_detail_from_json_string(self) -> None:
+        resp = httpx.Response(500, json="Direct string error")
+        assert extract_error_detail(resp) == "Direct string error"
+
     def test_format_http_error_empty_detail(self) -> None:
         resp = httpx.Response(500, text="")
         msg = format_http_error("pp-formulanet", resp)

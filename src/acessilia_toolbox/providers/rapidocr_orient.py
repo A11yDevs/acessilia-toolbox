@@ -17,7 +17,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
-from acessilia_toolbox.providers.http_support import extract_error_detail
+from acessilia_toolbox.providers.http_support import format_http_error
 
 LOG = logging.getLogger(__name__)
 
@@ -137,12 +137,8 @@ class RapidOcrOrientProvider:
             ) from exc
 
         if response.status_code != 200:
-            detail = extract_error_detail(response)
-            msg = f"RapidOCR orientation failed with status {response.status_code}"
-            if detail:
-                msg = f"{msg}: {detail}"
             raise ProviderExecutionError(
-                msg,
+                format_http_error("RapidOCR orientation", response),
                 provider=self.descriptor.id,
                 status_code=response.status_code,
             )

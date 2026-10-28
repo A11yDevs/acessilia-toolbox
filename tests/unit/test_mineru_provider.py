@@ -281,7 +281,9 @@ def test_http_error_maps_to_provider_execution_error() -> None:
 
     with pytest.raises(ProviderExecutionError) as excinfo:
         extract(provider_with(handler))
-    assert "422" in str(excinfo.value)
+    assert excinfo.value.details.get("status_code") == 422
+    assert "mineru-api rejected the document: HTTP 422 - bad file" in str(excinfo.value)
+
 
 
 def test_timeout_maps_to_provider_timeout_error() -> None:

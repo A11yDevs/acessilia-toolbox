@@ -15,22 +15,31 @@ def extract_error_detail(response: httpx.Response, max_length: int = 500) -> str
     try:
         data = response.json()
         if isinstance(data, dict):
-            if "detail" in data:
-                detail = data["detail"]
-                if isinstance(detail, list):
-                    # Pydantic validation errors list
-                    items = [
-                        f"{'.'.join(str(loc) for loc in err.get('loc', []))}: {err.get('msg', '')}"
-                        if isinstance(err, dict)
-                        else str(err)
-                        for err in detail
-                    ]
-                    return " ".join(" ".join(items).split())[:max_length]
-                return " ".join(str(detail).split())[:max_length]
-            if "message" in data:
-                return " ".join(str(data["message"]).split())[:max_length]
-            if "error" in data:
-                return " ".join(str(data["error"]).split())[:max_length]
+            for key in ("detail", "message", "error"):
+                if key in data:
+                    val = data[key]
+                    if isinstance(val, list):
+                        # Pydantic validation errors list or list of error items
+                        items = []
+                        for err in val:
+                            if isinstance(err, dict) and "loc" in err:
+                                loc_str = ".".join(str(loc) for loc in err.get("loc", []))
+                                items.append(f"{loc_str}: {err.get('msg', '')}")
+                            else:
+                                items.append(str(err))
+                        return " ".join(" ".join(items).split())[:max_length]
+                    if isinstance(val, dict):
+                        # Nested error object (e.g. {"error": {"message": "..."}})
+                        if "message" in val:
+                            return " ".join(str(val["message"]).split())[:max_length]
+                        if "detail" in val:
+                            return " ".join(str(val["detail"]).split())[:max_length]
+                    return " ".join(str(val).split())[:max_length]
+        elif isinstance(data, list):
+            items = [str(item) for item in data]
+            return " ".join(" ".join(items).split())[:max_length]
+        elif isinstance(data, str):
+            return " ".join(data.split())[:max_length]
     except Exception:
         pass
 

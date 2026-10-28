@@ -1,4 +1,4 @@
-﻿"""rapidocr-orient adapter behavior, exercised over simulated transport."""
+"""rapidocr-orient adapter behavior, exercised over simulated transport."""
 
 from __future__ import annotations
 
@@ -214,10 +214,13 @@ def test_orient_server_error() -> None:
         return httpx.Response(500, text="Internal Server Error")
 
     adapter = provider_with(handler)
-    with pytest.raises(ProviderExecutionError):
+    with pytest.raises(ProviderExecutionError) as exc_info:
         adapter.execute(
             "image.page.orient",
             b"fake-image",
             filename="page.png",
             media_type="image/png",
         )
+    assert exc_info.value.details.get("status_code") == 500
+    assert "RapidOCR orientation rejected: HTTP 500 - Internal Server Error" in str(exc_info.value)
+

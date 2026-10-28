@@ -181,6 +181,7 @@ class MineruProvider:
                     action="rejected the document",
                 ),
                 provider=self.descriptor.id,
+                status_code=exc.response.status_code,
             ) from exc
         except httpx.HTTPError as exc:
             raise ProviderUnavailableError(
