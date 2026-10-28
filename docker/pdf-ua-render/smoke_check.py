@@ -118,8 +118,9 @@ def text_layer(pdf: bytes) -> set[str]:
 
 if __name__ == "__main__":
     pdf = Path(sys.argv[1]).read_bytes()
+    expected = sys.argv[2] if len(sys.argv) > 2 else EXPECTED
     texts = alternate_texts(pdf)
-    if EXPECTED not in texts:
+    if expected not in texts:
         sys.exit(f"formula alternate text missing; /Alt found: {texts}")
     if MATH_FONT not in pdf:
         sys.exit(f"math font {MATH_FONT.decode()} not embedded: unicode-math did not take effect")

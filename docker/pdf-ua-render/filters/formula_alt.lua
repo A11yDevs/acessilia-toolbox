@@ -7,7 +7,8 @@
 -- and this filter turns the span into a TeX group that sets the alternate
 -- text of the formula it holds (\AccessiliaFormulaAlt, defined in
 -- pdf_ua.tex), so the Formula structure element gets /Alt <text> instead of
--- latex-lab's default "LaTeX formula starts ... ends".
+-- latex-lab's default "LaTeX formula starts ... ends". It also re-enables math
+-- collection, which table alignment can suppress while building a cell.
 --
 -- The sidecar rejects raw TeX in the incoming AST; this filter is the only
 -- source of raw TeX, and it drops every character that is special to TeX
@@ -31,7 +32,7 @@ function Span(span)
   if alt == "" then
     return span.content
   end
-  local inlines = { pandoc.RawInline("latex", "{\\AccessiliaFormulaAlt{" .. alt .. "}") }
+  local inlines = { pandoc.RawInline("latex", "{\\MathCollectTrue\\AccessiliaFormulaAlt{" .. alt .. "}") }
   for _, inline in ipairs(span.content) do
     table.insert(inlines, inline)
   end

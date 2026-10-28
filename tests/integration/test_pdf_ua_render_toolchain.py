@@ -51,3 +51,19 @@ def test_server_renders_a_tagged_pdf(server: Any) -> None:
     assert response.status_code == 200, response.text[:500]
     assert response.content.startswith(b"%PDF-")
     assert b"/StructTreeRoot" in response.content or b"/MarkInfo" in response.content
+
+
+def test_server_keeps_formula_alt_in_a_table_cell(server: Any) -> None:
+    fixture = SERVER_PATH.parent / "table-smoke.json"
+    response = TestClient(server.app).post(
+        "/render",
+        files={"file": ("table.json", fixture.read_bytes(), "application/json")},
+    )
+    assert response.status_code == 200, response.text[:500]
+
+    checker_path = SERVER_PATH.parent / "smoke_check.py"
+    spec = importlib.util.spec_from_file_location("pdf_ua_smoke_check_it", checker_path)
+    assert spec is not None and spec.loader is not None
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
+    assert "x diferente de um na célula" in checker.alternate_texts(response.content)
