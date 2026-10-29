@@ -177,8 +177,10 @@ providers:
     config:
       model: qwen3-vl-8b
       api_key: ${VLM_API_KEY:-}
-      # llama-server runs 4 parallel slots of 8192 tokens each.
-      max_concurrency: 4
+      # llama-server runs 2 parallel slots of 8192 tokens each (--parallel 2
+      # --ctx-size 16384): on a CPU-only host, 4 slots left every request near
+      # the timeout.
+      max_concurrency: 2
       page_max_tokens: 4096
       # Two candidates plus the page image must fit in one 8192-token slot.
       judge_max_chars: 6000
