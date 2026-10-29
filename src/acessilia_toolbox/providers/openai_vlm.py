@@ -204,15 +204,30 @@ class OpenAiCompatibleVlmProvider:
             )
         self._slots = _semaphore(descriptor.id, int(self.config["max_concurrency"]))
 
-    def _client(self, timeout: float | None = None) -> httpx.Client:
-        headers = {}
+    @property
+    def slots(self) -> threading.BoundedSemaphore:
+        """The server's parallel slots, shared with the chat gateway."""
+        return self._slots
+
+    def _headers(self) -> dict[str, str]:
         api_key = str(self.config.get("api_key") or "")
         if api_key and "${" not in api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+            return {"Authorization": f"Bearer {api_key}"}
+        return {}
+
+    def _client(self, timeout: float | None = None) -> httpx.Client:
         return httpx.Client(
             base_url=self.base_url,
             timeout=timeout or self.descriptor.timeout_seconds,
-            headers=headers,
+            headers=self._headers(),
+        )
+
+    def async_client(self) -> httpx.AsyncClient:
+        """Client for the chat gateway, which relays requests without blocking."""
+        return httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=self.descriptor.timeout_seconds,
+            headers=self._headers(),
         )
 
     def execute(

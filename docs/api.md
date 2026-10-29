@@ -128,6 +128,43 @@ curl http://localhost:8002/v1/health
 The OpenAPI document at `/v1/openapi.json` includes the security scheme
 and can be explored interactively at `/v1/docs` (Swagger UI).
 
+## VLM chat gateway
+
+`POST /v1/vlm/chat/completions` relays an OpenAI chat-completions request to an
+OpenAI-compatible VLM provider (`qwen3-vl-8b`). The agentic core points its
+own OpenAI-compatible client here instead of at the model server, so that:
+
+- its requests share the provider's `max_concurrency` limiter with the VLM
+  capabilities, and the server never receives more requests than it has
+  parallel slots;
+- the model server's key stays with the Toolbox; the caller authenticates with
+  `TOOLBOX_API_KEY`.
+
+The body's `model` is the provider id; the Toolbox replaces it with the
+provider's `config.model` and sends the provider's `api_key`. The request
+waits for a free slot, then the server's answer, streamed when the body sets
+`"stream": true`, is returned with its status. A client that disconnects
+frees its slot, and the upstream connection is closed so the server stops
+generating.
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Body is not a JSON object with a string `model`, or the provider is not an OpenAI-compatible VLM (server 400s are relayed as they are) |
+| 401 | Missing or invalid `TOOLBOX_API_KEY` |
+| 404 | `model` names no provider |
+| 502 | The model server rejected the Toolbox's own key |
+| 503 | The model server is unreachable |
+| 504 | The model server did not answer within the provider's `timeout_seconds` |
+
+With the Agno/OpenAI client of the core, for example:
+
+``` bash
+AI_CLIENT=openrouter
+OPENROUTER_BASE_URL=http://toolbox:8002/v1/vlm/chat/completions
+OPENROUTER_API_KEY=<TOOLBOX_API_KEY>
+OPENROUTER_MODEL=qwen3-vl-8b
+```
+
 ## Execution request
 
 ``` json

@@ -14,6 +14,7 @@ from acessilia_toolbox import __version__
 from acessilia_toolbox.api import auth
 from acessilia_toolbox.api.rest import MAX_UPLOAD_BYTES, dataset_router, public_router, router
 from acessilia_toolbox.api.upload_limit import UploadLimitMiddleware
+from acessilia_toolbox.api.vlm_gateway import vlm_router
 from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import ConfigurationError, ToolboxError
@@ -94,6 +95,7 @@ def create_app(
     app.include_router(public_router)
     app.include_router(router)
     app.include_router(dataset_router)
+    app.include_router(vlm_router)
 
     if not auth.TOOLBOX_API_KEY:
         LOG.warning(
