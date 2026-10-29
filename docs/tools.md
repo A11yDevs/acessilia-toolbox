@@ -227,7 +227,7 @@ Provider `config` keys:
 |---|---|---|
 | `model` | — (required) | Model id the server serves |
 | `api_key` | empty | Bearer token |
-| `max_concurrency` | 4 | Requests in flight, shared by all instances of the provider in one process; match the server's parallel slots (divide them among workers if the Toolbox runs more than one) |
+| `max_concurrency` | 4 | Requests in flight, shared by all instances of the provider in one process; match the server's parallel slots (divide them among workers if the Toolbox runs more than one). The shipped `qwen3-vl-8b` sets 2, see [Production server](#production-server) |
 | `page_max_tokens` | 4096 | Output limit of a page transcription |
 | `judge_max_chars` | 14000 | Each judge candidate is cut to this length; both plus the image must fit the server's context |
 | `region_max_tokens`, `region_max_chars` | 1024, 1800 | Region output limit and per-hypothesis cut |
@@ -264,6 +264,37 @@ Qwen3-VL-32B (FP8); the production server runs Qwen3-VL-8B (Q4_K_M) with 8192
 tokens per slot. Results are expected to differ, so the core's thresholds must
 be re-validated on this model before the methods that use these capabilities
 are enabled.
+
+### Production server
+
+The production server is CPU-only (8 vCPUs, VM2) and runs as the systemd unit
+`llama-server.service`, with the key in an `EnvironmentFile`
+(`LLAMA_API_KEY`) instead of on the command line:
+
+``` bash
+llama-server -hf Qwen/Qwen3-VL-8B-Instruct-GGUF:Q4_K_M --alias qwen3-vl-8b \
+  --host <internal address> --port 81 \
+  --parallel 2 --ctx-size 16384 --threads 8 --image-min-tokens 1024 --metrics
+```
+
+The unit lives on VM2, outside this repository, so the two sides must change
+together:
+
+- `max_concurrency` of `qwen3-vl-8b` in `providers-config.yaml` must equal
+  `--parallel`. With more requests than slots, the extra requests queue inside
+  llama-server, where the Toolbox's timeouts cannot see them.
+- `--ctx-size` is the **total** KV cache, divided among the slots: 16384 over 2
+  slots gives 8192 tokens per slot, which `page_max_tokens`, `judge_max_chars`
+  and `table_max_tokens` are sized for. More room per slot means a larger
+  `--ctx-size` and more RAM, not fewer slots. On this host, a larger cache,
+  or a second model loaded beside it, pushed the weights into swap and
+  stalled every request.
+
+The limiter is the queue. A request waits for a slot with no time limit, then
+gets `timeout_seconds` (600 s) at the server. With 2 slots, a request can wait
+behind two full generations before it starts. `table.recognize` makes 1 +
+`samples` sequential requests, each taking a slot. A client that disconnects
+does not free the slot until the server answers the request already running.
 
 ## Chemistry
 
