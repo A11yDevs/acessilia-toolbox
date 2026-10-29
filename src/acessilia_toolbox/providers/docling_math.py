@@ -152,7 +152,13 @@ class DoclingMathProvider:
         return {str(key): str(value) for key, value in data.items()}
 
     def _extract_formulas(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Extract LaTeX formulas from docling-serve response conforming to artifact/latex@1."""
+        """Extract LaTeX formulas from docling-serve response conforming to artifact/latex@1.
+
+        Note on math.recognize@1:
+            When multiple formulas are extracted from the document, the expressions are
+            concatenated with double newlines (``\\n\\n``) in ``latex``, while ``page``
+            and ``bbox`` anchor to the primary (first) detected formula.
+        """
         doc = raw.get("document") or {}
         json_content = doc.get("json_content") or {}
 
@@ -167,7 +173,7 @@ class DoclingMathProvider:
                     prov = (item.get("prov") or [{}])[0]
                     formulas.append({
                         "latex": latex,
-                        "confidence": item.get("confidence", 1.0),
+                        "confidence": item.get("confidence"),
                         "page": prov.get("page", 1) or prov.get("page_no", 1),
                         "bbox": prov.get("bbox", []),
                     })
@@ -181,30 +187,46 @@ class DoclingMathProvider:
                     prov = (item.get("prov") or [{}])[0]
                     formulas.append({
                         "latex": latex,
-                        "confidence": item.get("confidence", 1.0),
+                        "confidence": item.get("confidence"),
                         "page": prov.get("page", 1) or prov.get("page_no", 1),
                         "bbox": prov.get("bbox", []),
                     })
 
-        # If no explicit formula elements, fallback to raw text
+        # If no explicit formula elements, fallback to raw text if available
         if not formulas:
             raw_text = ""
             for item in json_content.get("texts", []):
                 text = (item.get("text") or "").strip()
                 if text:
                     raw_text += text + "\n"
-            return {"latex": raw_text.strip()}
+            raw_text = raw_text.strip()
+            if not raw_text:
+                raise ProviderExecutionError(
+                    "docling-serve found no mathematical formulas in the image",
+                    provider=self.descriptor.id,
+                )
+            return {"latex": raw_text}
 
-        latex_str = "\n\n".join(f["latex"] for f in formulas if f.get("latex"))
+        latex_str = "\n\n".join(f["latex"] for f in formulas if f.get("latex")).strip()
+        if not latex_str:
+            raise ProviderExecutionError(
+                "docling-serve found no mathematical formulas in the image",
+                provider=self.descriptor.id,
+            )
+
         primary = formulas[0]
-
         document_payload: dict[str, Any] = {
             "latex": latex_str,
         }
 
-        conf = primary.get("confidence")
-        if conf is not None:
-            document_payload["confidence"] = float(conf)
+        raw_conf = primary.get("confidence")
+        if raw_conf is not None:
+            try:
+                conf = float(raw_conf)
+                if 0.0 <= conf <= 1.0:
+                    document_payload["confidence"] = conf
+            except (ValueError, TypeError):
+                pass
 
         page = primary.get("page")
         if page is not None and isinstance(page, int) and page >= 1:
@@ -220,25 +242,34 @@ class DoclingMathProvider:
     def _bbox_values(bbox: Any) -> list[float]:
         """Normalize Docling dict/list coordinates to [left, top, right, bottom]."""
         if isinstance(bbox, dict):
-            left = bbox.get("l", bbox.get("left"))
-            top = bbox.get("t", bbox.get("top"))
-            right = bbox.get("r", bbox.get("right"))
-            bottom = bbox.get("b", bbox.get("bottom"))
-            if left is not None and top is not None and right is not None and bottom is not None:
-                return [
-                    float(min(left, right)),
-                    float(min(top, bottom)),
-                    float(max(left, right)),
-                    float(max(top, bottom)),
-                ]
+            raw_coords = (
+                bbox.get("l", bbox.get("left")),
+                bbox.get("t", bbox.get("top")),
+                bbox.get("r", bbox.get("right")),
+                bbox.get("b", bbox.get("bottom")),
+            )
+            if all(v is not None for v in raw_coords):
+                try:
+                    left_f, top_f, right_f, bottom_f = (float(v) for v in raw_coords if v is not None)
+                    return [
+                        min(left_f, right_f),
+                        min(top_f, bottom_f),
+                        max(left_f, right_f),
+                        max(top_f, bottom_f),
+                    ]
+                except (ValueError, TypeError):
+                    return []
         if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
-            values = [float(v) for v in bbox[:4]]
-            return [
-                min(values[0], values[2]),
-                min(values[1], values[3]),
-                max(values[0], values[2]),
-                max(values[1], values[3]),
-            ]
+            try:
+                values = [float(v) for v in bbox[:4]]
+                return [
+                    min(values[0], values[2]),
+                    min(values[1], values[3]),
+                    max(values[0], values[2]),
+                    max(values[1], values[3]),
+                ]
+            except (ValueError, TypeError):
+                return []
         return []
 
     @staticmethod

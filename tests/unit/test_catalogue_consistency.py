@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import jsonschema
 import pytest
@@ -199,7 +200,7 @@ def test_math_recognize_providers_conform_to_declared_schema(
     schema = json.loads(schema_file.read_text(encoding="utf-8"))
 
     # Simulated responses representing successful extractions from each sidecar backend:
-    simulated_responses = {
+    simulated_responses: dict[str, dict[str, Any]] = {
         "rapid-latex-ocr": {
             "latex": r"x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}",
             "confidence": 0.98,
@@ -228,15 +229,17 @@ def test_math_recognize_providers_conform_to_declared_schema(
     for binding in manifest.providers:
         descriptor = providers.get(binding.id)
         adapter = create_adapter(descriptor)
-        mock_data = simulated_responses[binding.id]
+        mock_data: dict[str, Any] = simulated_responses[binding.id]
 
-        def handler(request: httpx.Request, data=mock_data) -> httpx.Response:
+        def handler(request: httpx.Request, data: dict[str, Any] = mock_data) -> httpx.Response:
             if request.url.path == "/version":
                 return httpx.Response(200, json={"version": "1.0.0"})
             return httpx.Response(200, json=data)
 
         transport = httpx.MockTransport(handler)
-        adapter._client = lambda timeout=None, t=transport, url=adapter.base_url: httpx.Client(  # type: ignore[method-assign]
+        adapter_any = cast(Any, adapter)
+        base_url = adapter_any.base_url
+        adapter_any._client = lambda timeout=None, t=transport, url=base_url: httpx.Client(
             transport=t, base_url=url
         )
 

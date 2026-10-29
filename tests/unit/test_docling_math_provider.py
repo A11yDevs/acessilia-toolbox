@@ -129,7 +129,7 @@ class TestDoclingMathProvider:
 
         jsonschema.validate(instance=extraction.document, schema=schema)
 
-    def test_empty_response_returns_empty_latex(self) -> None:
+    def test_empty_response_raises_when_no_formulas_or_text(self) -> None:
         empty = dict(SAMPLE_RESPONSE)
         empty["document"]["json_content"]["groups"] = []
         empty["document"]["json_content"]["texts"] = []
@@ -139,8 +139,29 @@ class TestDoclingMathProvider:
                 return httpx.Response(200, json={"docling-serve": "1.32.0"})
             return httpx.Response(200, json=empty)
 
+        with pytest.raises(ProviderExecutionError, match="found no mathematical formulas"):
+            extract(provider_with(handler))
+
+    def test_fallback_to_plain_text_conforms_to_schema(self) -> None:
+        schema_path = Path(__file__).parents[2] / "schemas" / "latex@1.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+        response = dict(SAMPLE_RESPONSE)
+        response["document"]["json_content"]["groups"] = []
+        response["document"]["json_content"]["texts"] = [
+            {"text": "a^2 + b^2 = c^2"}
+        ]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/version":
+                return httpx.Response(200, json={"docling-serve": "1.32.0"})
+            return httpx.Response(200, json=response)
+
         extraction = extract(provider_with(handler))
-        assert extraction.document == {"latex": ""}
+        assert extraction.document["latex"] == "a^2 + b^2 = c^2"
+        assert "confidence" not in extraction.document
+        assert "bbox" not in extraction.document
+        jsonschema.validate(instance=extraction.document, schema=schema)
 
     def test_timeout_raises_provider_error(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
