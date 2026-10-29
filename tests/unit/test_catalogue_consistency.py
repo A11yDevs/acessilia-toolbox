@@ -11,8 +11,10 @@ These tests encode the invariants so the three layers cannot drift again.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import jsonschema
 import pytest
 
 from acessilia_toolbox.core.capability import CapabilityRegistry
@@ -23,6 +25,7 @@ from acessilia_toolbox.providers import ADAPTERS, create_adapter
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CAPABILITIES_DIR = PROJECT_ROOT / "capabilities"
 PROVIDERS_CONFIG = PROJECT_ROOT / "providers-config.yaml"
+SCHEMAS_DIR = PROJECT_ROOT / "schemas"
 
 # Transport-level capabilities the provider registry tracks but that are not
 # public capabilities: the gateway uses them internally. They are also the only
@@ -178,3 +181,73 @@ def test_provider_records_the_capability_the_manifest_claims(
         f"providers bound by a manifest without declaring the capability: "
         f"{asymmetric}"
     )
+
+
+def test_math_recognize_providers_conform_to_declared_schema(
+    capabilities: CapabilityRegistry, providers: ProviderRegistry
+) -> None:
+    """Every provider bound to math.recognize must return a document conforming to artifact/latex@1.
+
+    Guards against contract drift (issue #90) where providers return divergent shapes.
+    """
+    import httpx
+
+    manifest = capabilities.get("math.recognize")
+    schema_ref = manifest.output.schema_ref
+    name, _, version = schema_ref.partition("@")
+    schema_file = SCHEMAS_DIR / f"{name.split('/')[-1]}@{version}.json"
+    schema = json.loads(schema_file.read_text(encoding="utf-8"))
+
+    # Simulated responses representing successful extractions from each sidecar backend:
+    simulated_responses = {
+        "rapid-latex-ocr": {
+            "latex": r"x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}",
+            "confidence": 0.98,
+            "bbox": [10, 20, 210, 50],
+        },
+        "pp-formulanet": {
+            "latex": r"A=\begin{pmatrix}a&b\\c&d\end{pmatrix}",
+            "bbox": [10, 20, 210, 50],
+        },
+        "docling-math": {
+            "document": {
+                "json_content": {
+                    "groups": [
+                        {
+                            "label": {"value": "formula"},
+                            "text": r"E = mc^2",
+                            "confidence": 0.95,
+                            "prov": [{"page": 1, "bbox": [50, 50, 500, 100]}],
+                        }
+                    ]
+                }
+            }
+        },
+    }
+
+    for binding in manifest.providers:
+        descriptor = providers.get(binding.id)
+        adapter = create_adapter(descriptor)
+        mock_data = simulated_responses[binding.id]
+
+        def handler(request: httpx.Request, data=mock_data) -> httpx.Response:
+            if request.url.path == "/version":
+                return httpx.Response(200, json={"version": "1.0.0"})
+            return httpx.Response(200, json=data)
+
+        transport = httpx.MockTransport(handler)
+        adapter._client = lambda timeout=None, t=transport, url=adapter.base_url: httpx.Client(  # type: ignore[method-assign]
+            transport=t, base_url=url
+        )
+
+        extraction = adapter.execute(
+            "math.recognize",
+            b"fake-image-bytes",
+            filename="formula.png",
+            media_type="image/png",
+        )
+
+        jsonschema.validate(instance=extraction.document, schema=schema)
+        assert isinstance(extraction.document.get("latex"), str)
+        assert len(extraction.document["latex"]) > 0
+

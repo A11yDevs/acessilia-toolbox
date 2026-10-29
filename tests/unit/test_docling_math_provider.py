@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import httpx
+import jsonschema
 import pytest
 
 from acessilia_toolbox.core.errors import (
@@ -110,40 +114,22 @@ def extract(adapter: DoclingMathProvider):
 
 
 class TestDoclingMathProvider:
-    def test_extraction_returns_formulas(self) -> None:
+    def test_extraction_returns_latex_and_conforms_to_schema(self) -> None:
+        schema_path = Path(__file__).parents[2] / "schemas" / "latex@1.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
         extraction = extract(provider_with(convert_handler))
 
         assert extraction.backend == "docling"
         assert extraction.version == "1.32.0"
-        assert extraction.document["formula_count"] == 2
+        assert extraction.document["latex"] == "E = mc^2\n\n\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}"
+        assert extraction.document["confidence"] == 0.95
+        assert extraction.document["page"] == 1
+        assert extraction.document["bbox"] == [50.0, 50.0, 500.0, 100.0]
 
-    def test_formulas_contain_latex(self) -> None:
-        extraction = extract(provider_with(convert_handler))
-        formulas = extraction.document["formulas"]
+        jsonschema.validate(instance=extraction.document, schema=schema)
 
-        assert formulas[0]["latex"] == r"E = mc^2"
-        assert formulas[1]["latex"] == r"\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"
-
-    def test_formulas_have_confidence_and_page(self) -> None:
-        extraction = extract(provider_with(convert_handler))
-        formulas = extraction.document["formulas"]
-
-        assert formulas[0]["confidence"] == 0.95
-        assert formulas[0]["page"] == 1
-        assert formulas[1]["page"] == 2
-
-    def test_formulas_have_bbox(self) -> None:
-        extraction = extract(provider_with(convert_handler))
-        formulas = extraction.document["formulas"]
-
-        assert len(formulas[0]["bbox"]) == 4
-
-    def test_raw_text_fallback(self) -> None:
-        extraction = extract(provider_with(convert_handler))
-
-        assert "E = mc^2" in extraction.document["raw_text"]
-
-    def test_empty_response_returns_no_formulas(self) -> None:
+    def test_empty_response_returns_empty_latex(self) -> None:
         empty = dict(SAMPLE_RESPONSE)
         empty["document"]["json_content"]["groups"] = []
         empty["document"]["json_content"]["texts"] = []
@@ -154,8 +140,7 @@ class TestDoclingMathProvider:
             return httpx.Response(200, json=empty)
 
         extraction = extract(provider_with(handler))
-        assert extraction.document["formula_count"] == 0
-        assert extraction.document["formulas"] == []
+        assert extraction.document == {"latex": ""}
 
     def test_timeout_raises_provider_error(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -230,5 +215,7 @@ class TestDoclingMathProvider:
             return httpx.Response(200, json=response)
 
         extraction = extract(provider_with(handler))
-        assert extraction.document["formula_count"] == 1
-        assert extraction.document["formulas"][0]["latex"] == "x = y"
+        assert extraction.document["latex"] == "x = y"
+        assert extraction.document["confidence"] == 0.9
+        assert extraction.document["page"] == 1
+        assert extraction.document["bbox"] == [0.0, 0.0, 100.0, 50.0]

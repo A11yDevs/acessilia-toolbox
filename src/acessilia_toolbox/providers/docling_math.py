@@ -152,12 +152,7 @@ class DoclingMathProvider:
         return {str(key): str(value) for key, value in data.items()}
 
     def _extract_formulas(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Extract LaTeX formulas from docling-serve response.
-
-        Returns a dict with:
-        - formulas: list of {latex, confidence, page, bbox}
-        - raw_text: full text content as fallback
-        """
+        """Extract LaTeX formulas from docling-serve response conforming to artifact/latex@1."""
         doc = raw.get("document") or {}
         json_content = doc.get("json_content") or {}
 
@@ -191,18 +186,60 @@ class DoclingMathProvider:
                         "bbox": prov.get("bbox", []),
                     })
 
-        # Collect raw text as fallback
-        raw_text = ""
-        for item in json_content.get("texts", []):
-            text = (item.get("text") or "").strip()
-            if text:
-                raw_text += text + "\n"
+        # If no explicit formula elements, fallback to raw text
+        if not formulas:
+            raw_text = ""
+            for item in json_content.get("texts", []):
+                text = (item.get("text") or "").strip()
+                if text:
+                    raw_text += text + "\n"
+            return {"latex": raw_text.strip()}
 
-        return {
-            "formulas": formulas,
-            "raw_text": raw_text.strip(),
-            "formula_count": len(formulas),
+        latex_str = "\n\n".join(f["latex"] for f in formulas if f.get("latex"))
+        primary = formulas[0]
+
+        document_payload: dict[str, Any] = {
+            "latex": latex_str,
         }
+
+        conf = primary.get("confidence")
+        if conf is not None:
+            document_payload["confidence"] = float(conf)
+
+        page = primary.get("page")
+        if page is not None and isinstance(page, int) and page >= 1:
+            document_payload["page"] = page
+
+        bbox = self._bbox_values(primary.get("bbox"))
+        if len(bbox) == 4:
+            document_payload["bbox"] = bbox
+
+        return document_payload
+
+    @staticmethod
+    def _bbox_values(bbox: Any) -> list[float]:
+        """Normalize Docling dict/list coordinates to [left, top, right, bottom]."""
+        if isinstance(bbox, dict):
+            left = bbox.get("l", bbox.get("left"))
+            top = bbox.get("t", bbox.get("top"))
+            right = bbox.get("r", bbox.get("right"))
+            bottom = bbox.get("b", bbox.get("bottom"))
+            if left is not None and top is not None and right is not None and bottom is not None:
+                return [
+                    float(min(left, right)),
+                    float(min(top, bottom)),
+                    float(max(left, right)),
+                    float(max(top, bottom)),
+                ]
+        if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+            values = [float(v) for v in bbox[:4]]
+            return [
+                min(values[0], values[2]),
+                min(values[1], values[3]),
+                max(values[0], values[2]),
+                max(values[1], values[3]),
+            ]
+        return []
 
     @staticmethod
     def _get_label(item: dict[str, Any]) -> str:
