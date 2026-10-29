@@ -250,7 +250,11 @@ class DoclingMathProvider:
             )
             if all(v is not None for v in raw_coords):
                 try:
-                    left_f, top_f, right_f, bottom_f = (float(v) for v in raw_coords if v is not None)
+                    left, top, right, bottom = raw_coords
+                    assert left is not None and top is not None
+                    assert right is not None and bottom is not None
+                    left_f, top_f = float(left), float(top)
+                    right_f, bottom_f = float(right), float(bottom)
                     return [
                         min(left_f, right_f),
                         min(top_f, bottom_f),
