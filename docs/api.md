@@ -141,28 +141,41 @@ own OpenAI-compatible client here instead of at the model server, so that:
   `TOOLBOX_API_KEY`.
 
 The body's `model` is the provider id; the Toolbox replaces it with the
-provider's `config.model` and sends the provider's `api_key`. The request
-waits for a free slot, then the server's answer, streamed when the body sets
-`"stream": true`, is returned with its status. A client that disconnects
-frees its slot, and the upstream connection is closed so the server stops
-generating.
+provider's `config.model` and sends the provider's `api_key`. The response
+streams as server-sent events only when the body sets `"stream": true`; any
+other `stream` value is sent to the server as `false`.
 
-| Status | Meaning |
-|--------|---------|
-| 400 | Body is not a JSON object with a string `model`, or the provider is not an OpenAI-compatible VLM (server 400s are relayed as they are) |
-| 401 | Missing or invalid `TOOLBOX_API_KEY` |
-| 404 | `model` names no provider |
-| 502 | The model server rejected the Toolbox's own key |
-| 503 | The model server is unreachable |
-| 504 | The model server did not answer within the provider's `timeout_seconds` |
+The request waits for a free slot for at most the provider's
+`timeout_seconds`, then gets the same bound at the server, so the worst case
+is twice that. The gateway takes a slot without queueing behind a capability
+already blocked on the same limiter, so under heavy gateway load a capability
+may wait longer for its turn. A client that disconnects, while waiting or
+during the generation, frees its slot, and the upstream connection is closed
+so the server stops generating.
 
-With the Agno/OpenAI client of the core, for example:
+Only bodies from the model server are OpenAI-shaped (`{"error": {...}}` for
+its errors) and are relayed with their status. Errors raised by the Toolbox
+itself use the Toolbox envelope (`{"code", "message", "details"}`, see
+[Errors](#errors)); the OpenAI SDK reads the message from either.
+
+| Status | Source | Meaning |
+|--------|--------|---------|
+| 400 | Toolbox | Body is not a JSON object with a string `model`, or the provider is not an OpenAI-compatible VLM |
+| 401 | Toolbox | Missing or invalid `TOOLBOX_API_KEY` |
+| 404 | Toolbox | `model` names no provider |
+| 499 | Toolbox | The client disconnected; it never sees this status, which only appears in access logs |
+| 502 | Toolbox | The model server rejected the Toolbox's own key |
+| 503 | Toolbox | The model server is unreachable |
+| 504 | Toolbox | No free slot, or no answer from the model server, within the provider's `timeout_seconds` |
+| any other | Model server | Relayed as is, for example a 400 for a request larger than the context window |
+
+The core uses it with its `toolbox` client:
 
 ``` bash
-AI_CLIENT=openrouter
-OPENROUTER_BASE_URL=http://toolbox:8002/v1/vlm/chat/completions
-OPENROUTER_API_KEY=<TOOLBOX_API_KEY>
-OPENROUTER_MODEL=qwen3-vl-8b
+AI_CLIENT=toolbox
+TOOLBOX_BASE_URL=http://toolbox:8002
+TOOLBOX_API_KEY=<TOOLBOX_API_KEY>
+TOOLBOX_VLM_PROVIDER=qwen3-vl-8b
 ```
 
 ## Execution request

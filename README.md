@@ -222,6 +222,7 @@ flowchart TB
 | `GET` | `/v1/health` | Service status |
 | `GET` | `/v1/capabilities` | List capabilities |
 | `POST` | `/v1/capabilities/{id}:execute` | Execute a capability |
+| `POST` | `/v1/vlm/chat/completions` | OpenAI-compatible chat relay to a VLM provider, under its concurrency limit |
 | `GET` | `/v1/providers` | List providers |
 | `POST` | `/v1/artifacts` | Store content |
 | `GET` | `/v1/artifacts/{id}` | Retrieve content |

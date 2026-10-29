@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 from typing import Annotated, Any, TypeVar
 
@@ -29,6 +29,7 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.background import BackgroundTask
 
 from acessilia_toolbox.api.auth import require_api_key
+from acessilia_toolbox.api.rest import ERROR_RESPONSES, providers
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
     ProviderExecutionError,
@@ -51,6 +52,38 @@ POLL_SECONDS = 0.5
 # Status a disconnected client never sees; it only ends the request.
 CLIENT_CLOSED_REQUEST = 499
 
+GATEWAY_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "The server's chat completion, relayed as is; server-sent "
+        "events when the body sets stream",
+        "content": {"application/json": {}, "text/event-stream": {}},
+    },
+    **{status: ERROR_RESPONSES[status] for status in (400, 404, 502, 503, 504)},
+    CLIENT_CLOSED_REQUEST: {"description": "The client disconnected; it never sees this status"},
+}
+
+CHAT_REQUEST_BODY: dict[str, Any] = {
+    "requestBody": {
+        "required": True,
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "description": "OpenAI chat-completions request, relayed as is "
+                    "except for model",
+                    "required": ["model", "messages"],
+                    "properties": {
+                        "model": {"type": "string", "description": "VLM provider id"},
+                        "messages": {"type": "array", "items": {"type": "object"}},
+                        "stream": {"type": "boolean", "default": False},
+                    },
+                    "additionalProperties": True,
+                }
+            }
+        },
+    }
+}
+
 T = TypeVar("T")
 
 
@@ -58,12 +91,7 @@ class _ClientDisconnectedError(Exception):
     pass
 
 
-def providers(request: Request) -> ProviderRegistry:
-    registry: ProviderRegistry = request.app.state.providers
-    return registry
-
-
-@vlm_router.post("/chat/completions")
+@vlm_router.post("/chat/completions", responses=GATEWAY_RESPONSES, openapi_extra=CHAT_REQUEST_BODY)
 async def chat_completions(
     request: Request,
     registry: Annotated[ProviderRegistry, Depends(providers)],
@@ -83,49 +111,59 @@ async def chat_completions(
         )
     body["model"] = adapter.config["model"]
     stream = body.get("stream") is True
+    if "stream" in body:
+        # The server would stream a truthy non-boolean that the relay buffers.
+        body["stream"] = stream
 
-    if not await _acquire(adapter.slots, request):
+    if not await _acquire(adapter, request):
         return Response(status_code=CLIENT_CLOSED_REQUEST)
     release = _once(adapter.slots.release)
-    client = adapter.async_client()
+    try:
+        client = adapter.async_client()
+    except BaseException:
+        release()
+        raise
+
+    async def discard() -> None:
+        try:
+            await client.aclose()
+        finally:
+            release()
+
     try:
         upstream = await _unless_disconnected(
             request, client.send(client.build_request("POST", CHAT_PATH, json=body), stream=stream)
         )
         _reject_credentials(upstream, adapter)
     except _ClientDisconnectedError:
-        await client.aclose()
-        release()
+        await discard()
         return Response(status_code=CLIENT_CLOSED_REQUEST)
     except httpx.TimeoutException as exc:
-        await client.aclose()
-        release()
+        await discard()
         raise ProviderTimeoutError(
             f"{adapter.descriptor.id} did not answer within {adapter.descriptor.timeout_seconds}s",
             provider=adapter.descriptor.id,
         ) from exc
     except httpx.RequestError as exc:
-        await client.aclose()
-        release()
+        await discard()
         raise ProviderUnavailableError(
             f"{adapter.descriptor.id} is not reachable at {adapter.base_url}: {exc}",
             provider=adapter.descriptor.id,
         ) from exc
     except BaseException:
-        await client.aclose()
-        release()
+        await discard()
         raise
 
     media_type = upstream.headers.get("content-type")
     if not stream:
-        await client.aclose()
-        release()
+        await discard()
         return Response(upstream.content, upstream.status_code, media_type=media_type)
 
     async def close() -> None:
-        await upstream.aclose()
-        await client.aclose()
-        release()
+        try:
+            await upstream.aclose()
+        finally:
+            await discard()
 
     async def relay() -> AsyncIterator[bytes]:
         try:
@@ -144,27 +182,43 @@ async def chat_completions(
     )
 
 
-async def _acquire(slots: threading.BoundedSemaphore, request: Request) -> bool:
-    """Wait for a slot without blocking the event loop; False if the client left."""
-    while not slots.acquire(blocking=False):
+async def _acquire(adapter: OpenAiCompatibleVlmProvider, request: Request) -> bool:
+    """Wait for a slot without blocking the event loop; False if the client left.
+
+    The wait is bounded by the provider's ``timeout_seconds``. A non-blocking
+    acquire does not queue behind a capability thread blocked on the same
+    semaphore, so under load the gateway may take a slot first.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + adapter.descriptor.timeout_seconds
+    while not adapter.slots.acquire(blocking=False):
         if await request.is_disconnected():
             return False
+        if loop.time() >= deadline:
+            raise ProviderTimeoutError(
+                f"{adapter.descriptor.id} had no free slot within "
+                f"{adapter.descriptor.timeout_seconds}s",
+                provider=adapter.descriptor.id,
+            )
         await asyncio.sleep(POLL_SECONDS)
     return True
 
 
 async def _unless_disconnected(request: Request, call: Awaitable[T]) -> T:
-    """Await ``call``, cancelling it if the client disconnects first."""
+    """Await ``call``, cancelling it if the client disconnects or the request is cancelled."""
     task = asyncio.ensure_future(call)
-    while True:
-        done, _ = await asyncio.wait({task}, timeout=POLL_SECONDS)
-        if done:
-            return task.result()
-        if await request.is_disconnected():
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=POLL_SECONDS)
+            if done:
+                return task.result()
+            if await request.is_disconnected():
+                raise _ClientDisconnectedError
+    finally:
+        if not task.done():
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
-            raise _ClientDisconnectedError
 
 
 def _reject_credentials(upstream: httpx.Response, adapter: OpenAiCompatibleVlmProvider) -> None:
@@ -179,7 +233,7 @@ def _reject_credentials(upstream: httpx.Response, adapter: OpenAiCompatibleVlmPr
         )
 
 
-def _once(release: Any) -> Any:
+def _once(release: Callable[[], None]) -> Callable[[], None]:
     lock = threading.Lock()
     released = False
 
