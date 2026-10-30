@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from time import perf_counter
+from threading import Lock
+from time import monotonic, perf_counter
 from typing import Any
 
 import httpx
@@ -15,6 +17,7 @@ from acessilia_toolbox.core.errors import (
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
+from acessilia_toolbox.core.fingerprint import fingerprint_parameters
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
@@ -27,6 +30,12 @@ VERSION_PATH = "/version"
 # describe the artifacts that produced a result, so only these enter provenance
 # and the cache key.
 VERSION_KEYS = ("version", "engine_version")
+VERSION_TTL_SECONDS = 30.0
+VERSION_RETRY_SECONDS = 5.0
+_VERSION_CACHE_LIMIT = 128
+_VERSION_CACHE: OrderedDict[tuple[str, str, str, str], tuple[float, dict[str, str]]] = OrderedDict()
+_VERSION_REFRESHING: set[tuple[str, str, str, str]] = set()
+_VERSION_LOCK = Lock()
 
 
 class RapidOcrOrientProvider:
@@ -56,7 +65,7 @@ class RapidOcrOrientProvider:
 
         with self._client() as client:
             raw = self._orient(client, payload, filename, media_type, parameters)
-            reported_versions = self._server_versions(client)
+        reported_versions = self._reported_versions()
 
         completed_at = datetime.now(UTC)
         duration_ms = int((perf_counter() - started_clock) * 1000)
@@ -158,15 +167,7 @@ class RapidOcrOrientProvider:
         return result
 
     def versions(self) -> dict[str, str]:
-        try:
-            with self._client(timeout=5.0) as client:
-                reported = self._server_versions(client)
-        except Exception:
-            # The executor tolerates version failures; the declared version is
-            # then the only identity available for the cache key.
-            LOG.debug("rapidocr-orient version probe failed", exc_info=True)
-            reported = {}
-
+        reported = self._reported_versions()
         server_version = (
             reported.get("engine_version")
             or reported.get("version")
@@ -177,14 +178,64 @@ class RapidOcrOrientProvider:
             **reported,
         }
 
+    def _reported_versions(self) -> dict[str, str]:
+        """Memoize across adapters; failed refreshes retain the last good identity.
+
+        The lock only guards the cache, never the probe: while one request
+        refreshes an expired entry, the others keep the last good value instead
+        of waiting on a slow or unreachable ``/version``. The cache is bounded
+        and keyed by deployment/configuration, so separate deployments cannot
+        share versions. Orientation still runs on every auto-rotate request;
+        only the metadata probe is memoized. Before the first success, declared
+        versions apply.
+        """
+        key = (
+            self.descriptor.id, self.base_url, self.descriptor.version,
+            fingerprint_parameters(self.descriptor.config),
+        )
+        with _VERSION_LOCK:
+            previous = _VERSION_CACHE.get(key)
+            if previous is not None and (
+                monotonic() < previous[0] or key in _VERSION_REFRESHING
+            ):
+                _VERSION_CACHE.move_to_end(key)
+                return dict(previous[1])
+            _VERSION_REFRESHING.add(key)
+        try:
+            try:
+                with self._client(timeout=5.0) as client:
+                    reported: dict[str, str] | None = self._server_versions(client)
+            except Exception:
+                LOG.debug("rapidocr-orient version probe failed", exc_info=True)
+                reported = None
+        finally:
+            with _VERSION_LOCK:
+                _VERSION_REFRESHING.discard(key)
+        with _VERSION_LOCK:
+            # A server answering without version fields is a valid answer, not
+            # a failure: it keeps the full TTL instead of retrying every 5 s.
+            ttl = VERSION_TTL_SECONDS
+            if reported is None:
+                current = _VERSION_CACHE.get(key, previous)
+                reported = dict(current[1]) if current is not None else {}
+                ttl = VERSION_RETRY_SECONDS
+            _VERSION_CACHE[key] = (monotonic() + ttl, dict(reported))
+            _VERSION_CACHE.move_to_end(key)
+            while len(_VERSION_CACHE) > _VERSION_CACHE_LIMIT:
+                _VERSION_CACHE.popitem(last=False)
+            return dict(reported)
+
     def _server_versions(self, client: httpx.Client) -> dict[str, str]:
-        """Version fields the server reports, filtered to artifact identity."""
+        """Version fields the server reports, filtered to artifact identity.
+
+        Raises when the probe fails, so failure is distinct from a server that
+        answers without reporting any version field.
+        """
         response = client.get(VERSION_PATH)
-        if response.status_code != 200:
-            return {}
+        response.raise_for_status()
         data = response.json()
         if not isinstance(data, dict):
-            return {}
+            raise ValueError(f"/version returned {type(data).__name__}; expected an object")
         return {k: str(v) for k, v in data.items() if k in VERSION_KEYS}
 
     def health(self) -> ProviderHealth:

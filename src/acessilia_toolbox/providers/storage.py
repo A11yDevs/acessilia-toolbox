@@ -28,6 +28,7 @@ from acessilia_toolbox.core.provider import ProviderDescriptor
 METADATA_SUFFIX = ".meta.json"
 LOG = logging.getLogger(__name__)
 T = TypeVar("T")
+FALLBACK_MODES = frozenset({"disabled", "local", "shared"})
 
 
 def _atomic_write(target: Path, payload: bytes) -> None:
@@ -237,13 +238,23 @@ class S3ArtifactStore:
 
 
 class FailoverArtifactStore:
-    """Write to a local backup during S3 outages; read from either backend."""
+    """Read from either backend; fallback writes require an explicit policy.
+
+    ``shared`` declares a backup visible to every replica. ``local`` is for
+    single-instance deployments and offers no cross-host availability.
+    ``disabled`` preserves backup reads but propagates primary write failures.
+    """
 
     backend = "failover"
 
-    def __init__(self, primary: ArtifactStore, fallback: ArtifactStore) -> None:
+    def __init__(
+        self, primary: ArtifactStore, fallback: ArtifactStore, *, fallback_mode: str = "disabled"
+    ) -> None:
+        if fallback_mode not in FALLBACK_MODES:
+            raise ConfigurationError("artifact fallback mode must be disabled, local or shared")
         self.primary = primary
         self.fallback = fallback
+        self.fallback_mode = fallback_mode
 
     def put(
         self,
@@ -255,6 +266,9 @@ class FailoverArtifactStore:
         try:
             return self.primary.put(payload, media_type=media_type, filename=filename)
         except ProviderUnavailableError as exc:
+            if self.fallback_mode == "disabled":
+                LOG.warning("primary artifact store unavailable; fallback writes disabled: %s", exc)
+                raise
             LOG.warning("primary artifact store unavailable; writing to fallback: %s", exc)
             return self.fallback.put(payload, media_type=media_type, filename=filename)
 

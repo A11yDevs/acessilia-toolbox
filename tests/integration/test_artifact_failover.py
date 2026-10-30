@@ -7,12 +7,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Event, Thread
 from time import monotonic
+from unittest.mock import Mock
 
 import pytest
+from fastapi.testclient import TestClient
 
-from acessilia_toolbox.core.errors import ProviderUnavailableError
+from acessilia_toolbox.api.app import create_app
+from acessilia_toolbox.core.artifact import NullCache
+from acessilia_toolbox.core.errors import ArtifactNotFoundError, ProviderUnavailableError
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
-from acessilia_toolbox.core.provider import ProviderDescriptor
+from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers.storage import (
     FailoverArtifactStore,
     FilesystemArtifactStore,
@@ -20,6 +24,61 @@ from acessilia_toolbox.providers.storage import (
 )
 
 pytestmark = pytest.mark.integration
+
+
+def test_filesystem_only_api_keeps_artifact_uploads_available(tmp_path, monkeypatch):
+    from acessilia_toolbox.api import auth
+
+    monkeypatch.setattr(auth, "TOOLBOX_API_KEY", "storage-test")
+    monkeypatch.delenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", raising=False)
+    app = create_app(providers=ProviderRegistry([ProviderDescriptor(
+        id="filesystem", transport="in_process", capabilities=["artifact.store"],
+        config={"root": str(tmp_path)},
+    )]))
+    with TestClient(app, headers={"Authorization": "Bearer storage-test"}) as client:
+        response = client.post(
+            "/v1/artifacts", files={"file": ("sample.txt", b"content", "text/plain")}
+        )
+        assert response.status_code == 200
+        downloaded = client.get(f"/v1/artifacts/{response.json()['artifact_id']}")
+        assert downloaded.status_code == 200
+        assert downloaded.content == b"content"
+
+
+@pytest.mark.parametrize("shared", [False, True], ids=["private-disks", "shared-volume"])
+def test_two_replicas_during_primary_outage(tmp_path: Path, shared: bool) -> None:
+    primary = Mock()
+    for method in (primary.put, primary.get, primary.stat, primary.exists):
+        method.side_effect = ProviderUnavailableError("S3 offline")
+    roots = [tmp_path / "shared"] * 2 if shared else [tmp_path / "a", tmp_path / "b"]
+    stores = [
+        FailoverArtifactStore(
+            primary, FilesystemArtifactStore(root),
+            fallback_mode="shared" if shared else "disabled",
+        )
+        for root in roots
+    ]
+    apps = [
+        create_app(providers=ProviderRegistry(), store=store, cache=NullCache())
+        for store in stores
+    ]
+    with TestClient(apps[0]) as a:
+        response = a.post("/v1/artifacts", files={"file": ("sample.txt", b"content", "text/plain")})
+    # The producing application is stopped before the second replica reads.
+    with TestClient(apps[1]) as b:
+        if not shared:
+            assert response.status_code == 503
+            assert not list(tmp_path.rglob("*.meta.json"))
+            return
+        assert response.status_code == 200
+        artifact_id = response.json()["artifact_id"]
+        downloaded = b.get(f"/v1/artifacts/{artifact_id}")
+        assert downloaded.status_code == 200
+        assert downloaded.content == b"content"
+        assert fingerprint_bytes(downloaded.content) == artifact_id
+        # The primary recovers but has no object: fallback remains readable.
+        primary.stat.side_effect = primary.get.side_effect = ArtifactNotFoundError("not in S3")
+        assert b.get(f"/v1/artifacts/{artifact_id}").content == b"content"
 
 
 def test_unreachable_s3_endpoint_uses_filesystem(tmp_path: Path) -> None:
@@ -34,7 +93,7 @@ def test_unreachable_s3_endpoint_uses_filesystem(tmp_path: Path) -> None:
     )
     primary = S3ArtifactStore(descriptor)
     store = FailoverArtifactStore(
-        primary, FilesystemArtifactStore(tmp_path / "backup")
+        primary, FilesystemArtifactStore(tmp_path / "backup"), fallback_mode="local"
     )
 
     ref = store.put(b"stored during outage", media_type="text/plain")
@@ -86,7 +145,9 @@ def test_stalled_s3_uses_filesystem_before_client_timeout(
             config={"access_key": "test", "secret_key": "test"},
         )
     )
-    store = FailoverArtifactStore(primary, FilesystemArtifactStore(tmp_path / "backup"))
+    store = FailoverArtifactStore(
+        primary, FilesystemArtifactStore(tmp_path / "backup"), fallback_mode="local"
+    )
 
     started = monotonic()
     ref = store.put(b"stored despite stalled S3", media_type="text/plain", filename="test.txt")

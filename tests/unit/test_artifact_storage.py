@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -173,7 +174,7 @@ def test_runtime_failover_preserves_artifacts_after_recovery(tmp_path: Path) -> 
     primary.bucket = "test"
     primary._client = client
     backup = FilesystemArtifactStore(tmp_path / "backup")
-    store = FailoverArtifactStore(primary, backup)
+    store = FailoverArtifactStore(primary, backup, fallback_mode="local")
 
     original = store.put(b"before outage", media_type="text/plain")
     assert original.storage_backend == "s3"
@@ -197,7 +198,42 @@ def test_runtime_failover_preserves_artifacts_after_recovery(tmp_path: Path) -> 
         store.get(fingerprint_bytes(b"unknown"))
 
 
-def test_store_factory_keeps_filesystem_as_runtime_backup(tmp_path: Path) -> None:
+def test_default_outage_policy_does_not_publish_replica_local_artifacts(tmp_path: Path) -> None:
+    client = FakeS3Client()
+    client.available = False
+    primary = object.__new__(S3ArtifactStore)
+    primary.bucket = "test"
+    primary._client = client
+    backups = [FilesystemArtifactStore(tmp_path / name) for name in ("replica-a", "replica-b")]
+    replicas = [FailoverArtifactStore(primary, backup) for backup in backups]
+
+    for replica in replicas:
+        with pytest.raises(ProviderUnavailableError):
+            replica.put(PAYLOAD)
+    assert all(not backup.exists(fingerprint_bytes(PAYLOAD)) for backup in backups)
+
+
+def test_disabled_fallback_writes_preserve_existing_backup_reads(tmp_path: Path) -> None:
+    client = FakeS3Client()
+    primary = object.__new__(S3ArtifactStore)
+    primary.bucket = "test"
+    primary._client = client
+    backup = FilesystemArtifactStore(tmp_path)
+    ref = backup.put(PAYLOAD, filename="saved.pdf")
+    store = FailoverArtifactStore(primary, backup)
+    # Both a missing primary object and an outage must still permit backup reads.
+    for available in (True, False):
+        client.available = available
+        assert store.get(ref.artifact_id) == PAYLOAD
+        assert store.stat(ref.artifact_id).filename == "saved.pdf"
+        assert store.exists(ref.artifact_id)
+
+
+@pytest.mark.parametrize("mode", ["disabled", "local", "shared"])
+def test_store_factory_keeps_filesystem_as_runtime_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    monkeypatch.setenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", mode)
     providers = ProviderRegistry(
         [
             ProviderDescriptor.model_validate(
@@ -225,6 +261,38 @@ def test_store_factory_keeps_filesystem_as_runtime_backup(tmp_path: Path) -> Non
     assert isinstance(selected, FailoverArtifactStore)
     assert isinstance(selected.primary, S3ArtifactStore)
     assert isinstance(selected.fallback, FilesystemArtifactStore)
+    assert selected.fallback_mode == mode
+
+
+def test_invalid_fallback_policy_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", "typo")
+    with pytest.raises(ConfigurationError, match="FALLBACK_MODE"):
+        _store_from(ProviderRegistry())
+
+
+@pytest.mark.parametrize("mode", ["disabled", "local", "shared"])
+@pytest.mark.parametrize("unresolved_s3", [False, True])
+def test_filesystem_only_store_remains_primary_in_every_fallback_mode(
+    tmp_path, monkeypatch, caplog, mode, unresolved_s3
+):
+    monkeypatch.setenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", mode)
+    registry = ProviderRegistry([ProviderDescriptor(
+        id="filesystem", transport="in_process", capabilities=["artifact.store"],
+        config={"root": str(tmp_path)},
+    )])
+    if unresolved_s3:
+        registry.register(ProviderDescriptor(
+            id="minio", transport="s3", capabilities=["artifact.store"],
+            endpoint="${UNCONFIGURED_MINIO}",
+        ))
+    with caplog.at_level(logging.WARNING):
+        selected = _store_from(registry)
+    assert isinstance(selected, FilesystemArtifactStore)
+    warning = "S3 artifact store is declared" if unresolved_s3 else "no S3 artifact store"
+    assert warning in caplog.text
+    assert "shared mount" in caplog.text
+    ref = selected.put(PAYLOAD)
+    assert selected.get(ref.artifact_id) == PAYLOAD
 
 
 @pytest.mark.parametrize(
