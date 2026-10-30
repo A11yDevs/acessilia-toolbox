@@ -495,6 +495,21 @@ def test_template_sets_math_with_unicode_math_after_fontspec() -> None:
     assert "\\setmathfont{STIXTwoMath-Regular.otf}[range=" in template
 
 
+def test_template_maps_math_letters_to_base_letters_before_any_font() -> None:
+    """#106: the ToUnicode patch only reaches fonts loaded after it is registered."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    callback = '"luaotfload.patch_font"'
+    assert callback in template
+    assert template.index(callback) < template.index("\\usepackage{fontspec}")
+    # \directlua reads its argument as one line of TeX tokens: a Lua comment
+    # would swallow the rest, and %, # and ~ are TeX specials.
+    start = template.index("\\directlua{")
+    end = template.index('"accessilia.math_letter_tounicode")', start)
+    lua = template[start + len("\\directlua{") : end]
+    assert "--" not in lua
+    assert not set("%#~\\") & set(lua)
+
+
 def _smoke_check() -> Any:
     spec = importlib.util.spec_from_file_location(
         "pdf_ua_smoke_check", SERVER_PATH.parent / "smoke_check.py"
@@ -569,3 +584,16 @@ def test_smoke_check_skips_malformed_tounicode_targets() -> None:
     )
 
     assert module.text_layer(pdf) == {"￾", "￿", "≠"}
+
+
+def test_smoke_check_finds_italic_math_letters_in_the_text_layer() -> None:
+    module = _smoke_check()
+
+    layer = {"v", "\U0001d463", "\u210e", "\U0001d6fc", "\U0001d482", "\u211d", "\U0001d524"}
+
+    # Italic v, italic h, italic alpha and bold italic a; double-struck R and
+    # fraktur g keep their code points by design.
+    assert module.math_italic_letters(layer) == {
+        "\U0001d463", "\u210e", "\U0001d6fc", "\U0001d482"
+    }
+    assert module.math_italic_letters({"v(t) = s\u2032(t)", "\u211d"}) == set()

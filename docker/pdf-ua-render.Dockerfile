@@ -93,7 +93,8 @@ WORKDIR /app
 # the one /render runs in server.py, so a change to either shows up here.
 # smoke_check.py checks that each expected alt is on a Formula element,
 # including formulas in a table header and data cell, and that the math font
-# is embedded with \neq as U+2260 in the text layer.
+# is embedded with \neq as U+2260 and math letters as base letters in the
+# text layer.
 COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json \
     docker/pdf-ua-render/table-smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
 RUN luaotfload-tool --update && \
@@ -101,7 +102,7 @@ RUN luaotfload-tool --update && \
         --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
         --lua-filter=/app/filters/formula_alt.lua \
         -V lang=pt-BR -o /tmp/smoke.pdf /tmp/smoke.json && \
-    python /tmp/smoke_check.py /tmp/smoke.pdf && \
+    python /tmp/smoke_check.py /tmp/smoke.pdf --require-double-struck && \
     pandoc --from json --to pdf --standalone --syntax-highlighting=none \
         --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
         --lua-filter=/app/filters/formula_alt.lua \
