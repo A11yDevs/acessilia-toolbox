@@ -362,3 +362,54 @@ class TestDoclingLayoutProvider:
         assert page["page_number"] == 2
         region = page["regions"][0]
         assert region["page_number"] == 2
+
+
+def _table_doc(pages: object) -> dict[str, object]:
+    return {
+        "tables": [
+            {
+                "self_ref": "#/tables/0",
+                "label": {"value": "table"},
+                "confidence": 0.95,
+                "prov": [
+                    {
+                        "page_no": 1,
+                        "bbox": {
+                            "l": 50.0,
+                            "t": 500.0,
+                            "r": 500.0,
+                            "b": 200.0,
+                            "coord_origin": "BOTTOMLEFT",
+                        },
+                    }
+                ],
+            }
+        ],
+        "pages": pages,
+    }
+
+
+def _layout_of(doc: dict[str, object]):
+    def _handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return httpx.Response(200, json={})
+        return httpx.Response(200, json=doc)
+
+    return extract(provider_with(_handler)).document
+
+
+def test_a_page_list_without_page_numbers_is_one_based() -> None:
+    """The page list's first entry is page 1, as for the provenance and the bbox."""
+    layout = _layout_of(_table_doc([{"size": {"width": 595, "height": 842}}]))
+
+    [page] = layout["pages"]
+    assert (page["page_number"], page["width"], page["height"]) == (1, 595.0, 842.0)
+    assert page["regions"][0]["bbox"] == [50.0, 342.0, 500.0, 642.0]
+
+
+def test_a_malformed_page_size_reads_as_unknown() -> None:
+    layout = _layout_of(_table_doc({"1": {"width": "bad", "height": 842}}))
+
+    [page] = layout["pages"]
+    assert (page["width"], page["height"]) == (0.0, 842.0)
+    assert page["regions"][0]["bbox"] == [50.0, 342.0, 500.0, 642.0]

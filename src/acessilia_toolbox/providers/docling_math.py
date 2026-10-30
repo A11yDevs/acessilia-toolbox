@@ -196,7 +196,7 @@ class DoclingMathProvider:
 
         raw_conf = primary.get("confidence")
         if raw_conf is not None:
-            conf = _float_or_none(raw_conf)
+            conf = float_or_none(raw_conf)
             if conf is not None and 0.0 <= conf <= 1.0:
                 document_payload["confidence"] = conf
             else:
@@ -231,9 +231,3 @@ def _pick_version(versions: dict[str, str], fallback: str) -> str:
 
 def _components(versions: dict[str, str]) -> dict[str, str]:
     return {key: versions[key] for key in COMPONENT_KEYS if key in versions}
-
-
-# Retained for internal backwards compatibility
-_float_or_none = float_or_none
-_page_height = page_height
-_top_left_bbox = top_left_bbox

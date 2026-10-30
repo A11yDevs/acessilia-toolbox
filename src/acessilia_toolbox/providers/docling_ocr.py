@@ -21,6 +21,11 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.docling_support import (
+    extract_page_number,
+    page_height,
+    top_left_bbox,
+)
 from acessilia_toolbox.providers.http_support import format_http_error
 
 CONVERT_PATH = "/v1/convert/file"
@@ -171,7 +176,14 @@ class DoclingOcrProvider:
         return {str(key): str(value) for key, value in data.items()}
 
     def _extract_ocr(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Extract OCR text items from docling-serve response."""
+        """Extract OCR text items from docling-serve response.
+
+        Each ``bbox`` is ``[left, top, right, bottom]`` with a top-left origin,
+        as ``artifact/ocr-result@1`` declares: Docling's dict boxes are
+        normalized with ``coord_origin`` and the page height. An item whose
+        box cannot be placed (no provenance, or a bottom-left box on a page of
+        unknown height) keeps its text with an empty ``bbox``, as before.
+        """
         doc = raw.get("document") or {}
         json_content = doc.get("json_content") or {}
 
@@ -191,13 +203,15 @@ class DoclingOcrProvider:
 
                 prov_list = item.get("prov") or []
                 prov = prov_list[0] if prov_list else {}
+                page = extract_page_number(prov, default=1)
+                bbox = top_left_bbox(prov.get("bbox"), page_height(json_content, page))
 
                 items.append({
                     "text": text,
                     "label": label,
                     "confidence": item.get("confidence", 1.0),
-                    "page": prov.get("page_no") or prov.get("page") or 1,
-                    "bbox": prov.get("bbox", []),
+                    "page": page,
+                    "bbox": list(bbox) if bbox is not None else [],
                 })
                 full_text_parts.append(text)
 

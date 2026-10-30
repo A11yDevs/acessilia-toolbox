@@ -3,7 +3,10 @@ version: 1
 description: >-
   Extract and classify the visual layout regions of a document page into
   semantic categories: text_clean, text_scanned, embedded_image, table,
-  formula, code_block, list_block, callout_box, unknown, and ignore.
+  formula, code_block, list_block, callout_box, unknown, and ignore. Each
+  region's bbox is [left, top, right, bottom] in page points with a top-left
+  origin (y grows downwards); a box whose origin cannot be resolved is left
+  out rather than returned in another convention.
 
 input:
   schema: artifact/document@1

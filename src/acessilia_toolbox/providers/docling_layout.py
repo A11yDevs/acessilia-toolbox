@@ -23,6 +23,7 @@ from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 from acessilia_toolbox.providers.docling_support import (
     extract_page_number,
+    float_or_none,
     page_height,
     top_left_bbox,
 )
@@ -178,7 +179,8 @@ class DoclingLayoutProvider:
         """Convert docling-serve response to a layout analysis document."""
         pages = raw.get("pages", {})
         if isinstance(pages, list):
-            pages = {p.get("page_number", i): p for i, p in enumerate(pages)}
+            # 1-based like the provenance, and like page_height for a list.
+            pages = {p.get("page_number", i): p for i, p in enumerate(pages, start=1)}
 
         page_regions: dict[int, list[dict[str, Any]]] = {}
         page_dimensions: dict[int, dict[str, float]] = {}
@@ -197,9 +199,10 @@ class DoclingLayoutProvider:
                 height = page_data.get("height")
                 if height is None and isinstance(size, dict):
                     height = size.get("height")
+                # A malformed size reads as unknown (0.0), not as a crash.
                 page_dimensions[page_num] = {
-                    "width": float(width) if width is not None else 0.0,
-                    "height": float(height) if height is not None else 0.0,
+                    "width": float_or_none(width) or 0.0,
+                    "height": float_or_none(height) or 0.0,
                 }
 
         # Collect items from all collections
