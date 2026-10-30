@@ -226,8 +226,23 @@ def test_relays_server_errors_as_they_are(monkeypatch) -> None:
 def test_requires_the_toolbox_key(monkeypatch) -> None:
     app = app_with(lambda _: httpx.Response(200, json=ANSWER), monkeypatch)
 
-    assert asyncio.run(post(app, CHAT, key=None)).status_code == 401
-    assert asyncio.run(post(app, CHAT, key="wrong")).status_code == 401
+    for key in (None, "wrong"):
+        response = asyncio.run(post(app, CHAT, key=key))
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "authorization_failed"
+
+
+def test_the_gateways_own_errors_have_the_openai_shape(monkeypatch) -> None:
+    # Agno reads only error.message; the Toolbox envelope read as
+    # "Unknown model error".
+    app = app_with(lambda _: httpx.Response(200, json=ANSWER), monkeypatch)
+
+    response = asyncio.run(post(app, {**CHAT, "model": "gpt-4"}))
+
+    assert response.status_code == 404
+    error = response.json()["error"]
+    assert error["code"] == error["type"] == "provider_not_found"
+    assert "gpt-4" in error["message"]
 
 
 def test_rejects_unknown_models_and_bodies(monkeypatch) -> None:
@@ -245,7 +260,7 @@ def test_rejects_a_provider_that_is_not_an_openai_compatible_vlm(monkeypatch) ->
     response = asyncio.run(post(app, {**CHAT, "model": "pure-text"}))
 
     assert response.status_code == 400
-    assert "not an OpenAI-compatible VLM" in response.text
+    assert "not an OpenAI-compatible VLM" in response.json()["error"]["message"]
 
 
 def test_server_rejecting_the_vlm_key_is_a_provider_error(monkeypatch) -> None:
@@ -255,7 +270,7 @@ def test_server_rejecting_the_vlm_key_is_a_provider_error(monkeypatch) -> None:
     response = asyncio.run(post(app_with(handler, monkeypatch), CHAT))
 
     assert response.status_code == 502
-    assert "credentials" in response.text
+    assert "credentials" in response.json()["error"]["message"]
     assert slots_free()
 
 
@@ -303,21 +318,26 @@ def test_waits_for_a_slot_shared_with_the_capabilities(monkeypatch) -> None:
     assert slots_free(1)
 
 
-def test_waiting_for_a_slot_is_bounded_by_the_providers_timeout(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "bounds",
+    [{"timeout_seconds": 0.05}, {"timeout_seconds": 60.0, "slot_wait_seconds": 0.05}],
+    ids=["timeout_seconds", "slot_wait_seconds"],
+)
+def test_waiting_for_a_slot_is_bounded(monkeypatch, bounds) -> None:
     calls: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
         return httpx.Response(200, json=ANSWER)
 
-    app = app_with(handler, monkeypatch, timeout_seconds=0.05, max_concurrency=1)
+    app = app_with(handler, monkeypatch, max_concurrency=1, **bounds)
     busy = openai_vlm._semaphore("qwen3-vl-8b", 1)
     assert busy.acquire(blocking=False)
 
     response = asyncio.run(post(app, CHAT))
 
     assert response.status_code == 504
-    assert "no free slot" in response.text
+    assert "had no free slot within 0.05s" in response.json()["error"]["message"]
     assert not calls
     busy.release()
     assert slots_free(1)

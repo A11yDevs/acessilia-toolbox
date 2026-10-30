@@ -235,6 +235,7 @@ Provider `config` keys:
 | `page_sampling` | `{}` | Extra sampling keys for page requests, in the server's own naming (`repeat_penalty` for llama-server, `repetition_penalty` for vLLM) |
 | `table_max_tokens`, `table_hint_chars` | 6000, 6000 | Output limit of each table generation and per-hint cut |
 | `table_max_samples` | 8 | Largest `samples` a request may ask for |
+| `slot_wait_seconds` | `timeout_seconds` | How long a chat of the [VLM gateway](api.md#vlm-chat-gateway) waits for a slot before a 504 |
 
 `table.recognize` exists to test the table specialist, which the Dr.DocBench
 experiments rejected (TEDS 69.13 to 64.75 with Qwen3-VL-32B) without isolating
@@ -290,9 +291,12 @@ together:
   or a second model loaded beside it, pushed the weights into swap and
   stalled every request.
 
-The limiter is the queue. A request waits for a slot with no time limit, then
+The limiter is the queue. A capability request waits for a slot with no time
+limit; a gateway chat waits up to `slot_wait_seconds` (1800 s). Either then
 gets `timeout_seconds` (600 s) at the server. With 2 slots, a request can wait
-behind two full generations before it starts. `table.recognize` makes 1 +
+behind two full generations before it starts. On this host the server reads
+an image in about 33 s and generates 3 to 5 tokens/s, so a 2048-token page
+(`page_max_tokens`) holds a slot for up to about 12 minutes. `table.recognize` makes 1 +
 `samples` sequential requests, each taking a slot. A client that disconnects
 does not free the slot until the server answers the request already running.
 

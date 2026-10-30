@@ -146,17 +146,22 @@ streams as server-sent events only when the body sets `"stream": true`; any
 other `stream` value is sent to the server as `false`.
 
 The request waits for a free slot for at most the provider's
-`timeout_seconds`, then gets the same bound at the server, so the worst case
-is twice that. The gateway takes a slot without queueing behind a capability
+`slot_wait_seconds` (its `timeout_seconds` when unset), then gets
+`timeout_seconds` at the server. A slot can stay taken for a whole long
+generation, so the wait has its own, longer bound: the shipped `qwen3-vl-8b`
+waits up to 1800 s, then gets 600 s. A client's own timeout must exceed the
+sum, or the client gives up first. The gateway takes a slot without queueing behind a capability
 already blocked on the same limiter, so under heavy gateway load a capability
 may wait longer for its turn. A client that disconnects, while waiting or
 during the generation, frees its slot, and the upstream connection is closed
 so the server stops generating.
 
-Only bodies from the model server are OpenAI-shaped (`{"error": {...}}` for
-its errors) and are relayed with their status. Errors raised by the Toolbox
-itself use the Toolbox envelope (`{"code", "message", "details"}`, see
-[Errors](#errors)); the OpenAI SDK reads the message from either.
+Every error has the OpenAI shape, `{"error": {"message", "type", "code"}}`.
+The model server's errors are relayed as they are; the Toolbox's own errors
+carry its error code (see [Errors](#errors)) in `type` and `code`. Unlike the
+rest of the API, the gateway does not use the Toolbox envelope: OpenAI-compatible
+clients such as Agno read the message only from `error.message`, and reported
+the envelope as "Unknown model error".
 
 | Status | Source | Meaning |
 |--------|--------|---------|
@@ -166,7 +171,7 @@ itself use the Toolbox envelope (`{"code", "message", "details"}`, see
 | 499 | Toolbox | The client disconnected; it never sees this status, which only appears in access logs |
 | 502 | Toolbox | The model server rejected the Toolbox's own key |
 | 503 | Toolbox | The model server is unreachable |
-| 504 | Toolbox | No free slot, or no answer from the model server, within the provider's `timeout_seconds` |
+| 504 | Toolbox | No free slot within `slot_wait_seconds`, or no answer from the model server within `timeout_seconds` |
 | any other | Model server | Relayed as is, for example a 400 for a request larger than the context window |
 
 The core uses it with its `toolbox` client:

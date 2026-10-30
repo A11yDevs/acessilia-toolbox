@@ -1728,51 +1728,211 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Invalid body, or the provider is not an OpenAI-compatible VLM",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "properties": {
+                                        "error": {
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "type": {
+                                                    "type": "string"
+                                                },
+                                                "code": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ]
+                                        }
+                                    },
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid TOOLBOX_API_KEY",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "error": {
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "type": {
+                                                    "type": "string"
+                                                },
+                                                "code": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ]
+                                        }
+                                    },
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ]
                                 }
                             }
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "model names no provider",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "properties": {
+                                        "error": {
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "type": {
+                                                    "type": "string"
+                                                },
+                                                "code": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ]
+                                        }
+                                    },
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ]
                                 }
                             }
                         }
                     },
                     "502": {
-                        "description": "Bad Gateway",
+                        "description": "The model server rejected the Toolbox's own key",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "properties": {
+                                        "error": {
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "type": {
+                                                    "type": "string"
+                                                },
+                                                "code": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ]
+                                        }
+                                    },
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ]
                                 }
                             }
                         }
                     },
                     "503": {
-                        "description": "Service Unavailable",
+                        "description": "The model server is unreachable",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "properties": {
+                                        "error": {
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "type": {
+                                                    "type": "string"
+                                                },
+                                                "code": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ]
+                                        }
+                                    },
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ]
                                 }
                             }
                         }
                     },
                     "504": {
-                        "description": "Gateway Timeout",
+                        "description": "No free slot within slot_wait_seconds, or no answer within timeout_seconds",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "properties": {
+                                        "error": {
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "type": {
+                                                    "type": "string"
+                                                },
+                                                "code": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "type": "object",
+                                            "required": [
+                                                "message"
+                                            ]
+                                        }
+                                    },
+                                    "type": "object",
+                                    "required": [
+                                        "error"
+                                    ]
                                 }
                             }
                         }
