@@ -78,6 +78,7 @@ def test_core_direct_extraction_survives_json_storage_outage(tmp_path, monkeypat
     )
     store = Mock()
     store.put.side_effect = ProviderUnavailableError("S3 offline; local fallback disabled")
+    store.put_stream.side_effect = ProviderUnavailableError("S3 offline; local fallback disabled")
     app = create_app(
         capabilities=CapabilityRegistry([CapabilityManifest.model_validate({
             "id": "document.structure.extract", "version": 1, "description": "Test extraction",
@@ -113,5 +114,6 @@ def test_core_direct_extraction_survives_json_storage_outage(tmp_path, monkeypat
             server.should_exit = True
             thread.join(timeout=10)
             assert not thread.is_alive()
-    assert store.put.call_count == 2  # Initial upload and output JSON persistence.
+    assert store.put_stream.call_count == 1  # Streaming input upload.
+    assert store.put.call_count == 1  # Output JSON persistence.
     provider.execute.assert_called_once()
