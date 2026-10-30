@@ -12,6 +12,12 @@ The same formula has ``\\neq``. Set in TeX Gyre DejaVu Math by unicode-math, its
 glyph maps to U+2260 in the font's ToUnicode CMap; with the legacy math fonts
 it is ``\\not`` over "=" and the text layer reads "=" plus an orphan U+0338.
 tagpdf's ``uncompress`` leaves the CMaps readable as plain text.
+
+Math letters reach the text layer as base letters: the template maps unicode-math's
+italic and bold italic Mathematical Alphanumeric Symbols (``v`` is U+1D463) back
+to ``v``, which readers ignoring the Formula /Alt would otherwise announce as a
+symbol. The smoke's ``\\mathbb{R}`` must keep U+211D: a double-struck letter
+means something else than its base letter.
 """
 
 import re
@@ -21,6 +27,7 @@ from pathlib import Path
 EXPECTED = "conjunto dos h reais com h maior ou igual a menos 2 e h diferente de 0"
 MATH_FONT = b"TeXGyreDejaVuMath"
 NOT_EQUAL, COMBINING_NOT = "\u2260", "\u0338"
+DOUBLE_STRUCK_R = "\u211d"
 
 
 _ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f"}
@@ -133,6 +140,22 @@ def text_layer(pdf: bytes) -> set[str]:
     return texts
 
 
+def math_italic_letters(texts: set[str]) -> set[str]:
+    """The italic and bold italic math letters left in a text layer.
+
+    Latin U+1D434-U+1D49B, the italic h U+210E, dotless i and j U+1D6A4-U+1D6A5
+    and Greek U+1D6E2-U+1D755: the styles the template maps to base letters.
+    """
+    return {
+        char
+        for text in texts
+        for char in text
+        if 0x1D434 <= ord(char) <= 0x1D49B
+        or ord(char) in (0x210E, 0x1D6A4, 0x1D6A5)
+        or 0x1D6E2 <= ord(char) <= 0x1D755
+    }
+
+
 if __name__ == "__main__":
     pdf = Path(sys.argv[1]).read_bytes()
     texts = formula_alternate_texts(pdf)
@@ -147,4 +170,9 @@ if __name__ == "__main__":
     layer = text_layer(pdf)
     if NOT_EQUAL not in layer or any(COMBINING_NOT in text for text in layer):
         sys.exit("\\neq is not U+2260 in the text layer (legacy \\not overlay?)")
-    print("smoke: formula alternate text present, math text layer has U+2260")
+    if italic := math_italic_letters(layer):
+        sys.exit(f"math letters reach the text layer as symbols: {sorted(italic)}")
+    if not sys.argv[2:] and DOUBLE_STRUCK_R not in layer:
+        # Only the default smoke has \\mathbb{R}.
+        sys.exit("\\mathbb{R} lost U+211D in the text layer")
+    print("smoke: formula alternate text present, math text layer has U+2260 and base letters")

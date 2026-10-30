@@ -72,3 +72,42 @@ def test_server_tags_every_formula_in_a_table(server: Any) -> None:
     assert len(alts) == 3, alts
     assert alts[:2] == ["t igual a 2 mais h no cabeçalho", "x diferente de um na célula"]
     assert alts[2].startswith("LaTeX formula starts"), alts[2]
+
+
+def test_math_letters_reach_the_text_layer_as_base_letters(server: Any) -> None:
+    """#106: unicode-math's italic letters must not reach readers as plane-1 symbols."""
+    ast = {
+        "pandoc-api-version": [1, 23, 1],
+        "meta": {},
+        "blocks": [
+            {
+                "t": "Para",
+                "c": [
+                    {
+                        "t": "Math",
+                        "c": [
+                            {"t": "InlineMath"},
+                            r"v(t) = s'(t),\ \alpha h \in \mathbb{R},\ "
+                            r"\mathfrak{g},\ \boldsymbol{x}",
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    response = TestClient(server.app).post(
+        "/render",
+        files={"file": ("math.json", json.dumps(ast).encode(), "application/json")},
+    )
+    assert response.status_code == 200, response.text[:500]
+
+    checker_path = SERVER_PATH.parent / "smoke_check.py"
+    spec = importlib.util.spec_from_file_location("pdf_ua_smoke_check_letters", checker_path)
+    assert spec is not None and spec.loader is not None
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
+    layer = checker.text_layer(response.content)
+    assert checker.math_italic_letters(layer) == set()
+    assert {"v", "t", "s", "h", "x", "\u03b1"} <= layer
+    # Double-struck and fraktur letters keep their meaning.
+    assert {"\u211d", "\U0001d524"} <= layer
