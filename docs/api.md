@@ -142,7 +142,10 @@ and can be explored interactively at `/v1/docs` (Swagger UI).
 ## VLM chat gateway
 
 `POST /v1/vlm/chat/completions` relays an OpenAI chat-completions request to an
-OpenAI-compatible VLM provider (`qwen3-vl-8b`). The agentic core points its
+OpenAI-compatible VLM provider (`qwen3-vl-8b`). The same route answers at
+`POST /v1/vlm/v1/chat/completions`, so `/v1/vlm` also works as a model
+server's root: a Toolbox whose VLM provider points at another Toolbox's
+`/v1/vlm` posts `{endpoint}/v1/chat/completions` and checks `{endpoint}/health`. The agentic core points its
 own OpenAI-compatible client here instead of at the model server, so that:
 
 - its requests share the provider's `max_concurrency` limiter with the VLM

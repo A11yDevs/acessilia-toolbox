@@ -1783,6 +1783,136 @@
                 }
             }
         },
+        "/v1/vlm/v1/chat/completions": {
+            "post": {
+                "tags": [
+                    "vlm"
+                ],
+                "summary": "Chat Completions (model server root)",
+                "operationId": "chat_completions_server_root",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "model": {
+                                        "type": "string",
+                                        "description": "VLM provider id"
+                                    },
+                                    "messages": {
+                                        "items": {
+                                            "type": "object"
+                                        },
+                                        "type": "array"
+                                    },
+                                    "stream": {
+                                        "type": "boolean",
+                                        "default": false
+                                    }
+                                },
+                                "additionalProperties": true,
+                                "type": "object",
+                                "required": [
+                                    "model",
+                                    "messages"
+                                ],
+                                "description": "OpenAI chat-completions request, relayed as is except for model"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "The server's chat completion, relayed as is; server-sent events when the body sets stream",
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            },
+                            "text/event-stream": {}
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid body, or the provider is not an OpenAI-compatible VLM",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid TOOLBOX_API_KEY",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "model names no provider",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "The model server rejected the Toolbox's own key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "The model server is unreachable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "504": {
+                        "description": "No free slot within slot_wait_seconds, or no answer within timeout_seconds",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected failure in the gateway",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "499": {
+                        "description": "The client disconnected; it never sees this status"
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
         "/v1/vlm/chat/completions": {
             "post": {
                 "tags": [

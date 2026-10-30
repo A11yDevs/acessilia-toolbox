@@ -3,8 +3,11 @@
 The Toolbox in gateway mode, deployed next to llama-server. It is the same
 package and the same image as the Toolbox, started with
 `acessilia_toolbox.api.gateway_app:create_gateway_app` instead of
-`create_app`: it serves only `GET /v1/health`, `GET /v1/vlm/health` and
-`POST /v1/vlm/chat/completions` (no `/v1/docs` or `/v1/openapi.json`).
+`create_app`: it serves only `GET /v1/health`, `GET /v1/vlm/health` and the
+chat, at `POST /v1/vlm/chat/completions` and `POST /v1/vlm/v1/chat/completions`
+(no `/v1/docs` or `/v1/openapi.json`). The second path makes `/v1/vlm` look
+like llama-server's root to the environments' Toolboxes: their provider posts
+`{VLM_SERVE_URL}/v1/chat/completions` and checks `{VLM_SERVE_URL}/health`.
 
 Run it as **one process**. The limiter is a semaphore inside the process, so
 `uvicorn --workers N` would let N times `max_concurrency` requests reach
