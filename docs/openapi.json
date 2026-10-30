@@ -1732,32 +1732,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "error": {
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string"
-                                                },
-                                                "type": {
-                                                    "type": "string"
-                                                },
-                                                "code": {
-                                                    "type": [
-                                                        "string",
-                                                        "null"
-                                                    ]
-                                                }
-                                            },
-                                            "type": "object",
-                                            "required": [
-                                                "message"
-                                            ]
-                                        }
-                                    },
-                                    "type": "object",
-                                    "required": [
-                                        "error"
-                                    ]
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
@@ -1767,32 +1742,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "error": {
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string"
-                                                },
-                                                "type": {
-                                                    "type": "string"
-                                                },
-                                                "code": {
-                                                    "type": [
-                                                        "string",
-                                                        "null"
-                                                    ]
-                                                }
-                                            },
-                                            "type": "object",
-                                            "required": [
-                                                "message"
-                                            ]
-                                        }
-                                    },
-                                    "type": "object",
-                                    "required": [
-                                        "error"
-                                    ]
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
@@ -1802,32 +1752,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "error": {
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string"
-                                                },
-                                                "type": {
-                                                    "type": "string"
-                                                },
-                                                "code": {
-                                                    "type": [
-                                                        "string",
-                                                        "null"
-                                                    ]
-                                                }
-                                            },
-                                            "type": "object",
-                                            "required": [
-                                                "message"
-                                            ]
-                                        }
-                                    },
-                                    "type": "object",
-                                    "required": [
-                                        "error"
-                                    ]
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
@@ -1837,32 +1762,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "error": {
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string"
-                                                },
-                                                "type": {
-                                                    "type": "string"
-                                                },
-                                                "code": {
-                                                    "type": [
-                                                        "string",
-                                                        "null"
-                                                    ]
-                                                }
-                                            },
-                                            "type": "object",
-                                            "required": [
-                                                "message"
-                                            ]
-                                        }
-                                    },
-                                    "type": "object",
-                                    "required": [
-                                        "error"
-                                    ]
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
@@ -1872,32 +1772,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "error": {
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string"
-                                                },
-                                                "type": {
-                                                    "type": "string"
-                                                },
-                                                "code": {
-                                                    "type": [
-                                                        "string",
-                                                        "null"
-                                                    ]
-                                                }
-                                            },
-                                            "type": "object",
-                                            "required": [
-                                                "message"
-                                            ]
-                                        }
-                                    },
-                                    "type": "object",
-                                    "required": [
-                                        "error"
-                                    ]
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
@@ -1907,32 +1782,17 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "properties": {
-                                        "error": {
-                                            "properties": {
-                                                "message": {
-                                                    "type": "string"
-                                                },
-                                                "type": {
-                                                    "type": "string"
-                                                },
-                                                "code": {
-                                                    "type": [
-                                                        "string",
-                                                        "null"
-                                                    ]
-                                                }
-                                            },
-                                            "type": "object",
-                                            "required": [
-                                                "message"
-                                            ]
-                                        }
-                                    },
-                                    "type": "object",
-                                    "required": [
-                                        "error"
-                                    ]
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected failure in the gateway",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
@@ -2473,6 +2333,48 @@
                     "version"
                 ],
                 "title": "HealthResponse"
+            },
+            "OpenAiError": {
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Type"
+                    },
+                    "code": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Code"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "message",
+                    "type"
+                ],
+                "title": "OpenAiError"
+            },
+            "OpenAiErrorResponse": {
+                "properties": {
+                    "error": {
+                        "$ref": "#/components/schemas/OpenAiError"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "error"
+                ],
+                "title": "OpenAiErrorResponse",
+                "description": "Error of the VLM chat gateway, in the shape OpenAI-compatible clients read."
             },
             "ProviderHealth": {
                 "properties": {

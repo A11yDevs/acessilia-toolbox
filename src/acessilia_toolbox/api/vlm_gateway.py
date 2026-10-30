@@ -23,6 +23,7 @@ Agno read the message only from there, and reported the Toolbox envelope as
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
@@ -36,6 +37,7 @@ from starlette.background import BackgroundTask
 
 from acessilia_toolbox.api.auth import bearer_scheme, require_api_key
 from acessilia_toolbox.api.rest import providers
+from acessilia_toolbox.api.schemas import OpenAiErrorResponse
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
     ProviderExecutionError,
@@ -47,7 +49,11 @@ from acessilia_toolbox.core.provider import ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.openai_vlm import CHAT_PATH, OpenAiCompatibleVlmProvider
 
-# Authentication runs inside the route, so a 401 has the OpenAI shape too.
+LOG = logging.getLogger(__name__)
+
+# Authentication runs inside each route, so a 401 has the OpenAI shape too.
+# A route added here must call require_api_key itself; a test checks that
+# every /v1/vlm route answers 401 without the key.
 vlm_router = APIRouter(prefix="/v1/vlm", tags=["vlm"])
 
 # How often a waiting request checks whether its client is still there.
@@ -56,22 +62,6 @@ POLL_SECONDS = 0.5
 # Status a disconnected client never sees; it only ends the request.
 CLIENT_CLOSED_REQUEST = 499
 
-OPENAI_ERROR_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "required": ["error"],
-    "properties": {
-        "error": {
-            "type": "object",
-            "required": ["message"],
-            "properties": {
-                "message": {"type": "string"},
-                "type": {"type": "string"},
-                "code": {"type": ["string", "null"]},
-            },
-        }
-    },
-}
-
 _ERROR_MEANINGS = {
     400: "Invalid body, or the provider is not an OpenAI-compatible VLM",
     401: "Missing or invalid TOOLBOX_API_KEY",
@@ -79,6 +69,7 @@ _ERROR_MEANINGS = {
     502: "The model server rejected the Toolbox's own key",
     503: "The model server is unreachable",
     504: "No free slot within slot_wait_seconds, or no answer within timeout_seconds",
+    500: "Unexpected failure in the gateway",
 }
 
 GATEWAY_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -88,10 +79,7 @@ GATEWAY_RESPONSES: dict[int | str, dict[str, Any]] = {
         "content": {"application/json": {}, "text/event-stream": {}},
     },
     **{
-        status: {
-            "description": meaning,
-            "content": {"application/json": {"schema": OPENAI_ERROR_SCHEMA}},
-        }
+        status: {"model": OpenAiErrorResponse, "description": meaning}
         for status, meaning in _ERROR_MEANINGS.items()
     },
     CLIENT_CLOSED_REQUEST: {"description": "The client disconnected; it never sees this status"},
@@ -138,13 +126,21 @@ async def chat_completions(
     except ToolboxError as error:
         return _openai_error(error.http_status, error.message, error.code)
     except HTTPException as error:
-        return _openai_error(error.status_code, str(error.detail), "authorization_failed")
+        code = "authorization_failed" if error.status_code == 401 else f"http_{error.status_code}"
+        return _openai_error(error.status_code, str(error.detail), code)
+    except Exception:
+        # Starlette would answer text/plain, which the client reads as
+        # "Unknown model error" again.
+        LOG.exception("VLM gateway failed")
+        return _openai_error(500, "unexpected failure in the VLM gateway", "internal_error")
 
 
 def _openai_error(status: int, message: str, code: str) -> JSONResponse:
+    headers = {"WWW-Authenticate": "Bearer"} if status == 401 else None
     return JSONResponse(
         status_code=status,
         content={"error": {"message": message, "type": code, "code": code}},
+        headers=headers,
     )
 
 
@@ -244,7 +240,7 @@ async def _acquire(adapter: OpenAiCompatibleVlmProvider, request: Request) -> bo
     not queue behind a capability thread blocked on the same semaphore, so
     under load the gateway may take a slot first.
     """
-    wait = float(adapter.config.get("slot_wait_seconds") or adapter.descriptor.timeout_seconds)
+    wait = adapter.slot_wait_seconds
     loop = asyncio.get_running_loop()
     deadline = loop.time() + wait
     while not adapter.slots.acquire(blocking=False):

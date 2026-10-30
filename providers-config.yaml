@@ -183,8 +183,9 @@ providers:
       # and more RAM, not fewer slots.
       max_concurrency: 2
       # A gateway chat waits this long for a slot, then gets timeout_seconds at
-      # the server. Two long page or table generations can hold both slots for
-      # several minutes on this CPU-only host (3-5 tokens/s).
+      # the server. Any request frees its slot within timeout_seconds (600 s),
+      # so this covers about three turns of both slots (docs/tools.md,
+      # "Production server"). Clients need a longer timeout than 1800 + 600.
       slot_wait_seconds: 1800
       # At 3 tokens/s, 4096 tokens held a slot for over 20 minutes. A page cut
       # here reports finish "length", and the core keeps the extractors' text.

@@ -230,6 +230,41 @@ def test_requires_the_toolbox_key(monkeypatch) -> None:
         response = asyncio.run(post(app, CHAT, key=key))
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "authorization_failed"
+        assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_every_vlm_route_requires_the_toolbox_key(monkeypatch) -> None:
+    # The router carries no auth dependency: each route checks the key itself.
+    app = app_with(lambda _: httpx.Response(200, json=ANSWER), monkeypatch)
+    # FastAPI nests included routers, so the OpenAPI paths are the full list.
+    routes = [
+        (method.upper(), path)
+        for path, operations in app.openapi()["paths"].items()
+        if path.startswith("/v1/vlm")
+        for method in operations
+    ]
+    assert routes
+
+    async def call(method: str, path: str) -> int:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://toolbox"
+        ) as client:
+            return (await client.request(method, path, json=CHAT)).status_code
+
+    for method, path in routes:
+        assert asyncio.run(call(method, path)) == 401, (method, path)
+
+
+def test_an_unexpected_failure_is_a_500_in_the_openai_shape(monkeypatch) -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        raise RuntimeError("boom")
+
+    response = asyncio.run(post(app_with(handler, monkeypatch), CHAT))
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "internal_error"
+    assert "boom" not in response.text
+    assert slots_free()
 
 
 def test_the_gateways_own_errors_have_the_openai_shape(monkeypatch) -> None:
@@ -313,6 +348,27 @@ def test_waits_for_a_slot_shared_with_the_capabilities(monkeypatch) -> None:
         response = await waiting
         assert called.is_set()
         return response.status_code
+
+    assert asyncio.run(run()) == 200
+    assert slots_free(1)
+
+
+def test_a_chat_waits_past_the_generation_timeout_for_a_slot(monkeypatch) -> None:
+    async def run() -> int:
+        app = app_with(
+            lambda _: httpx.Response(200, json=ANSWER),
+            monkeypatch,
+            max_concurrency=1,
+            timeout_seconds=0.05,
+            slot_wait_seconds=5,
+        )
+        busy = openai_vlm._semaphore("qwen3-vl-8b", 1)
+        assert busy.acquire(blocking=False)
+        waiting = asyncio.create_task(post(app, CHAT))
+        # Held past timeout_seconds: only slot_wait_seconds keeps the chat waiting.
+        await asyncio.sleep(0.2)
+        busy.release()
+        return (await waiting).status_code
 
     assert asyncio.run(run()) == 200
     assert slots_free(1)
