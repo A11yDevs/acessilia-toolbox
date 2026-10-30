@@ -25,6 +25,23 @@
 \ExplSyntaxOn
 \NewDocumentCommand \AccessiliaFormulaAlt { m }
   { \tl_set:Nn \l__math_content_template_tl { \exp_not:n {#1} } }
+
+% Turns math collection back on for the rest of the group, so the next formula
+% gets its Formula element: table alignment (latex-lab-testphase-table) can
+% switch collection off while it builds a cell. \MathCollectTrue is internal to
+% latex-lab (latex-lab-math.ltx; despite the name it sets
+% \l__math_collected_bool to false, the flag that suppresses collection), not
+% a documented interface. The image pins TeX Live 2025 and its build smoke
+% renders a formula in a table cell; if a latex-lab update drops the command,
+% this check names it instead of failing on an undefined control sequence.
+\msg_new:nnn { accessilia } { math-collect-missing }
+  { latex-lab~no~longer~defines~\iow_char:N\\MathCollectTrue;~formulas~in~table~cells~would~lose~their~Formula~element. }
+\AtBeginDocument
+  {
+    \cs_if_exist:NF \MathCollectTrue
+      { \msg_error:nn { accessilia } { math-collect-missing } }
+  }
+\NewDocumentCommand \AccessiliaFormulaCollect { } { \MathCollectTrue }
 \ExplSyntaxOff
 
 \usepackage{fontspec}

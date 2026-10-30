@@ -61,6 +61,37 @@
                         {
                           "t": "Str",
                           "c": "Cálculo"
+                        },
+                        {
+                          "t": "Space"
+                        },
+                        {
+                          "t": "Span",
+                          "c": [
+                            [
+                              "",
+                              [
+                                "accessilia-formula"
+                              ],
+                              [
+                                [
+                                  "alt",
+                                  "t igual a 2 mais h no cabeçalho"
+                                ]
+                              ]
+                            ],
+                            [
+                              {
+                                "t": "Math",
+                                "c": [
+                                  {
+                                    "t": "InlineMath"
+                                  },
+                                  "t = 2 + h"
+                                ]
+                              }
+                            ]
+                          ]
                         }
                       ]
                     }
@@ -125,6 +156,62 @@
                                       "t": "InlineMath"
                                     },
                                     "x \\neq 1"
+                                  ]
+                                }
+                              ]
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "",
+                  [],
+                  []
+                ],
+                [
+                  [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    {
+                      "t": "AlignDefault"
+                    },
+                    1,
+                    1,
+                    [
+                      {
+                        "t": "Plain",
+                        "c": [
+                          {
+                            "t": "Span",
+                            "c": [
+                              [
+                                "",
+                                [
+                                  "accessilia-formula"
+                                ],
+                                [
+                                  [
+                                    "alt",
+                                    ""
+                                  ]
+                                ]
+                              ],
+                              [
+                                {
+                                  "t": "Math",
+                                  "c": [
+                                    {
+                                      "t": "InlineMath"
+                                    },
+                                    "h \\neq 0"
                                   ]
                                 }
                               ]

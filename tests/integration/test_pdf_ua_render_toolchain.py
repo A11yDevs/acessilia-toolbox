@@ -53,7 +53,7 @@ def test_server_renders_a_tagged_pdf(server: Any) -> None:
     assert b"/StructTreeRoot" in response.content or b"/MarkInfo" in response.content
 
 
-def test_server_keeps_formula_alt_in_a_table_cell(server: Any) -> None:
+def test_server_tags_every_formula_in_a_table(server: Any) -> None:
     fixture = SERVER_PATH.parent / "table-smoke.json"
     response = TestClient(server.app).post(
         "/render",
@@ -66,4 +66,9 @@ def test_server_keeps_formula_alt_in_a_table_cell(server: Any) -> None:
     assert spec is not None and spec.loader is not None
     checker = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(checker)
-    assert "x diferente de um na célula" in checker.alternate_texts(response.content)
+    # One Formula per formula: header cell, data cell, and the empty alt, which
+    # keeps latex-lab's default text instead of losing the element.
+    alts = checker.formula_alternate_texts(response.content)
+    assert len(alts) == 3, alts
+    assert alts[:2] == ["t igual a 2 mais h no cabeçalho", "x diferente de um na célula"]
+    assert alts[2].startswith("LaTeX formula starts"), alts[2]

@@ -91,8 +91,9 @@ WORKDIR /app
 # pdf_ua.tex maps for unicode-math): one unrenderable formula makes the core
 # degrade every formula of a document to literal text. The PDF command mirrors
 # the one /render runs in server.py, so a change to either shows up here.
-# smoke_check.py checks the formula alts, including one inside a table cell,
-# and that the math font is embedded with \neq as U+2260 in the text layer.
+# smoke_check.py checks that each expected alt is on a Formula element,
+# including formulas in a table header and data cell, and that the math font
+# is embedded with \neq as U+2260 in the text layer.
 COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json \
     docker/pdf-ua-render/table-smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
 RUN luaotfload-tool --update && \
@@ -105,7 +106,8 @@ RUN luaotfload-tool --update && \
         --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
         --lua-filter=/app/filters/formula_alt.lua \
         -V lang=pt-BR -o /tmp/smoke-table.pdf /tmp/table-smoke.json && \
-    python /tmp/smoke_check.py /tmp/smoke-table.pdf "x diferente de um na célula" && \
+    python /tmp/smoke_check.py /tmp/smoke-table.pdf \
+        "t igual a 2 mais h no cabeçalho" "x diferente de um na célula" && \
     printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
         | pandoc --from json --to docx --standalone --sandbox --metadata lang=pt-BR \
             -o /tmp/smoke.docx && \

@@ -64,8 +64,11 @@ RegisterHTMLHandler(liteAdaptor());
 const texDocument = mathjax.document('', {
   InputJax: new TeX({
     packages: TEX_PACKAGES,
-    // In pt-BR, `{,}` is a decimal separator; a three-digit group is not required.
-    digits: /^(?:[0-9]+(?:\{,\}[0-9]+)*(?:\.[0-9]*)?|\.[0-9]+)/,
+    // In pt-BR, `{,}` is a decimal separator (-0{,}0833), so it may end a
+    // number with any count of digits; MathJax's default only takes `{,}` before
+    // a three-digit thousands group, which still comes first (1{,}000.5). One
+    // decimal part at most: 1{,}2{,}3 and 1{,}23.4 do not read as one number.
+    digits: /^(?:[0-9]+(?:\{,\}[0-9]{3}(?![0-9]))*(?:\{,\}[0-9]+|\.[0-9]*)?|\.[0-9]+)/,
     formatError: (_jax, error) => {
       throw error;
     },

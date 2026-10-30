@@ -4,6 +4,9 @@ smoke.json marks its first formula with an ``accessilia-formula`` span; the
 image only builds if filters/formula_alt.lua and \\AccessiliaFormulaAlt in
 pdf_ua.tex turned it into that Formula's /Alt. A latex-lab update that renames
 the alt template would otherwise silently bring back "LaTeX formula starts ...".
+Extra arguments are the alts another smoke file expects instead, each on a
+Formula element: table-smoke.json has formulas in a header and a data cell,
+where table alignment can switch math collection off and drop the Formula.
 
 The same formula has ``\\neq``. Set in TeX Gyre DejaVu Math by unicode-math, its
 glyph maps to U+2260 in the font's ToUnicode CMap; with the legacy math fonts
@@ -76,6 +79,20 @@ def alternate_texts(pdf: bytes) -> list[str]:
     return texts
 
 
+def formula_alternate_texts(pdf: bytes) -> list[str]:
+    """The /Alt of each Formula structure element, "" for one without /Alt.
+
+    tagpdf's ``uncompress`` writes each StructElem as a plain object; an /Alt
+    on any other element (a figure, a span) does not count.
+    """
+    texts = []
+    for obj in re.finditer(rb"\d+\s+\d+\s+obj(.*?)endobj", pdf, re.S):
+        body = obj.group(1)
+        if re.search(rb"/Type\s*/StructElem\b", body) and re.search(rb"/S\s*/Formula\b", body):
+            texts.extend(alternate_texts(body) or [""])
+    return texts
+
+
 def _hex_text(digits: bytes) -> str | None:
     """The UTF-16BE text of a CMap target, or None for a malformed one.
 
@@ -118,10 +135,10 @@ def text_layer(pdf: bytes) -> set[str]:
 
 if __name__ == "__main__":
     pdf = Path(sys.argv[1]).read_bytes()
-    expected = sys.argv[2] if len(sys.argv) > 2 else EXPECTED
-    texts = alternate_texts(pdf)
-    if expected not in texts:
-        sys.exit(f"formula alternate text missing; /Alt found: {texts}")
+    texts = formula_alternate_texts(pdf)
+    for expected in sys.argv[2:] or [EXPECTED]:
+        if expected not in texts:
+            sys.exit(f"formula alternate text missing; Formula /Alt found: {texts}")
     if MATH_FONT not in pdf:
         sys.exit(f"math font {MATH_FONT.decode()} not embedded: unicode-math did not take effect")
     # Document-wide: the U+0338 check reads every font's CMap, text fonts
