@@ -21,6 +21,11 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.docling_support import (
+    extract_page_number,
+    page_height,
+    top_left_bbox,
+)
 from acessilia_toolbox.providers.http_support import format_http_error
 
 CONVERT_PATH = "/v1/convert/file"
@@ -178,13 +183,35 @@ class DoclingLayoutProvider:
         page_regions: dict[int, list[dict[str, Any]]] = {}
         page_dimensions: dict[int, dict[str, float]] = {}
 
+        # Collect page dimensions first so bbox normalization has page heights
+        for page_num_str, page_data in pages.items():
+            try:
+                page_num = int(page_num_str)
+            except (ValueError, TypeError):
+                continue
+            if isinstance(page_data, dict):
+                size = page_data.get("size") or {}
+                width = page_data.get("width")
+                if width is None and isinstance(size, dict):
+                    width = size.get("width")
+                height = page_data.get("height")
+                if height is None and isinstance(size, dict):
+                    height = size.get("height")
+                page_dimensions[page_num] = {
+                    "width": float(width) if width is not None else 0.0,
+                    "height": float(height) if height is not None else 0.0,
+                }
+
         # Collect items from all collections
         for collection in ("texts", "pictures", "tables", "groups"):
             for item in raw.get(collection, []):
                 for prov in item.get("prov") or []:
-                    page_num = int(prov.get("page_no") or prov.get("page") or 1)
-                    bbox = self._bbox_values(prov.get("bbox"))
-                    if len(bbox) != 4:
+                    page_num = extract_page_number(prov, default=1)
+                    height = page_dimensions.get(page_num, {}).get("height")
+                    if not height:
+                        height = page_height(raw, page_num)
+                    bbox = self._bbox_values(prov.get("bbox"), height)
+                    if bbox is None:
                         continue
 
                     label = self._get_label(item)
@@ -203,16 +230,6 @@ class DoclingLayoutProvider:
                         continue
 
                     page_regions.setdefault(page_num, []).append(region)
-
-        # Collect page dimensions
-        for page_num_str, page_data in pages.items():
-            page_num = int(page_num_str)
-            if isinstance(page_data, dict):
-                size = page_data.get("size") or {}
-                page_dimensions[page_num] = {
-                    "width": page_data.get("width", size.get("width", 0)),
-                    "height": page_data.get("height", size.get("height", 0)),
-                }
 
         # Build page-level output
         pages_output = []
@@ -285,29 +302,10 @@ class DoclingLayoutProvider:
         return "unknown"
 
     @staticmethod
-    def _bbox_values(bbox: Any) -> list[float]:
-        """Normalize Docling dict/list coordinates to [left, bottom, right, top]."""
-        if isinstance(bbox, dict):
-            left = bbox.get("l", bbox.get("left"))
-            top = bbox.get("t", bbox.get("top"))
-            right = bbox.get("r", bbox.get("right"))
-            bottom = bbox.get("b", bbox.get("bottom"))
-            if left is not None and top is not None and right is not None and bottom is not None:
-                return [
-                    min(float(left), float(right)),
-                    min(float(bottom), float(top)),
-                    max(float(left), float(right)),
-                    max(float(bottom), float(top)),
-                ]
-        if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
-            values = [float(value) for value in bbox[:4]]
-            return [
-                min(values[0], values[2]),
-                min(values[1], values[3]),
-                max(values[0], values[2]),
-                max(values[1], values[3]),
-            ]
-        return []
+    def _bbox_values(bbox: Any, page_height: float | None = None) -> list[float] | None:
+        """Normalize Docling dict/list coordinates to [left, top, right, bottom]."""
+        coords = top_left_bbox(bbox, page_height)
+        return list(coords) if coords is not None else None
 
     @staticmethod
     def _bbox_area(bbox: list[float]) -> float:
