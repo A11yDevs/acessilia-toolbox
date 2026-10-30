@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import jsonschema
 import pytest
@@ -218,9 +218,21 @@ def test_math_recognize_providers_conform_to_declared_schema(
                             "label": {"value": "formula"},
                             "text": r"E = mc^2",
                             "confidence": 0.95,
-                            "prov": [{"page": 1, "bbox": [50, 50, 500, 100]}],
+                            "prov": [
+                                {
+                                    "page_no": 2,
+                                    "bbox": {
+                                        "l": 50,
+                                        "t": 100,
+                                        "r": 500,
+                                        "b": 50,
+                                        "coord_origin": "BOTTOMLEFT",
+                                    },
+                                }
+                            ],
                         }
-                    ]
+                    ],
+                    "pages": {"2": {"size": {"width": 595, "height": 842}}},
                 }
             }
         },
@@ -229,6 +241,8 @@ def test_math_recognize_providers_conform_to_declared_schema(
     for binding in manifest.providers:
         descriptor = providers.get(binding.id)
         adapter = create_adapter(descriptor)
+        if binding.id not in simulated_responses:
+            pytest.fail(f"no simulated sidecar payload for math.recognize provider {binding.id}")
         mock_data: dict[str, Any] = simulated_responses[binding.id]
 
         def handler(request: httpx.Request, data: dict[str, Any] = mock_data) -> httpx.Response:
@@ -237,9 +251,8 @@ def test_math_recognize_providers_conform_to_declared_schema(
             return httpx.Response(200, json=data)
 
         transport = httpx.MockTransport(handler)
-        adapter_any = cast(Any, adapter)
-        base_url = adapter_any.base_url
-        adapter_any._client = lambda timeout=None, t=transport, url=base_url: httpx.Client(
+        base_url = adapter.base_url  # type: ignore[attr-defined]
+        adapter._client = lambda timeout=None, t=transport, url=base_url: httpx.Client(  # type: ignore[attr-defined]
             transport=t, base_url=url
         )
 
@@ -253,4 +266,7 @@ def test_math_recognize_providers_conform_to_declared_schema(
         jsonschema.validate(instance=extraction.document, schema=schema)
         assert isinstance(extraction.document.get("latex"), str)
         assert len(extraction.document["latex"]) > 0
+        if binding.id == "docling-math":
+            assert extraction.document["page"] == 2
+            assert extraction.document["bbox"] == [50.0, 742.0, 500.0, 792.0]
 

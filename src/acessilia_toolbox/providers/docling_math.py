@@ -7,10 +7,11 @@ DoclingProvider helpers.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -49,12 +50,12 @@ class DoclingMathProvider:
 
         with self._client() as client:
             raw = self._convert(client, payload, filename, media_type)
-            formulas = self._extract_formulas(raw)
+            document, notes = self._extract_formulas(raw)
             versions = self._server_versions(client)
 
         completed_at = datetime.now(UTC)
         return ExtractionResult(
-            document=formulas,
+            document=document,
             backend="docling",
             started_at=started_at,
             completed_at=completed_at,
@@ -65,6 +66,7 @@ class DoclingMathProvider:
                 "base_url": self.base_url,
                 "capability": capability_id,
                 "component_versions": _components(versions),
+                **notes,
                 **dict(parameters or {}),
             },
         )
@@ -151,130 +153,56 @@ class DoclingMathProvider:
             return {}
         return {str(key): str(value) for key, value in data.items()}
 
-    def _extract_formulas(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Extract LaTeX formulas from docling-serve response conforming to artifact/latex@1.
+    def _extract_formulas(
+        self, raw: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Build an artifact/latex@1 document from the docling-serve response.
 
-        Note on math.recognize@1:
-            When multiple formulas are extracted from the document, the expressions are
-            concatenated with double newlines (``\\n\\n``) in ``latex``, while ``page``
-            and ``bbox`` anchor to the primary (first) detected formula.
+        artifact/latex@1 carries a single expression, and math.convert and
+        math.verbalize hand ``latex`` to MathJax/MathCAT as one expression, so
+        only the first formula in reading order is returned. The number of
+        formulas found is reported in the returned notes, which end up in the
+        extraction configuration. Items without a ``formula``/``equation``
+        label are never returned as LaTeX.
         """
         doc = raw.get("document") or {}
         json_content = doc.get("json_content") or {}
 
-        formulas: list[dict[str, Any]] = []
-
-        # Extract from groups collection (formula/equation items)
-        for item in json_content.get("groups", []):
-            label = self._get_label(item)
-            if label in ("formula", "equation"):
-                latex = (item.get("text") or "").strip()
-                if latex:
-                    prov = (item.get("prov") or [{}])[0]
-                    formulas.append({
-                        "latex": latex,
-                        "confidence": item.get("confidence"),
-                        "page": prov.get("page", 1) or prov.get("page_no", 1),
-                        "bbox": prov.get("bbox", []),
-                    })
-
-        # Also check texts with formula/equation label
-        for item in json_content.get("texts", []):
-            label = self._get_label(item)
-            if label in ("formula", "equation"):
-                latex = (item.get("text") or "").strip()
-                if latex:
-                    prov = (item.get("prov") or [{}])[0]
-                    formulas.append({
-                        "latex": latex,
-                        "confidence": item.get("confidence"),
-                        "page": prov.get("page", 1) or prov.get("page_no", 1),
-                        "bbox": prov.get("bbox", []),
-                    })
-
-        # If no explicit formula elements, fallback to raw text if available
+        formulas = [
+            item
+            for collection in ("groups", "texts")
+            for item in json_content.get(collection, [])
+            if self._get_label(item) in ("formula", "equation")
+            and (item.get("text") or "").strip()
+        ]
         if not formulas:
-            raw_text = ""
-            for item in json_content.get("texts", []):
-                text = (item.get("text") or "").strip()
-                if text:
-                    raw_text += text + "\n"
-            raw_text = raw_text.strip()
-            if not raw_text:
-                raise ProviderExecutionError(
-                    "docling-serve found no mathematical formulas in the image",
-                    provider=self.descriptor.id,
-                )
-            return {"latex": raw_text}
-
-        latex_str = "\n\n".join(f["latex"] for f in formulas if f.get("latex")).strip()
-        if not latex_str:
             raise ProviderExecutionError(
                 "docling-serve found no mathematical formulas in the image",
                 provider=self.descriptor.id,
             )
 
         primary = formulas[0]
-        document_payload: dict[str, Any] = {
-            "latex": latex_str,
-        }
+        document_payload: dict[str, Any] = {"latex": primary["text"].strip()}
+        notes: dict[str, Any] = {"formula_count": len(formulas)}
 
         raw_conf = primary.get("confidence")
         if raw_conf is not None:
-            try:
-                conf = float(raw_conf)
-                if 0.0 <= conf <= 1.0:
-                    document_payload["confidence"] = conf
-            except (ValueError, TypeError):
-                pass
+            conf = _float_or_none(raw_conf)
+            if conf is not None and 0.0 <= conf <= 1.0:
+                document_payload["confidence"] = conf
+            else:
+                notes["dropped_confidence"] = str(raw_conf)
 
-        page = primary.get("page")
-        if page is not None and isinstance(page, int) and page >= 1:
+        prov = (primary.get("prov") or [{}])[0]
+        page = prov.get("page_no") or prov.get("page") or 1
+        if isinstance(page, int) and page >= 1:
             document_payload["page"] = page
 
-        bbox = self._bbox_values(primary.get("bbox"))
-        if len(bbox) == 4:
-            document_payload["bbox"] = bbox
+        bbox = _top_left_bbox(prov.get("bbox"), _page_height(json_content, page))
+        if bbox is not None:
+            document_payload["bbox"] = list(bbox)
 
-        return document_payload
-
-    @staticmethod
-    def _bbox_values(bbox: Any) -> list[float]:
-        """Normalize Docling dict/list coordinates to [left, top, right, bottom]."""
-        if isinstance(bbox, dict):
-            raw_coords = (
-                bbox.get("l", bbox.get("left")),
-                bbox.get("t", bbox.get("top")),
-                bbox.get("r", bbox.get("right")),
-                bbox.get("b", bbox.get("bottom")),
-            )
-            if all(v is not None for v in raw_coords):
-                try:
-                    left, top, right, bottom = raw_coords
-                    assert left is not None and top is not None
-                    assert right is not None and bottom is not None
-                    left_f, top_f = float(left), float(top)
-                    right_f, bottom_f = float(right), float(bottom)
-                    return [
-                        min(left_f, right_f),
-                        min(top_f, bottom_f),
-                        max(left_f, right_f),
-                        max(top_f, bottom_f),
-                    ]
-                except (ValueError, TypeError):
-                    return []
-        if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
-            try:
-                values = [float(v) for v in bbox[:4]]
-                return [
-                    min(values[0], values[2]),
-                    min(values[1], values[3]),
-                    max(values[0], values[2]),
-                    max(values[1], values[3]),
-                ]
-            except (ValueError, TypeError):
-                return []
-        return []
+        return document_payload, notes
 
     @staticmethod
     def _get_label(item: dict[str, Any]) -> str:
@@ -295,3 +223,59 @@ def _pick_version(versions: dict[str, str], fallback: str) -> str:
 
 def _components(versions: dict[str, str]) -> dict[str, str]:
     return {key: versions[key] for key in COMPONENT_KEYS if key in versions}
+
+
+def _float_or_none(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+    except (ValueError, TypeError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _page_height(json_content: Mapping[str, Any], page: Any) -> float | None:
+    pages = json_content.get("pages") or {}
+    if not isinstance(pages, Mapping):
+        return None
+    entry = pages.get(str(page)) or pages.get(page) or {}
+    if not isinstance(entry, Mapping):
+        return None
+    size = entry.get("size") or {}
+    height = entry.get("height", size.get("height") if isinstance(size, Mapping) else None)
+    return _float_or_none(height)
+
+
+def _top_left_bbox(
+    bbox: Any, page_height: float | None
+) -> tuple[float, float, float, float] | None:
+    """Normalize a Docling bbox to [left, top, right, bottom] with a top-left origin.
+
+    Docling dict boxes carry ``coord_origin``; ``BOTTOMLEFT`` boxes are flipped
+    against the page height and dropped when that height is unknown. List boxes
+    have no origin and are taken as top-left.
+    """
+    origin = "TOPLEFT"
+    if isinstance(bbox, Mapping):
+        origin = str(bbox.get("coord_origin") or "TOPLEFT").upper()
+        values = [
+            bbox.get(short, bbox.get(long))
+            for short, long in (("l", "left"), ("t", "top"), ("r", "right"), ("b", "bottom"))
+        ]
+    elif isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+        values = list(bbox[:4])
+    else:
+        return None
+
+    coords = [_float_or_none(value) for value in values]
+    if any(value is None for value in coords):
+        return None
+    left, top, right, bottom = (cast(float, value) for value in coords)
+    if origin == "BOTTOMLEFT":
+        if page_height is None:
+            return None
+        top, bottom = page_height - top, page_height - bottom
+    elif origin != "TOPLEFT":
+        return None
+    return (min(left, right), min(top, bottom), max(left, right), max(top, bottom))
