@@ -16,8 +16,11 @@ tagpdf's ``uncompress`` leaves the CMaps readable as plain text.
 Math letters reach the text layer as base letters: the template maps unicode-math's
 italic and bold italic Mathematical Alphanumeric Symbols (``v`` is U+1D463) back
 to ``v``, which readers ignoring the Formula /Alt would otherwise announce as a
-symbol. The smoke's ``\\mathbb{R}`` must keep U+211D: a double-struck letter
-means something else than its base letter.
+symbol. With ``--require-double-struck`` (the default smoke, whose formula has
+``\\mathbb{R}``), U+211D must also be there: a double-struck letter means
+something else than its base letter.
+
+Usage: ``smoke_check.py PDF [--require-double-struck] [EXPECTED_ALT ...]``.
 """
 
 import re
@@ -145,6 +148,8 @@ def math_italic_letters(texts: set[str]) -> set[str]:
 
     Latin U+1D434-U+1D49B, the italic h U+210E, dotless i and j U+1D6A4-U+1D6A5
     and Greek U+1D6E2-U+1D755: the styles the template maps to base letters.
+    The layer holds every font's CMap, so a U+210E typed in the prose (which the
+    template keeps) counts too: a smoke checked with this has none.
     """
     return {
         char
@@ -156,10 +161,16 @@ def math_italic_letters(texts: set[str]) -> set[str]:
     }
 
 
+REQUIRE_DOUBLE_STRUCK = "--require-double-struck"
+
+
 if __name__ == "__main__":
     pdf = Path(sys.argv[1]).read_bytes()
+    options = sys.argv[2:]
+    require_double_struck = REQUIRE_DOUBLE_STRUCK in options
+    expected_alts = [arg for arg in options if arg != REQUIRE_DOUBLE_STRUCK]
     texts = formula_alternate_texts(pdf)
-    for expected in sys.argv[2:] or [EXPECTED]:
+    for expected in expected_alts or [EXPECTED]:
         if expected not in texts:
             sys.exit(f"formula alternate text missing; Formula /Alt found: {texts}")
     if MATH_FONT not in pdf:
@@ -172,7 +183,6 @@ if __name__ == "__main__":
         sys.exit("\\neq is not U+2260 in the text layer (legacy \\not overlay?)")
     if italic := math_italic_letters(layer):
         sys.exit(f"math letters reach the text layer as symbols: {sorted(italic)}")
-    if not sys.argv[2:] and DOUBLE_STRUCK_R not in layer:
-        # Only the default smoke has \\mathbb{R}.
+    if require_double_struck and DOUBLE_STRUCK_R not in layer:
         sys.exit("\\mathbb{R} lost U+211D in the text layer")
     print("smoke: formula alternate text present, math text layer has U+2260 and base letters")

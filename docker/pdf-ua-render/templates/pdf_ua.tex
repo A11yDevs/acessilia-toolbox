@@ -48,11 +48,14 @@
 % (v is U+1D463 MATHEMATICAL ITALIC SMALL V), and the font's ToUnicode CMap
 % gives that plane-1 character to the text layer. A reader that ignores the
 % Formula /Alt (a browser viewer, read aloud, search, copy and paste) then gets
-% "símbolo 1a" for a variable. Each font loaded from here on maps its italic
-% and bold italic Latin and Greek letters (and the italic h, dotless i and j)
-% to their base letters; the glyphs stay the same. Double-struck, script,
-% fraktur, sans and monospace letters keep their code points, which carry
-% meaning (R is not ℝ). It must come before the first font is loaded.
+% "símbolo 1a" for a variable. Each math font loaded from here on maps its
+% italic and bold italic Latin and Greek letters (and the italic h, dotless i
+% and j) to their base letters; the glyphs stay the same. Double-struck,
+% script, fraktur, sans and monospace letters keep their code points, which
+% carry meaning (R is not ℝ). A math font is one with the math alphabet
+% (U+1D44E): the text fonts are left alone, so an ℎ (U+210E, which DejaVu Sans
+% has) written in prose keeps its code point. It must come before the first
+% font is loaded.
 % The Lua below has no TeX specials (percent, hash, tilde, backslash) and no
 % comments: \directlua reads it as one line.
 \directlua{
@@ -86,7 +89,7 @@
   end
   luatexbase.add_to_callback("luaotfload.patch_font", function(tfmdata)
     local characters = tfmdata.characters
-    if not characters then return end
+    if not characters or not characters[0x1D44E] then return end
     for code, letter in pairs(base) do
       local character = characters[code]
       if character then character.tounicode = hex4(letter) end
