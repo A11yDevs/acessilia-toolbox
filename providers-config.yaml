@@ -163,12 +163,18 @@ providers:
   # the cache key: bump it whenever the server loads a different model.
   # Reach the server over the internal network; VLM_API_KEY is sent as a Bearer
   # token when set (llama-server --api-key).
+  #
+  # Behind the VLM gateway (deploy/vlm-gateway/), VLM_SERVE_URL is the gateway's
+  # http://<host>:8002/v1/vlm and VLM_API_KEY its TOOLBOX_API_KEY; the gateway
+  # holds the server's slots, so this Toolbox needs a longer timeout and a
+  # larger limit than the defaults below (VLM_TIMEOUT_SECONDS,
+  # VLM_MAX_CONCURRENCY; docs/tools.md, "VLM gateway").
   - id: qwen3-vl-8b
     version: "qwen3-vl-8b-instruct-q4_k_m-f982a07"
     transport: http
     endpoint: ${VLM_SERVE_URL}
     health_path: /health
-    timeout_seconds: 600
+    timeout_seconds: ${VLM_TIMEOUT_SECONDS:-600}
     capabilities:
       - document.ocr.page
       - document.adjudicate.page
@@ -184,12 +190,12 @@ providers:
       # server"). --ctx-size 16384 is the total KV cache, divided among the
       # slots: 8192 tokens each. More room per slot needs a larger --ctx-size
       # and more RAM, not fewer slots.
-      max_concurrency: 2
+      max_concurrency: ${VLM_MAX_CONCURRENCY:-2}
       # A gateway chat waits this long for a slot, then gets timeout_seconds at
       # the server. Any request frees its slot within timeout_seconds (600 s),
       # so this covers about three turns of both slots (docs/tools.md,
       # "Production server"). Clients need a longer timeout than 1800 + 600.
-      slot_wait_seconds: 1800
+      slot_wait_seconds: ${VLM_SLOT_WAIT_SECONDS:-1800}
       # At 3 tokens/s, 4096 tokens held a slot for over 20 minutes. A page cut
       # here reports finish "length", and the core keeps the extractors' text.
       page_max_tokens: 2048

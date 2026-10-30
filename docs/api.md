@@ -204,6 +204,25 @@ TOOLBOX_API_KEY=<TOOLBOX_API_KEY>
 TOOLBOX_VLM_PROVIDER=qwen3-vl-8b
 ```
 
+`GET /v1/vlm/health` (same key) probes every OpenAI-compatible VLM provider of
+this Toolbox, concurrently: 200 with `"status": "healthy"` when all of them
+answer, 503 with `"unhealthy"` otherwise, and each provider's `ProviderHealth`
+in `providers`. A VLM provider whose adapter cannot be built (no
+`config.model`, for instance) is unhealthy with the reason in `detail`, and a
+Toolbox with no VLM provider at all answers 503.
+A Toolbox whose `qwen3-vl-8b` points at another Toolbox's gateway
+(`{endpoint}/v1/vlm`) reaches this route from its provider health check.
+
+### Gateway mode
+
+`acessilia_toolbox.api.gateway_app:create_gateway_app` starts the same package
+with only `GET /v1/health` and the `/v1/vlm` routes, without `/v1/docs` or
+`/v1/openapi.json`, in one process (its limiter is per process: no `--workers`).
+Run next to a model server
+shared by several environments, it is the server's one client, and every
+environment's Toolbox points its VLM provider at it; see
+[docs/tools.md](tools.md#vlm-gateway) and `deploy/vlm-gateway/`.
+
 ## Execution request
 
 ``` json

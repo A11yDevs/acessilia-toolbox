@@ -46,14 +46,7 @@ def create_app(
     cache: ExecutionCache | None = None,
     store: ArtifactStore | None = None,
 ) -> FastAPI:
-    # Fail closed: a missing key used to leave every endpoint open with only a
-    # log line, which a forgotten .env turns into an exposed service.
-    if not auth.TOOLBOX_API_KEY and not auth.unauthenticated_allowed():
-        raise ConfigurationError(
-            "TOOLBOX_API_KEY is not set. Set it, or set "
-            f"{auth.ALLOW_UNAUTHENTICATED_ENV}=1 to run without authentication "
-            "(local development only)."
-        )
+    auth.ensure_key_configured()
 
     app = FastAPI(
         title="Acessilia Toolbox",

@@ -109,6 +109,15 @@ def test_expand_env_uses_the_inline_default_when_unset(
     )
 
 
+def test_expand_env_uses_the_inline_default_when_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `KEY=` line left in an env file keeps the default, as in the shell."""
+    monkeypatch.setenv("VLM_TIMEOUT_SECONDS", "")
+    assert expand_env("${VLM_TIMEOUT_SECONDS:-600}") == "600"
+    assert expand_env("${VLM_TIMEOUT_SECONDS}") == ""
+
+
 def test_expand_env_prefers_the_environment_over_the_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

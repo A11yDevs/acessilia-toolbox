@@ -67,7 +67,17 @@ def app_with(
             headers=self._headers(),
         )
 
+    def sync_client(
+        self: OpenAiCompatibleVlmProvider, timeout: float | None = None
+    ) -> httpx.Client:
+        return httpx.Client(
+            transport=httpx.MockTransport(handler),
+            base_url=self.base_url,
+            headers=self._headers(),
+        )
+
     monkeypatch.setattr(OpenAiCompatibleVlmProvider, "async_client", client)
+    monkeypatch.setattr(OpenAiCompatibleVlmProvider, "_client", sync_client)
     descriptors = [vlm_descriptor(timeout_seconds, **config), *extra]
     return create_app(CapabilityRegistry([]), ProviderRegistry(descriptors))
 
@@ -460,3 +470,74 @@ def test_a_client_that_leaves_while_waiting_takes_no_slot() -> None:
     assert acquired is False
     adapter.slots.release()
     assert adapter.slots.acquire(blocking=False)
+
+
+async def get(app, path: str, *, key: str | None = TOOLBOX_KEY) -> httpx.Response:
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app), base_url="http://toolbox"
+    ) as client:
+        return await client.get(path, headers=headers)
+
+
+@pytest.mark.parametrize(
+    ("server_status", "status", "state"), [(200, 200, "healthy"), (503, 503, "unhealthy")]
+)
+def test_vlm_health_reports_the_vlm_providers(monkeypatch, server_status, status, state) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(server_status, json={"status": "ok"})
+
+    text = ProviderDescriptor(id="pure-text", capabilities=["text.normalize"])
+    response = asyncio.run(get(app_with(handler, monkeypatch, extra=(text,)), "/v1/vlm/health"))
+
+    assert response.status_code == status
+    body = response.json()
+    assert body["status"] == state
+    # Only the VLM provider is probed, with the server's key.
+    assert [p["provider"] for p in body["providers"]] == ["qwen3-vl-8b"]
+    (request,) = seen
+    assert request.url.path == "/health"
+    assert request.headers["authorization"] == f"Bearer {VLM_KEY}"
+
+
+def test_vlm_health_requires_the_toolbox_key(monkeypatch) -> None:
+    app = app_with(lambda _: httpx.Response(200), monkeypatch)
+
+    response = asyncio.run(get(app, "/v1/vlm/health", key=None))
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "authorization_failed"
+
+
+def test_a_provider_behind_a_gateway_checks_its_health_route(monkeypatch) -> None:
+    # An environment's qwen3-vl-8b points at the gateway's /v1/vlm; its health
+    # check is {endpoint}/health, which must be the gateway's health route.
+    adapter = OpenAiCompatibleVlmProvider(
+        ProviderDescriptor.model_validate(
+            {
+                "id": "qwen3-vl-8b",
+                "endpoint": "http://gateway:8002/v1/vlm",
+                "capabilities": list(openai_vlm.CAPABILITIES),
+                "config": {"model": "qwen3-vl-8b"},
+            }
+        )
+    )
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200)
+
+    monkeypatch.setattr(
+        adapter,
+        "_client",
+        lambda timeout=None: httpx.Client(
+            transport=httpx.MockTransport(handler), base_url=adapter.base_url
+        ),
+    )
+
+    assert adapter.health().healthy
+    assert seen == ["http://gateway:8002/v1/vlm/health"]

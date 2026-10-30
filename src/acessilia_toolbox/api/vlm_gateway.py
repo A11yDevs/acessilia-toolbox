@@ -27,6 +27,7 @@ import logging
 import threading
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
+from datetime import UTC, datetime
 from typing import Annotated, Any, TypeVar
 
 import httpx
@@ -34,10 +35,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 
 from acessilia_toolbox.api.auth import bearer_scheme, require_api_key
 from acessilia_toolbox.api.rest import providers
-from acessilia_toolbox.api.schemas import OpenAiErrorResponse
+from acessilia_toolbox.api.schemas import OpenAiErrorResponse, VlmHealthResponse
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
     ProviderExecutionError,
@@ -45,8 +47,8 @@ from acessilia_toolbox.core.errors import (
     ProviderUnavailableError,
     ToolboxError,
 )
-from acessilia_toolbox.core.provider import ProviderRegistry
-from acessilia_toolbox.providers import create_adapter
+from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth, ProviderRegistry
+from acessilia_toolbox.providers import ADAPTERS, create_adapter
 from acessilia_toolbox.providers.openai_vlm import CHAT_PATH, OpenAiCompatibleVlmProvider
 
 LOG = logging.getLogger(__name__)
@@ -133,6 +135,71 @@ async def chat_completions(
         # "Unknown model error" again.
         LOG.exception("VLM gateway failed")
         return _openai_error(500, "unexpected failure in the VLM gateway", "internal_error")
+
+
+@vlm_router.get(
+    "/health",
+    responses={
+        200: {"model": VlmHealthResponse, "description": "Every VLM provider answers"},
+        401: {"model": OpenAiErrorResponse, "description": _ERROR_MEANINGS[401]},
+        503: {"model": VlmHealthResponse, "description": "A VLM provider does not answer"},
+    },
+)
+async def vlm_health(
+    registry: Annotated[ProviderRegistry, Depends(providers)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer_scheme)],
+) -> Response:
+    """Probe the VLM providers this gateway relays to.
+
+    A Toolbox whose ``qwen3-vl-8b`` points at another Toolbox's gateway
+    (``{endpoint}/v1/vlm``) checks its health here: the provider probes
+    ``{endpoint}/health``, which is this route.
+    """
+    try:
+        await require_api_key(credentials)
+    except ToolboxError as error:
+        return _openai_error(error.http_status, error.message, error.code)
+    except HTTPException as error:
+        return _openai_error(error.status_code, str(error.detail), "authorization_failed")
+
+    try:
+        probes = [_probe(descriptor) for descriptor in registry.descriptors()]
+        # Concurrent: the route answers within the slowest probe, not their
+        # sum, which a caller with the same 10 s timeout would read as down.
+        checks = [check for check in await asyncio.gather(*probes) if check is not None]
+    except Exception:
+        LOG.exception("VLM health check failed")
+        return _openai_error(500, "unexpected failure in the VLM health check", "internal_error")
+    # No VLM provider at all is a misconfigured gateway, not a healthy one.
+    healthy = bool(checks) and all(check.healthy for check in checks)
+    body = VlmHealthResponse(status="healthy" if healthy else "unhealthy", providers=checks)
+    return JSONResponse(status_code=200 if healthy else 503, content=body.model_dump(mode="json"))
+
+
+async def _probe(descriptor: ProviderDescriptor) -> ProviderHealth | None:
+    """One VLM provider's health, or None for a provider that is not a VLM.
+
+    The adapter is built as ``_relay`` builds it, so a VLM registered through
+    a factory counts too. One that cannot be built (no ``config.model``, a bad
+    ``max_concurrency``) is reported unhealthy with the reason, instead of
+    failing the whole route; a build failure of a provider registered as
+    another adapter is not this route's to report.
+    """
+    try:
+        adapter = create_adapter(descriptor)
+    except Exception as exc:
+        registered = ADAPTERS.get(descriptor.id)
+        if isinstance(registered, type) and issubclass(registered, OpenAiCompatibleVlmProvider):
+            return ProviderHealth(
+                provider=descriptor.id,
+                healthy=False,
+                detail=f"{type(exc).__name__}: {exc}",
+                checked_at=datetime.now(UTC),
+            )
+        return None
+    if not isinstance(adapter, OpenAiCompatibleVlmProvider):
+        return None
+    return await run_in_threadpool(adapter.health)
 
 
 def _openai_error(status: int, message: str, code: str) -> JSONResponse:
