@@ -7,10 +7,11 @@ DoclingProvider helpers.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -52,12 +53,12 @@ class DoclingMathProvider:
 
         with self._client() as client:
             raw = self._convert(client, payload, filename, media_type)
-            formulas = self._extract_formulas(raw)
+            document, notes = self._extract_formulas(raw)
             versions = self._server_versions(client)
 
         completed_at = datetime.now(UTC)
         return ExtractionResult(
-            document=formulas,
+            document=document,
             backend="docling",
             started_at=started_at,
             completed_at=completed_at,
@@ -68,6 +69,7 @@ class DoclingMathProvider:
                 "base_url": self.base_url,
                 "capability": capability_id,
                 "component_versions": _components(versions),
+                **notes,
                 **dict(parameters or {}),
             },
         )
@@ -160,58 +162,56 @@ class DoclingMathProvider:
             return {}
         return {str(key): str(value) for key, value in data.items()}
 
-    def _extract_formulas(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Extract LaTeX formulas from docling-serve response.
+    def _extract_formulas(
+        self, raw: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Build an artifact/latex@1 document from the docling-serve response.
 
-        Returns a dict with:
-        - formulas: list of {latex, confidence, page, bbox}
-        - raw_text: full text content as fallback
+        artifact/latex@1 carries a single expression, and math.convert and
+        math.verbalize hand ``latex`` to MathJax/MathCAT as one expression, so
+        only the first formula in reading order is returned. The number of
+        formulas found is reported in the returned notes, which end up in the
+        extraction configuration. Items without a ``formula``/``equation``
+        label are never returned as LaTeX.
         """
         doc = raw.get("document") or {}
         json_content = doc.get("json_content") or {}
 
-        formulas: list[dict[str, Any]] = []
+        formulas = [
+            item
+            for collection in ("groups", "texts")
+            for item in json_content.get(collection, [])
+            if self._get_label(item) in ("formula", "equation")
+            and (item.get("text") or "").strip()
+        ]
+        if not formulas:
+            raise ProviderExecutionError(
+                "docling-serve found no mathematical formulas in the image",
+                provider=self.descriptor.id,
+            )
 
-        # Extract from groups collection (formula/equation items)
-        for item in json_content.get("groups", []):
-            label = self._get_label(item)
-            if label in ("formula", "equation"):
-                latex = (item.get("text") or "").strip()
-                if latex:
-                    prov = (item.get("prov") or [{}])[0]
-                    formulas.append({
-                        "latex": latex,
-                        "confidence": item.get("confidence", 1.0),
-                        "page": prov.get("page", 1) or prov.get("page_no", 1),
-                        "bbox": prov.get("bbox", []),
-                    })
+        primary = formulas[0]
+        document_payload: dict[str, Any] = {"latex": primary["text"].strip()}
+        notes: dict[str, Any] = {"formula_count": len(formulas)}
 
-        # Also check texts with formula/equation label
-        for item in json_content.get("texts", []):
-            label = self._get_label(item)
-            if label in ("formula", "equation"):
-                latex = (item.get("text") or "").strip()
-                if latex:
-                    prov = (item.get("prov") or [{}])[0]
-                    formulas.append({
-                        "latex": latex,
-                        "confidence": item.get("confidence", 1.0),
-                        "page": prov.get("page", 1) or prov.get("page_no", 1),
-                        "bbox": prov.get("bbox", []),
-                    })
+        raw_conf = primary.get("confidence")
+        if raw_conf is not None:
+            conf = _float_or_none(raw_conf)
+            if conf is not None and 0.0 <= conf <= 1.0:
+                document_payload["confidence"] = conf
+            else:
+                notes["dropped_confidence"] = str(raw_conf)
 
-        # Collect raw text as fallback
-        raw_text = ""
-        for item in json_content.get("texts", []):
-            text = (item.get("text") or "").strip()
-            if text:
-                raw_text += text + "\n"
+        prov = (primary.get("prov") or [{}])[0]
+        page = prov.get("page_no") or prov.get("page") or 1
+        if isinstance(page, int) and page >= 1:
+            document_payload["page"] = page
 
-        return {
-            "formulas": formulas,
-            "raw_text": raw_text.strip(),
-            "formula_count": len(formulas),
-        }
+        bbox = _top_left_bbox(prov.get("bbox"), _page_height(json_content, page))
+        if bbox is not None:
+            document_payload["bbox"] = list(bbox)
+
+        return document_payload, notes
 
     @staticmethod
     def _get_label(item: dict[str, Any]) -> str:
@@ -232,3 +232,59 @@ def _pick_version(versions: dict[str, str], fallback: str) -> str:
 
 def _components(versions: dict[str, str]) -> dict[str, str]:
     return {key: versions[key] for key in COMPONENT_KEYS if key in versions}
+
+
+def _float_or_none(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+    except (ValueError, TypeError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _page_height(json_content: Mapping[str, Any], page: Any) -> float | None:
+    pages = json_content.get("pages") or {}
+    if not isinstance(pages, Mapping):
+        return None
+    entry = pages.get(str(page)) or pages.get(page) or {}
+    if not isinstance(entry, Mapping):
+        return None
+    size = entry.get("size") or {}
+    height = entry.get("height", size.get("height") if isinstance(size, Mapping) else None)
+    return _float_or_none(height)
+
+
+def _top_left_bbox(
+    bbox: Any, page_height: float | None
+) -> tuple[float, float, float, float] | None:
+    """Normalize a Docling bbox to [left, top, right, bottom] with a top-left origin.
+
+    Docling dict boxes carry ``coord_origin``; ``BOTTOMLEFT`` boxes are flipped
+    against the page height and dropped when that height is unknown. List boxes
+    have no origin and are taken as top-left.
+    """
+    origin = "TOPLEFT"
+    if isinstance(bbox, Mapping):
+        origin = str(bbox.get("coord_origin") or "TOPLEFT").upper()
+        values = [
+            bbox.get(short, bbox.get(long))
+            for short, long in (("l", "left"), ("t", "top"), ("r", "right"), ("b", "bottom"))
+        ]
+    elif isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+        values = list(bbox[:4])
+    else:
+        return None
+
+    coords = [_float_or_none(value) for value in values]
+    if any(value is None for value in coords):
+        return None
+    left, top, right, bottom = (cast(float, value) for value in coords)
+    if origin == "BOTTOMLEFT":
+        if page_height is None:
+            return None
+        top, bottom = page_height - top, page_height - bottom
+    elif origin != "TOPLEFT":
+        return None
+    return (min(left, right), min(top, bottom), max(left, right), max(top, bottom))

@@ -196,7 +196,7 @@ class DoclingOcrProvider:
                     "text": text,
                     "label": label,
                     "confidence": item.get("confidence", 1.0),
-                    "page": prov.get("page", 1) or prov.get("page_no", 1),
+                    "page": prov.get("page_no") or prov.get("page") or 1,
                     "bbox": prov.get("bbox", []),
                 })
                 full_text_parts.append(text)
