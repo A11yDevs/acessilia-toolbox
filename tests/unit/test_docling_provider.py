@@ -136,6 +136,9 @@ def test_http_error_is_normalized_as_execution_failure() -> None:
 
     assert error.value.code == "provider_execution_failed"
     assert error.value.details["status_code"] == 422
+    # The sidecar's own wording must survive: it is what makes a deployment
+    # failure (missing dependency, OOM) diagnosable from the Toolbox error.
+    assert "docling-serve rejected the document: HTTP 422 - unsupported" in str(error.value)
 
 
 def test_timeout_is_normalized() -> None:

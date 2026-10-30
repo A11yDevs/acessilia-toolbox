@@ -35,6 +35,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.http_support import format_http_error
 from acessilia_toolbox.providers.mineru_document import MineruDocument
 
 PARSE_PATH = "/file_parse"
@@ -176,9 +177,13 @@ class MineruProvider:
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                "mineru-api rejected the document: "
-                f"HTTP {exc.response.status_code}",
+                format_http_error(
+                    "mineru-api",
+                    exc.response,
+                    action="rejected the document",
+                ),
                 provider=self.descriptor.id,
+                status_code=exc.response.status_code,
             ) from exc
         except httpx.HTTPError as exc:
             raise ProviderUnavailableError(
