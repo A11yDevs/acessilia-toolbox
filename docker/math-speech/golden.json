@@ -1,5 +1,10 @@
 [
   {
+    "name": "decimal com vírgula",
+    "latex": "-0{,}0833",
+    "speech": "menos 0,0833"
+  },
+  {
     "name": "fração",
     "latex": "x=\\frac{a}{b}",
     "speech": "x é igual a a sobre b"

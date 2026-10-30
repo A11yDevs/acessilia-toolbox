@@ -247,21 +247,26 @@ def test_cache_hit_reuses_the_stored_pdf_without_rendering(tmp_path: Path) -> No
     assert "%PDF" not in json.dumps(next(iter(cache.data.values())))
 
 
-def test_cache_hit_with_a_deleted_pdf_renders_again(tmp_path: Path) -> None:
+@pytest.mark.parametrize("artifact_index", [0, 1], ids=["json", "pdf"])
+def test_cache_hit_with_a_deleted_artifact_renders_again(
+    tmp_path: Path, artifact_index: int
+) -> None:
     handler, calls = sidecar()
     store = FilesystemArtifactStore(tmp_path)
     executor = executor_with(provider_with(handler), store=store, cache=MemoryCache())
 
     first = export(executor)
-    for stored in tmp_path.rglob("*"):
-        if stored.is_file():
-            stored.unlink()
+    store._path(first.artifacts[artifact_index].artifact_id).unlink()
     second = export(executor)
 
     assert not second.provenance.cache_hit
     assert sum(call.url.path == "/render" for call in calls) == 2
     assert store.get(second.document["artifact_id"]) == PDF_BYTES
     assert second.document["artifact_id"] == first.document["artifact_id"]
+    for artifact in second.artifacts:
+        payload, ref = executor.retrieve_artifact(artifact.artifact_id)
+        assert fingerprint_bytes(payload) == ref.artifact_id
+    assert export(executor).provenance.cache_hit
 
 
 def test_binary_outputs_require_an_artifact_store_before_rendering() -> None:
@@ -461,6 +466,17 @@ def test_template_defines_the_formula_alt_command() -> None:
     assert "\\l__math_content_template_tl" in template
 
 
+def test_template_guards_the_internal_math_collect_command() -> None:
+    """\\MathCollectTrue is latex-lab internal: its absence must fail by name."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    assert "\\NewDocumentCommand \\AccessiliaFormulaCollect { } { \\MathCollectTrue }" in template
+    assert "\\cs_if_exist:NF \\MathCollectTrue" in template
+    source = (SERVER_PATH.parent / "filters" / "formula_alt.lua").read_text(encoding="utf-8")
+    # The filter goes through the template's command, never the internal one.
+    assert "\\\\AccessiliaFormulaCollect" in source
+    assert "MathCollectTrue" not in source
+
+
 def test_template_sets_math_with_unicode_math_after_fontspec() -> None:
     template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
     # unicode-math needs fontspec first, and conflicts with amssymb.
@@ -477,6 +493,21 @@ def test_template_sets_math_with_unicode_math_after_fontspec() -> None:
         assert f"\\providecommand\\{name}{{" in template, name
     assert "\\let\\smallsetminus\\setminus" in template
     assert "\\setmathfont{STIXTwoMath-Regular.otf}[range=" in template
+
+
+def test_template_maps_math_letters_to_base_letters_before_any_font() -> None:
+    """#106: the ToUnicode patch only reaches fonts loaded after it is registered."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    callback = '"luaotfload.patch_font"'
+    assert callback in template
+    assert template.index(callback) < template.index("\\usepackage{fontspec}")
+    # \directlua reads its argument as one line of TeX tokens: a Lua comment
+    # would swallow the rest, and %, # and ~ are TeX specials.
+    start = template.index("\\directlua{")
+    end = template.index('"accessilia.math_letter_tounicode")', start)
+    lua = template[start + len("\\directlua{") : end]
+    assert "--" not in lua
+    assert not set("%#~\\") & set(lua)
 
 
 def _smoke_check() -> Any:
@@ -509,6 +540,22 @@ def test_smoke_check_reads_hex_and_literal_alternate_texts() -> None:
     ]
 
 
+def test_smoke_check_reads_only_formula_alternate_texts() -> None:
+    """An /Alt on another element must not stand in for a missing Formula."""
+    module = _smoke_check()
+    pdf = (
+        b"7 0 obj\n<< /Type /StructElem /S /Figure /Alt (figura) >>\nendobj\n"
+        b"8 0 obj\n<< /Type /StructElem /C /inline /Alt (x igual a 1) /S /Formula"
+        b" /K <</Type /MCR /MCID 1>> >>\nendobj\n"
+        b"9 0 obj\n<< /Type /StructElem /S /Formula /K 2 >>\nendobj\n"
+        # The role map names Formula without being a structure element.
+        b"10 0 obj\n<< /Type /StructTreeRoot /RoleMap << /Formula /Formula >>"
+        b" /Alt (raiz) >>\nendobj\n"
+    )
+
+    assert module.formula_alternate_texts(pdf) == ["x igual a 1", ""]
+
+
 def test_smoke_check_reads_the_tounicode_text_layer() -> None:
     """The build-time \\neq check reads bfchar and both bfrange forms of a CMap."""
     module = _smoke_check()
@@ -537,3 +584,16 @@ def test_smoke_check_skips_malformed_tounicode_targets() -> None:
     )
 
     assert module.text_layer(pdf) == {"￾", "￿", "≠"}
+
+
+def test_smoke_check_finds_italic_math_letters_in_the_text_layer() -> None:
+    module = _smoke_check()
+
+    layer = {"v", "\U0001d463", "\u210e", "\U0001d6fc", "\U0001d482", "\u211d", "\U0001d524"}
+
+    # Italic v, italic h, italic alpha and bold italic a; double-struck R and
+    # fraktur g keep their code points by design.
+    assert module.math_italic_letters(layer) == {
+        "\U0001d463", "\u210e", "\U0001d6fc", "\U0001d482"
+    }
+    assert module.math_italic_letters({"v(t) = s\u2032(t)", "\u211d"}) == set()

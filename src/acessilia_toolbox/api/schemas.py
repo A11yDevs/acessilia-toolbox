@@ -23,6 +23,21 @@ class HealthResponse(BaseModel):
     image_tag: str = ""
 
 
+class ReadinessChecks(BaseModel):
+    catalog: bool
+    structure: bool
+    storage: bool
+
+
+class ReadinessResponse(BaseModel):
+    status: Literal["ready", "unavailable"]
+    checks: ReadinessChecks
+
+
+class UploadLimitResponse(BaseModel):
+    detail: str
+
+
 class CapabilitySummary(BaseModel):
     id: str
     version: int

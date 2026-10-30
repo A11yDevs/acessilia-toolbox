@@ -21,6 +21,13 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.docling_support import (
+    extract_page_number,
+    float_or_none,
+    page_height,
+    top_left_bbox,
+)
+from acessilia_toolbox.providers.http_support import format_http_error
 
 CONVERT_PATH = "/v1/convert/file"
 
@@ -30,6 +37,8 @@ COMPONENT_KEYS = ("docling-serve", "docling", "docling-core", "docling-ibm-model
 
 class DoclingMathProvider:
     """Calls docling-serve and extracts LaTeX from formula groups."""
+
+    supports_streaming_input = True
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -49,12 +58,12 @@ class DoclingMathProvider:
 
         with self._client() as client:
             raw = self._convert(client, payload, filename, media_type)
-            formulas = self._extract_formulas(raw)
+            document, notes = self._extract_formulas(raw)
             versions = self._server_versions(client)
 
         completed_at = datetime.now(UTC)
         return ExtractionResult(
-            document=formulas,
+            document=document,
             backend="docling",
             started_at=started_at,
             completed_at=completed_at,
@@ -65,6 +74,7 @@ class DoclingMathProvider:
                 "base_url": self.base_url,
                 "capability": capability_id,
                 "component_versions": _components(versions),
+                **notes,
                 **dict(parameters or {}),
             },
         )
@@ -86,9 +96,7 @@ class DoclingMathProvider:
                 return ProviderHealth(
                     provider=self.descriptor.id,
                     healthy=True,
-                    version=_pick_version(
-                        self._server_versions(client), self.descriptor.version
-                    ),
+                    version=_pick_version(self._server_versions(client), self.descriptor.version),
                     checked_at=checked_at,
                 )
         except Exception as exc:
@@ -112,7 +120,13 @@ class DoclingMathProvider:
             response = client.post(
                 CONVERT_PATH,
                 files={"files": (filename, payload, media_type)},
-                data={"to_formats": ["json"]},
+                data={
+                    "to_formats": ["json"],
+                    "pipeline": "vlm",
+                    "vlm_pipeline_preset": self.descriptor.config.get(
+                        "vlm_pipeline_preset", "granite_docling"
+                    ),
+                },
             )
             response.raise_for_status()
         except httpx.TimeoutException as exc:
@@ -122,7 +136,7 @@ class DoclingMathProvider:
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                f"docling-serve rejected: HTTP {exc.response.status_code}",
+                format_http_error("docling-serve", exc.response),
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc
@@ -151,58 +165,52 @@ class DoclingMathProvider:
             return {}
         return {str(key): str(value) for key, value in data.items()}
 
-    def _extract_formulas(self, raw: dict[str, Any]) -> dict[str, Any]:
-        """Extract LaTeX formulas from docling-serve response.
+    def _extract_formulas(self, raw: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Build an artifact/latex@1 document from the docling-serve response.
 
-        Returns a dict with:
-        - formulas: list of {latex, confidence, page, bbox}
-        - raw_text: full text content as fallback
+        artifact/latex@1 carries a single expression, and math.convert and
+        math.verbalize hand ``latex`` to MathJax/MathCAT as one expression, so
+        only the first formula in reading order is returned. The number of
+        formulas found is reported in the returned notes, which end up in the
+        extraction configuration. Items without a ``formula``/``equation``
+        label are never returned as LaTeX.
         """
         doc = raw.get("document") or {}
         json_content = doc.get("json_content") or {}
 
-        formulas: list[dict[str, Any]] = []
+        formulas = [
+            item
+            for collection in ("groups", "texts")
+            for item in json_content.get(collection, [])
+            if self._get_label(item) in ("formula", "equation") and (item.get("text") or "").strip()
+        ]
+        if not formulas:
+            raise ProviderExecutionError(
+                "docling-serve found no mathematical formulas in the image",
+                provider=self.descriptor.id,
+            )
 
-        # Extract from groups collection (formula/equation items)
-        for item in json_content.get("groups", []):
-            label = self._get_label(item)
-            if label in ("formula", "equation"):
-                latex = (item.get("text") or "").strip()
-                if latex:
-                    prov = (item.get("prov") or [{}])[0]
-                    formulas.append({
-                        "latex": latex,
-                        "confidence": item.get("confidence", 1.0),
-                        "page": prov.get("page", 1) or prov.get("page_no", 1),
-                        "bbox": prov.get("bbox", []),
-                    })
+        primary = formulas[0]
+        document_payload: dict[str, Any] = {"latex": primary["text"].strip()}
+        notes: dict[str, Any] = {"formula_count": len(formulas)}
 
-        # Also check texts with formula/equation label
-        for item in json_content.get("texts", []):
-            label = self._get_label(item)
-            if label in ("formula", "equation"):
-                latex = (item.get("text") or "").strip()
-                if latex:
-                    prov = (item.get("prov") or [{}])[0]
-                    formulas.append({
-                        "latex": latex,
-                        "confidence": item.get("confidence", 1.0),
-                        "page": prov.get("page", 1) or prov.get("page_no", 1),
-                        "bbox": prov.get("bbox", []),
-                    })
+        raw_conf = primary.get("confidence")
+        if raw_conf is not None:
+            conf = float_or_none(raw_conf)
+            if conf is not None and 0.0 <= conf <= 1.0:
+                document_payload["confidence"] = conf
+            else:
+                notes["dropped_confidence"] = str(raw_conf)
 
-        # Collect raw text as fallback
-        raw_text = ""
-        for item in json_content.get("texts", []):
-            text = (item.get("text") or "").strip()
-            if text:
-                raw_text += text + "\n"
+        prov = (primary.get("prov") or [{}])[0]
+        page = extract_page_number(prov, default=1)
+        document_payload["page"] = page
 
-        return {
-            "formulas": formulas,
-            "raw_text": raw_text.strip(),
-            "formula_count": len(formulas),
-        }
+        bbox = top_left_bbox(prov.get("bbox"), page_height(json_content, page))
+        if bbox is not None:
+            document_payload["bbox"] = list(bbox)
+
+        return document_payload, notes
 
     @staticmethod
     def _get_label(item: dict[str, Any]) -> str:

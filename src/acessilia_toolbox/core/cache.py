@@ -24,23 +24,26 @@ def compute_cache_key(
     filename: str = "",
     media_type: str = "",
     language: str = "",
+    preprocessing: Mapping[str, object] | None = None,
 ) -> str:
     """Derive a stable key from the full execution context.
 
     Input order is preserved: for capabilities taking several inputs the
-    ordering is part of the request's meaning.
+    ordering is part of the request's meaning. Optional preprocessing binds
+    the key to the orientation provider and decision as well as its output.
     """
-    material = canonical_json(
-        {
-            "schema_version": 2,
-            "capability": f"{capability_id}@{capability_version}",
-            "provider": f"{provider_id}@{provider_version}",
-            "inputs": list(input_fingerprints),
-            "parameters": dict(parameters or {}),
-            "models": dict(model_versions or {}),
-            "filename": filename,
-            "media_type": media_type,
-            "language": language,
-        }
-    )
+    context: dict[str, object] = {
+        "schema_version": 2,
+        "capability": f"{capability_id}@{capability_version}",
+        "provider": f"{provider_id}@{provider_version}",
+        "inputs": list(input_fingerprints),
+        "parameters": dict(parameters or {}),
+        "models": dict(model_versions or {}),
+        "filename": filename,
+        "media_type": media_type,
+        "language": language,
+    }
+    if preprocessing is not None:
+        context["preprocessing"] = dict(preprocessing)
+    material = canonical_json(context)
     return fingerprint_bytes(material.encode("utf-8"))

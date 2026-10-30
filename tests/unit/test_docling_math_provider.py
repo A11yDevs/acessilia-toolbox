@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import copy
+import json
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
 import httpx
+import jsonschema
 import pytest
 
 from acessilia_toolbox.core.errors import (
@@ -14,7 +21,12 @@ from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.docling_math import DoclingMathProvider
 
-SAMPLE_RESPONSE = {
+
+def top_left_box(left: float, top: float, right: float, bottom: float) -> dict[str, Any]:
+    return {"l": left, "t": top, "r": right, "b": bottom, "coord_origin": "TOPLEFT"}
+
+
+SAMPLE_RESPONSE: dict[str, Any] = {
     "document": {
         "json_content": {
             "schema_name": "DoclingDocument",
@@ -30,7 +42,12 @@ SAMPLE_RESPONSE = {
                     "text": "E = mc^2",
                     "level": 1,
                     "confidence": 0.98,
-                    "prov": [{"page": 1, "bbox": [50, 50, 500, 100]}],
+                    "prov": [
+                        {
+                            "page_no": 1,
+                            "bbox": top_left_box(50, 50, 500, 100),
+                        }
+                    ],
                 },
             ],
             "groups": [
@@ -39,14 +56,24 @@ SAMPLE_RESPONSE = {
                     "label": {"value": "formula"},
                     "text": r"E = mc^2",
                     "confidence": 0.95,
-                    "prov": [{"page": 1, "bbox": [50, 50, 500, 100]}],
+                    "prov": [
+                        {
+                            "page_no": 1,
+                            "bbox": top_left_box(50, 50, 500, 100),
+                        }
+                    ],
                 },
                 {
                     "self_ref": "#/groups/1",
                     "label": {"value": "formula"},
                     "text": r"\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}",
                     "confidence": 0.90,
-                    "prov": [{"page": 2, "bbox": [50, 200, 500, 300]}],
+                    "prov": [
+                        {
+                            "page_no": 2,
+                            "bbox": top_left_box(50, 200, 500, 300),
+                        }
+                    ],
                 },
             ],
             "pictures": [],
@@ -100,6 +127,21 @@ def convert_handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json=SAMPLE_RESPONSE)
 
 
+def handler_for(response: dict[str, Any]) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return httpx.Response(200, json={"docling-serve": "1.32.0"})
+        return httpx.Response(200, json=response)
+
+    return handler
+
+
+def sample_with(**json_content: object) -> dict[str, Any]:
+    response = copy.deepcopy(SAMPLE_RESPONSE)
+    response["document"]["json_content"].update(json_content)
+    return response
+
+
 def extract(adapter: DoclingMathProvider):
     return adapter.execute(
         "math.recognize",
@@ -110,52 +152,126 @@ def extract(adapter: DoclingMathProvider):
 
 
 class TestDoclingMathProvider:
-    def test_extraction_returns_formulas(self) -> None:
+    def test_conversion_uses_formula_aware_vlm_pipeline(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/v1/convert/file":
+                assert b'name="pipeline"' in request.content
+                assert b"\r\n\r\nvlm\r\n" in request.content
+                assert b"granite_docling" in request.content
+            return convert_handler(request)
+
+        extract(provider_with(handler))
+
+    def test_extraction_returns_latex_and_conforms_to_schema(self) -> None:
+        schema_path = Path(__file__).parents[2] / "schemas" / "latex@1.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
         extraction = extract(provider_with(convert_handler))
 
         assert extraction.backend == "docling"
         assert extraction.version == "1.32.0"
-        assert extraction.document["formula_count"] == 2
+        assert extraction.document["latex"] == "E = mc^2"
+        assert extraction.document["confidence"] == 0.95
+        assert extraction.document["page"] == 1
+        assert extraction.document["bbox"] == [50.0, 50.0, 500.0, 100.0]
 
-    def test_formulas_contain_latex(self) -> None:
-        extraction = extract(provider_with(convert_handler))
-        formulas = extraction.document["formulas"]
+        jsonschema.validate(instance=extraction.document, schema=schema)
 
-        assert formulas[0]["latex"] == r"E = mc^2"
-        assert formulas[1]["latex"] == r"\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"
-
-    def test_formulas_have_confidence_and_page(self) -> None:
-        extraction = extract(provider_with(convert_handler))
-        formulas = extraction.document["formulas"]
-
-        assert formulas[0]["confidence"] == 0.95
-        assert formulas[0]["page"] == 1
-        assert formulas[1]["page"] == 2
-
-    def test_formulas_have_bbox(self) -> None:
-        extraction = extract(provider_with(convert_handler))
-        formulas = extraction.document["formulas"]
-
-        assert len(formulas[0]["bbox"]) == 4
-
-    def test_raw_text_fallback(self) -> None:
+    def test_multiple_formulas_return_the_first_and_report_the_count(self) -> None:
+        """latex@1 is one expression; the others are counted, not concatenated."""
         extraction = extract(provider_with(convert_handler))
 
-        assert "E = mc^2" in extraction.document["raw_text"]
+        assert "\n" not in extraction.document["latex"]
+        assert extraction.configuration["formula_count"] == 2
 
-    def test_empty_response_returns_no_formulas(self) -> None:
-        empty = dict(SAMPLE_RESPONSE)
-        empty["document"]["json_content"]["groups"] = []
-        empty["document"]["json_content"]["texts"] = []
+    def test_page_comes_from_docling_page_no(self) -> None:
+        response = sample_with(groups=SAMPLE_RESPONSE["document"]["json_content"]["groups"][1:])
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            if request.url.path == "/version":
-                return httpx.Response(200, json={"docling-serve": "1.32.0"})
-            return httpx.Response(200, json=empty)
+        extraction = extract(provider_with(handler_for(response)))
 
-        extraction = extract(provider_with(handler))
-        assert extraction.document["formula_count"] == 0
-        assert extraction.document["formulas"] == []
+        assert extraction.document["page"] == 2
+        assert extraction.document["confidence"] == 0.90
+
+    def test_bottom_left_bbox_is_flipped_to_top_left(self) -> None:
+        response = sample_with(
+            groups=[
+                {
+                    "label": {"value": "formula"},
+                    "text": "x",
+                    "prov": [
+                        {
+                            "page_no": 1,
+                            "bbox": {
+                                "l": 285.3,
+                                "t": 522.0,
+                                "r": 650.0,
+                                "b": 471.0,
+                                "coord_origin": "BOTTOMLEFT",
+                            },
+                        }
+                    ],
+                }
+            ]
+        )
+
+        extraction = extract(provider_with(handler_for(response)))
+
+        assert extraction.document["bbox"] == [285.3, 320.0, 650.0, 371.0]
+
+    def test_bottom_left_bbox_without_page_height_is_dropped(self) -> None:
+        response = sample_with(
+            pages={},
+            groups=[
+                {
+                    "label": {"value": "formula"},
+                    "text": "x",
+                    "prov": [
+                        {
+                            "page_no": 1,
+                            "bbox": {"l": 0, "t": 10, "r": 5, "b": 0, "coord_origin": "BOTTOMLEFT"},
+                        }
+                    ],
+                }
+            ],
+        )
+
+        extraction = extract(provider_with(handler_for(response)))
+
+        assert "bbox" not in extraction.document
+
+    def test_out_of_range_confidence_is_dropped_and_recorded(self) -> None:
+        response = sample_with(
+            groups=[{"label": {"value": "formula"}, "text": "x", "confidence": "high"}]
+        )
+
+        extraction = extract(provider_with(handler_for(response)))
+
+        assert "confidence" not in extraction.document
+        assert extraction.configuration["dropped_confidence"] == "high"
+
+    def test_empty_response_raises_when_no_formulas_or_text(self) -> None:
+        response = sample_with(groups=[], texts=[])
+
+        with pytest.raises(ProviderExecutionError, match="found no mathematical formulas"):
+            extract(provider_with(handler_for(response)))
+
+    def test_plain_text_is_not_returned_as_latex(self) -> None:
+        """Prose without a formula label must not reach math.convert as LaTeX."""
+        response = sample_with(
+            groups=[], texts=[{"label": {"value": "text"}, "text": "a page of prose"}]
+        )
+
+        with pytest.raises(ProviderExecutionError, match="found no mathematical formulas"):
+            extract(provider_with(handler_for(response)))
+
+    def test_formula_labelled_text_item_is_recognized(self) -> None:
+        response = sample_with(
+            groups=[], texts=[{"label": {"value": "formula"}, "text": "a^2 + b^2 = c^2"}]
+        )
+
+        extraction = extract(provider_with(handler_for(response)))
+
+        assert extraction.document == {"latex": "a^2 + b^2 = c^2", "page": 1}
 
     def test_timeout_raises_provider_error(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -212,23 +328,20 @@ class TestDoclingMathProvider:
 
     def test_label_as_string_not_dict(self) -> None:
         """Handle case where label is a plain string instead of {value: ...}."""
-        response = dict(SAMPLE_RESPONSE)
-        jc = response["document"]["json_content"]
-        jc["groups"] = [
-            {
-                "self_ref": "#/groups/0",
-                "label": "formula",
-                "text": r"x = y",
-                "confidence": 0.9,
-                "prov": [{"page": 1, "bbox": [0, 0, 100, 50]}],
-            },
-        ]
+        response = sample_with(
+            groups=[
+                {
+                    "self_ref": "#/groups/0",
+                    "label": "formula",
+                    "text": r"x = y",
+                    "confidence": 0.9,
+                    "prov": [{"page": 1, "bbox": [0, 0, 100, 50]}],
+                },
+            ]
+        )
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            if request.url.path == "/version":
-                return httpx.Response(200, json={"docling-serve": "1.32.0"})
-            return httpx.Response(200, json=response)
-
-        extraction = extract(provider_with(handler))
-        assert extraction.document["formula_count"] == 1
-        assert extraction.document["formulas"][0]["latex"] == "x = y"
+        extraction = extract(provider_with(handler_for(response)))
+        assert extraction.document["latex"] == "x = y"
+        assert extraction.document["confidence"] == 0.9
+        assert extraction.document["page"] == 1
+        assert extraction.document["bbox"] == [0.0, 0.0, 100.0, 50.0]

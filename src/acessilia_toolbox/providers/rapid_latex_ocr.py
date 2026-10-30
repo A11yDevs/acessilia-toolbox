@@ -20,6 +20,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.http_support import format_http_error
 
 PREDICT_PATH = "/predict"
 
@@ -30,6 +31,8 @@ class RapidLatexOcrProvider:
     Subclasses that reach a different service over the same ``/predict``,
     ``/health`` and ``/version`` API only override :attr:`backend`.
     """
+
+    supports_streaming_input = True
 
     #: Identity reported in the extraction and in error messages.
     backend: ClassVar[str] = "rapid-latex-ocr"
@@ -152,7 +155,7 @@ class RapidLatexOcrProvider:
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                f"{self.backend} rejected: HTTP {exc.response.status_code}",
+                format_http_error(self.backend, exc.response),
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc

@@ -6,9 +6,13 @@ provenance — testable without Docker or ML models.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 from tests.fixtures.documents import FakeDocument
@@ -17,15 +21,21 @@ from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegi
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
     ProviderNotBoundError,
+    ProviderUnavailableError,
     UnsupportedMediaTypeError,
 )
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
-from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+from acessilia_toolbox.core.normalization.extraction import BinaryOutput, ExtractionResult
 from acessilia_toolbox.core.provider import (
     ProviderDescriptor,
     ProviderHealth,
     ProviderRegistry,
+)
+from acessilia_toolbox.providers.storage import (
+    FailoverArtifactStore,
+    FilesystemArtifactStore,
+    S3ArtifactStore,
 )
 
 PDF = "application/pdf"
@@ -233,4 +243,150 @@ def test_incompatible_cached_result_is_replaced(executor, provider) -> None:
     assert len(provider.calls) == 1
     second = run(executor)
     assert second.provenance.cache_hit is True
+    assert len(provider.calls) == 1
+
+
+@pytest.mark.parametrize("with_store", [False, True], ids=["inline", "stored-json"])
+def test_cached_json_remains_usable(
+    executor: CapabilityExecutor, provider: StubProvider, tmp_path: Path, with_store: bool
+) -> None:
+    class MemoryCache:
+        def __init__(self):
+            self.data = {}
+
+        def get(self, key):
+            return self.data.get(key)
+
+        def put(self, key, value):
+            self.data[key] = value
+
+    executor._cache = MemoryCache()
+    store = FilesystemArtifactStore(tmp_path) if with_store else None
+    executor._store = store
+    first = run(executor)
+    assert run(executor).provenance.cache_hit
+    assert len(provider.calls) == 1
+
+    if store is not None:
+        store._path(first.artifacts[0].artifact_id).unlink()
+        refreshed = run(executor)
+        assert not refreshed.provenance.cache_hit
+        assert len(provider.calls) == 2
+        payload, ref = executor.retrieve_artifact(refreshed.artifacts[0].artifact_id)
+        assert fingerprint_bytes(payload) == ref.artifact_id
+        assert json.loads(payload) == refreshed.document
+        assert run(executor).provenance.cache_hit
+        assert len(provider.calls) == 2
+    else:
+        assert first.artifacts[0].storage_backend is None
+        assert run(executor).document == first.document
+        assert len(provider.calls) == 1
+
+
+class DictCache:
+    def __init__(self):
+        self.data = {}
+
+    def get(self, key):
+        return self.data.get(key)
+
+    def put(self, key, value):
+        self.data[key] = value
+
+
+def outage_store(tmp_path):
+    from tests.unit.test_artifact_storage import FakeS3Client
+
+    primary = object.__new__(S3ArtifactStore)
+    primary.bucket = "test"
+    primary._client = client = FakeS3Client()
+    return FailoverArtifactStore(primary, FilesystemArtifactStore(tmp_path)), client
+
+
+def test_json_storage_outage_returns_inline_and_caches_it(executor, provider, tmp_path):
+    executor._store, client = outage_store(tmp_path)
+    executor._cache = cache = DictCache()
+    client.available = False
+
+    result = run(executor)
+
+    assert result.status == "succeeded"
+    assert result.document["summary"]["element_count"] == 3
+    assert result.artifacts[0].storage_backend is None
+    assert result.artifacts[0].uri is None
+    assert len(cache.data) == 1
+    # Repeated requests during the outage are served from the cache.
+    for _ in range(2):
+        repeated = run(executor)
+        assert repeated.provenance.cache_hit
+        assert repeated.artifacts[0].uri is None
+    assert len(provider.calls) == 1
+
+    # After recovery the never-written object invalidates the entry: the next
+    # execution publishes the JSON and replaces the cached reference.
+    client.available = True
+    recovered = run(executor)
+    assert not recovered.provenance.cache_hit
+    assert recovered.artifacts[0].storage_backend == "s3"
+    assert len(provider.calls) == 2
+    payload, ref = executor.retrieve_artifact(recovered.artifacts[0].artifact_id)
+    assert fingerprint_bytes(payload) == ref.artifact_id
+    assert run(executor).provenance.cache_hit
+    assert len(provider.calls) == 2
+
+
+def test_permanent_json_storage_failure_is_not_hidden(executor):
+    store = Mock()
+    store.put.side_effect = InvalidInputError("invalid storage request")
+    executor._store = store
+    with pytest.raises(InvalidInputError):
+        run(executor)
+
+
+@pytest.mark.parametrize("by_reference", [False, True])
+def test_storage_outage_does_not_hide_required_outputs(executor, provider, by_reference):
+    store = Mock()
+    store.put.side_effect = ProviderUnavailableError("S3 offline")
+    executor._store = store
+    if by_reference:
+        executor._capabilities.get("document.structure.extract").output.by_reference = True
+    else:
+        execute = provider.execute
+        provider.execute = lambda *args, **kwargs: replace(
+            execute(*args, **kwargs),
+            outputs=(BinaryOutput(b"required", "application/pdf", "result.pdf"),),
+        )
+    with pytest.raises(ProviderUnavailableError):
+        run(executor)
+
+
+@pytest.mark.parametrize("by_reference", [False, True], ids=["inline-json", "required-reference"])
+def test_hot_cache_during_s3_outage(executor, provider, tmp_path, by_reference):
+    executor._store, client = outage_store(tmp_path)
+    executor._cache = cache = DictCache()
+    executor._capabilities.get("document.structure.extract").output.by_reference = by_reference
+    first = run(executor)
+    ref = first.artifacts[0]
+    assert ref.storage_backend == "s3"
+    client.available = False
+
+    if by_reference:
+        with pytest.raises(ProviderUnavailableError):
+            run(executor)
+        return
+
+    second = run(executor)
+    assert second.provenance.cache_hit
+    assert second.document == first.document
+    assert len(provider.calls) == 1
+    assert second.artifacts[0].artifact_id == ref.artifact_id
+    assert second.artifacts[0].uri is None
+    assert second.artifacts[0].storage_backend is None
+    # Returning inline must not rewrite the shared cache's persisted reference.
+    assert next(iter(cache.data.values()))["artifacts"][0]["storage_backend"] == "s3"
+    client.available = True
+    recovered = run(executor)
+    assert recovered.provenance.cache_hit
+    assert recovered.artifacts[0].storage_backend == "s3"
+    assert executor.retrieve_artifact(ref.artifact_id)[0]
     assert len(provider.calls) == 1

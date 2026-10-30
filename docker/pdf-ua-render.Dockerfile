@@ -91,20 +91,28 @@ WORKDIR /app
 # pdf_ua.tex maps for unicode-math): one unrenderable formula makes the core
 # degrade every formula of a document to literal text. The PDF command mirrors
 # the one /render runs in server.py, so a change to either shows up here.
-# smoke_check.py then checks that the formula marked with an alternate text got
-# it as /Alt (filters/formula_alt.lua + \AccessiliaFormulaAlt), and that the
-# math font is embedded with \neq as U+2260 in the text layer.
-COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
+# smoke_check.py checks that each expected alt is on a Formula element,
+# including formulas in a table header and data cell, and that the math font
+# is embedded with \neq as U+2260 and math letters as base letters in the
+# text layer.
+COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json \
+    docker/pdf-ua-render/table-smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
 RUN luaotfload-tool --update && \
     pandoc --from json --to pdf --standalone --syntax-highlighting=none \
         --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
         --lua-filter=/app/filters/formula_alt.lua \
         -V lang=pt-BR -o /tmp/smoke.pdf /tmp/smoke.json && \
-    python /tmp/smoke_check.py /tmp/smoke.pdf && \
+    python /tmp/smoke_check.py /tmp/smoke.pdf --require-double-struck && \
+    pandoc --from json --to pdf --standalone --syntax-highlighting=none \
+        --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
+        --lua-filter=/app/filters/formula_alt.lua \
+        -V lang=pt-BR -o /tmp/smoke-table.pdf /tmp/table-smoke.json && \
+    python /tmp/smoke_check.py /tmp/smoke-table.pdf \
+        "t igual a 2 mais h no cabeçalho" "x diferente de um na célula" && \
     printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
         | pandoc --from json --to docx --standalone --sandbox --metadata lang=pt-BR \
             -o /tmp/smoke.docx && \
-    rm /tmp/smoke.json /tmp/smoke_check.py /tmp/smoke.pdf /tmp/smoke.docx
+    rm /tmp/smoke.json /tmp/table-smoke.json /tmp/smoke_check.py /tmp/smoke.pdf /tmp/smoke-table.pdf /tmp/smoke.docx
 
 EXPOSE 5007
 
