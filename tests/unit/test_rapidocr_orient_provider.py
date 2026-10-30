@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 
 import httpx
@@ -22,9 +23,11 @@ from acessilia_toolbox.providers.rapidocr_orient import RapidOcrOrientProvider
 def _isolated_version_cache():
     with orient_module._VERSION_LOCK:
         orient_module._VERSION_CACHE.clear()
+        orient_module._VERSION_REFRESHING.clear()
     yield
     with orient_module._VERSION_LOCK:
         orient_module._VERSION_CACHE.clear()
+        orient_module._VERSION_REFRESHING.clear()
 
 
 def test_version_probe_is_shared_across_adapters_and_execute(monkeypatch):
@@ -66,6 +69,61 @@ def test_failed_version_refresh_retains_identity_then_recovers(monkeypatch):
     clock[0] += orient_module.VERSION_RETRY_SECONDS + 1
     state.update(fail=False, version="1.4.0")
     assert adapter.versions()["provider"] == "1.4.0"
+
+
+def test_slow_version_refresh_serves_last_good_identity_to_other_requests(monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(orient_module, "monotonic", lambda: clock[0])
+    probing = threading.Event()
+    release = threading.Event()
+    state = {"slow": False}
+
+    def handler(request):
+        if state["slow"]:
+            probing.set()
+            assert release.wait(5)
+        return httpx.Response(200, json={"engine_version": "1.3.0"})
+
+    adapter = provider_with(handler)
+    original = adapter.versions()
+    clock[0] += orient_module.VERSION_TTL_SECONDS + 1
+    state["slow"] = True
+    refresher = threading.Thread(target=adapter.versions)
+    refresher.start()
+    try:
+        assert probing.wait(5)
+        # The probe is in flight: another request must not wait for it.
+        served = {}
+        reader = threading.Thread(
+            target=lambda: served.update(versions=provider_with(handler).versions())
+        )
+        reader.start()
+        reader.join(2)
+        assert not reader.is_alive()
+        assert served["versions"] == original
+    finally:
+        release.set()
+        refresher.join(5)
+    assert not refresher.is_alive()
+
+
+def test_version_response_without_fields_keeps_the_full_ttl(monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(orient_module, "monotonic", lambda: clock[0])
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"status": "ok"})
+
+    adapter = provider_with(handler)
+    assert adapter.versions() == {"provider": adapter.descriptor.version}
+    clock[0] += orient_module.VERSION_RETRY_SECONDS + 1
+    adapter.versions()
+    assert calls == ["/version"]
+    clock[0] += orient_module.VERSION_TTL_SECONDS
+    adapter.versions()
+    assert calls == ["/version", "/version"]
 
 
 @pytest.mark.parametrize("change", ["endpoint", "version", "config"])

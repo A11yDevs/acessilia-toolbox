@@ -283,13 +283,30 @@ def test_cached_json_remains_usable(
         assert len(provider.calls) == 1
 
 
-def test_json_storage_outage_returns_inline_without_publishing_cache(executor, provider):
-    store = Mock()
-    store.put.side_effect = ProviderUnavailableError("S3 offline")
-    cache = Mock()
-    cache.get.return_value = None
-    executor._store = store
-    executor._cache = cache
+class DictCache:
+    def __init__(self):
+        self.data = {}
+
+    def get(self, key):
+        return self.data.get(key)
+
+    def put(self, key, value):
+        self.data[key] = value
+
+
+def outage_store(tmp_path):
+    from tests.unit.test_artifact_storage import FakeS3Client
+
+    primary = object.__new__(S3ArtifactStore)
+    primary.bucket = "test"
+    primary._client = client = FakeS3Client()
+    return FailoverArtifactStore(primary, FilesystemArtifactStore(tmp_path)), client
+
+
+def test_json_storage_outage_returns_inline_and_caches_it(executor, provider, tmp_path):
+    executor._store, client = outage_store(tmp_path)
+    executor._cache = cache = DictCache()
+    client.available = False
 
     result = run(executor)
 
@@ -297,8 +314,25 @@ def test_json_storage_outage_returns_inline_without_publishing_cache(executor, p
     assert result.document["summary"]["element_count"] == 3
     assert result.artifacts[0].storage_backend is None
     assert result.artifacts[0].uri is None
-    cache.put.assert_not_called()
+    assert len(cache.data) == 1
+    # Repeated requests during the outage are served from the cache.
+    for _ in range(2):
+        repeated = run(executor)
+        assert repeated.provenance.cache_hit
+        assert repeated.artifacts[0].uri is None
     assert len(provider.calls) == 1
+
+    # After recovery the never-written object invalidates the entry: the next
+    # execution publishes the JSON and replaces the cached reference.
+    client.available = True
+    recovered = run(executor)
+    assert not recovered.provenance.cache_hit
+    assert recovered.artifacts[0].storage_backend == "s3"
+    assert len(provider.calls) == 2
+    payload, ref = executor.retrieve_artifact(recovered.artifacts[0].artifact_id)
+    assert fingerprint_bytes(payload) == ref.artifact_id
+    assert run(executor).provenance.cache_hit
+    assert len(provider.calls) == 2
 
 
 def test_permanent_json_storage_failure_is_not_hidden(executor):
@@ -328,23 +362,8 @@ def test_storage_outage_does_not_hide_required_outputs(executor, provider, by_re
 
 @pytest.mark.parametrize("by_reference", [False, True], ids=["inline-json", "required-reference"])
 def test_hot_cache_during_s3_outage(executor, provider, tmp_path, by_reference):
-    from tests.unit.test_artifact_storage import FakeS3Client
-
-    class Cache:
-        def __init__(self):
-            self.data = {}
-
-        def get(self, key):
-            return self.data.get(key)
-
-        def put(self, key, value):
-            self.data[key] = value
-
-    primary = object.__new__(S3ArtifactStore)
-    primary.bucket = "test"
-    primary._client = client = FakeS3Client()
-    executor._store = FailoverArtifactStore(primary, FilesystemArtifactStore(tmp_path))
-    executor._cache = cache = Cache()
+    executor._store, client = outage_store(tmp_path)
+    executor._cache = cache = DictCache()
     executor._capabilities.get("document.structure.extract").output.by_reference = by_reference
     first = run(executor)
     ref = first.artifacts[0]

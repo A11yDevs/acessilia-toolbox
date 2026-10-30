@@ -51,7 +51,13 @@ jobs:
         env:
           ACESSILIA_CORE_PYTHON: ${{ github.workspace }}/.core-venv/bin/python
           ACESSILIA_CORE_ROOT: ${{ github.workspace }}/.core-source
-        run: .toolbox-venv/bin/python -m pytest tests/cross_project/test_core_storage_outage.py -v
+        run: >-
+          .toolbox-venv/bin/python -m pytest tests/cross_project/test_core_storage_outage.py
+          -v --junitxml=core-storage-outage-results.xml
+
+      # The test skips without ACESSILIA_CORE_PYTHON; a skip must fail the job.
+      - name: Reject unexpected skipped tests
+        run: python scripts/check_no_skipped_tests.py core-storage-outage-results.xml
 
   # During BHS a release branch only takes bug fixes (CONTRIBUTING.md, 5.1);
   # features, improvements and refactorings keep going to develop.
@@ -131,21 +137,4 @@ jobs:
           tests/statelessness/ -v --junitxml=artifact-test-results.xml
 
       - name: Reject unexpected skipped tests
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from xml.etree import ElementTree
-
-          skipped = sum(
-              int(suite.attrib.get("skipped", "0"))
-              for report in (Path("test-results.xml"), Path("artifact-test-results.xml"))
-              for root in (ElementTree.parse(report).getroot(),)
-              for suite in root.iter("testsuite")
-          )
-          if skipped:
-              raise SystemExit(
-                  f"CI incompleto: {skipped} teste(s) foram pulado(s). "
-                  "Consulte os motivos exibidos pelo pytest."
-              )
-          print("Relatorio JUnit validado: nenhum teste foi pulado.")
-          PY
+        run: python scripts/check_no_skipped_tests.py test-results.xml artifact-test-results.xml

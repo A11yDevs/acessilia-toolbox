@@ -117,7 +117,7 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 | `MINIO_ACCESS_KEY` | `change-me` | **Replace** with a real key |
 | `MINIO_SECRET_KEY` | `change-me-too` | **Replace** with a real secret |
 | `ARTIFACT_FALLBACK_SOURCE` | `artifact-fallback` | Named volume or host path for filesystem failover; use a shared mount for replicas on different hosts |
-| `TOOLBOX_ARTIFACT_FALLBACK_MODE` | `disabled` | `disabled` propagates S3 write failures; `local` permits single-instance fallback; `shared` declares a filesystem accessible by all replicas |
+| `TOOLBOX_ARTIFACT_FALLBACK_MODE` | `disabled` | `disabled` propagates S3 write failures (inline-only results are still returned, without a persisted location); `local` permits single-instance fallback; `shared` declares a filesystem accessible by all replicas |
 | `VALKEY_URL` | `redis://localhost:6379` | Valkey cache endpoint |
 | `VALKEY_PORT` | `6379` | Valkey port |
 | `TOOLBOX_HOST` | `0.0.0.0` | uvicorn listen address |
@@ -127,9 +127,10 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 
 #### Artifact fallback and multiple replicas
 
-The default `TOOLBOX_ARTIFACT_FALLBACK_MODE=disabled` returns HTTP 503 when
-an S3 write fails. It does not acknowledge an upload stored only on one
-replica's private disk. Existing backup objects remain readable when an S3
+With the default `TOOLBOX_ARTIFACT_FALLBACK_MODE=disabled`, a failed S3 write
+returns HTTP 503 for uploads, by-reference results and binary outputs.
+Inline-only results are returned without a persisted location (see below). It
+never acknowledges an upload stored only on one replica's private disk. Existing backup objects remain readable when an S3
 store is configured. The mode controls S3 failover writes only. Without a
 configured S3 store, the filesystem remains the primary store in every mode,
 including `disabled`. Filesystem-only deployments on multiple hosts still need
@@ -171,8 +172,11 @@ The constructor defaults to disabled fallback writes, like the REST factory.
 
 An operation returning only inline JSON can complete during a temporary
 storage outage. Its response identifies the JSON content without a persisted
-URI/backend, and a newly extracted unpersisted result is not written to the
-execution cache. Binary and by-reference outputs still require storage.
+URI/backend. The result is still written to the execution cache, so repeated
+requests during the outage are served from the cache instead of extracting
+again. After storage recovers, the never-written object invalidates that
+entry: the next request extracts once more, publishes the JSON and replaces
+the cache entry. Binary and by-reference outputs still require storage.
 
 For a warm execution cache, the executor checks stored references before
 returning them. This costs one `exists` call per artifact, including an S3

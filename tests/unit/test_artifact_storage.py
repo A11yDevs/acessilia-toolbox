@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -272,7 +273,7 @@ def test_invalid_fallback_policy_is_rejected(monkeypatch: pytest.MonkeyPatch) ->
 @pytest.mark.parametrize("mode", ["disabled", "local", "shared"])
 @pytest.mark.parametrize("unresolved_s3", [False, True])
 def test_filesystem_only_store_remains_primary_in_every_fallback_mode(
-    tmp_path, monkeypatch, mode, unresolved_s3
+    tmp_path, monkeypatch, caplog, mode, unresolved_s3
 ):
     monkeypatch.setenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", mode)
     registry = ProviderRegistry([ProviderDescriptor(
@@ -284,8 +285,12 @@ def test_filesystem_only_store_remains_primary_in_every_fallback_mode(
             id="minio", transport="s3", capabilities=["artifact.store"],
             endpoint="${UNCONFIGURED_MINIO}",
         ))
-    selected = _store_from(registry)
+    with caplog.at_level(logging.WARNING):
+        selected = _store_from(registry)
     assert isinstance(selected, FilesystemArtifactStore)
+    warning = "S3 artifact store is declared" if unresolved_s3 else "no S3 artifact store"
+    assert warning in caplog.text
+    assert "shared mount" in caplog.text
     ref = selected.put(PAYLOAD)
     assert selected.get(ref.artifact_id) == PAYLOAD
 

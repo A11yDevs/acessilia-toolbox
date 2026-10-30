@@ -128,11 +128,25 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
                 return store
         return None
 
-    primary = first_available([d for d in candidates if d.transport == "s3"])
+    s3_candidates = [d for d in candidates if d.transport == "s3"]
+    primary = first_available(s3_candidates)
     fallback = first_available([d for d in candidates if d.transport != "s3"])
     if primary is not None and fallback is not None:
         return FailoverArtifactStore(primary, fallback, fallback_mode=fallback_mode)
-    # Without S3, filesystem is the primary store, not an outage fallback.
+    if primary is None and fallback is not None:
+        # Without S3, filesystem is the primary store, not an outage fallback.
+        # Each replica then writes to its own disk unless that path is shared.
+        if s3_candidates:
+            LOG.warning(
+                "S3 artifact store is declared but could not be configured (unresolved "
+                "endpoint or startup failure); using the filesystem as the primary store. "
+                "Replicas on different hosts need a shared mount at this path."
+            )
+        else:
+            LOG.warning(
+                "no S3 artifact store is configured; using the filesystem as the primary "
+                "store. Replicas on different hosts need a shared mount at this path."
+            )
     return primary or fallback
 
 
