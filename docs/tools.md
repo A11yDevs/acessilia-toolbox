@@ -335,6 +335,7 @@ the gateway, which serves the same chat API under `/v1/vlm`:
 | `VLM_API_KEY` | the gateway's `TOOLBOX_API_KEY` | llama-server's key |
 | `VLM_MAX_CONCURRENCY` | 4: relay, do not queue | 2: `--parallel` |
 | `VLM_TIMEOUT_SECONDS` | 2700: longer than the gateway's 1800 + 600 | 600 |
+| `VLM_SLOT_WAIT_SECONDS` | 120: small, its worst case (120 + 2700) must fit the core's 3000 | 1800: the wait for one of the server's slots |
 
 The provider's health check reaches `GET /v1/vlm/health` on the gateway.
 `deploy/vlm-gateway/` has the compose file, the configuration, both systemd

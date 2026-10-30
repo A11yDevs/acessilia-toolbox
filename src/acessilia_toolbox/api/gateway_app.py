@@ -18,12 +18,14 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.api import auth
 from acessilia_toolbox.api.rest import public_router
 from acessilia_toolbox.api.vlm_gateway import vlm_router
+from acessilia_toolbox.core.errors import ToolboxError
 from acessilia_toolbox.core.provider import ProviderRegistry
 
 LOG = logging.getLogger(__name__)
@@ -39,12 +41,19 @@ def create_gateway_app(providers: ProviderRegistry | None = None) -> FastAPI:
         version=__version__,
         description="OpenAI-compatible chat relay to the vision-language model "
         "servers, under one limiter per provider.",
-        openapi_url="/v1/openapi.json",
-        docs_url="/v1/docs",
+        # Only the three routes the deployment documents: no API docs on a
+        # relay that sits on the network next to the model server.
+        openapi_url=None,
+        docs_url=None,
+        redoc_url=None,
     )
     app.state.providers = providers or ProviderRegistry.from_file(
         Path(os.getenv("TOOLBOX_PROVIDERS_CONFIG", DEFAULT_PROVIDERS_CONFIG))
     )
+    @app.exception_handler(ToolboxError)
+    async def _toolbox_error(_: Request, error: ToolboxError) -> JSONResponse:
+        return JSONResponse(status_code=error.http_status, content=error.to_payload())
+
     app.include_router(public_router)
     app.include_router(vlm_router)
 

@@ -6,6 +6,8 @@
 #     "acessilia-toolbox[api] @ git+https://github.com/A11yDevs/acessilia-toolbox@release/0.2.0"
 # and put providers-config.yaml and .env (chmod 600) in /opt/vlm-gateway.
 # GATEWAY_HOST and GATEWAY_PORT come from the .env.
+# One process: the limiter is a semaphore in the process, so --workers N would
+# let N times max_concurrency requests reach llama-server. Do not add --workers.
 [Unit]
 Description=Acessilia VLM gateway (Toolbox in gateway mode)
 After=network-online.target llama-server.service

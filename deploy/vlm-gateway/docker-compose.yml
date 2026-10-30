@@ -15,6 +15,9 @@ services:
       TOOLBOX_PROVIDERS_CONFIG: /app/vlm-gateway/providers-config.yaml
     volumes:
       - ./providers-config.yaml:/app/vlm-gateway/providers-config.yaml:ro
+    # One process: the limiter is a semaphore in the process, so --workers N
+    # would let N times max_concurrency requests reach llama-server. Do not
+    # add --workers.
     command:
       - uvicorn
       - acessilia_toolbox.api.gateway_app:create_gateway_app

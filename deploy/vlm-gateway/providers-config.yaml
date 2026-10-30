@@ -11,7 +11,8 @@ providers:
     # llama-server listens on loopback only, so nothing else reaches it.
     endpoint: ${LLAMA_SERVER_URL:-http://127.0.0.1:8080}
     health_path: /health
-    timeout_seconds: 600
+    # The gateway's own wait for llama-server's answer, not the environments'.
+    timeout_seconds: ${VLM_TIMEOUT_SECONDS:-600}
     capabilities:
       - document.ocr.page
       - document.adjudicate.page
