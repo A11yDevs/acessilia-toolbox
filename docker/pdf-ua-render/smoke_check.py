@@ -24,10 +24,15 @@ With ``--require-lists`` (the default smoke, which has an ordered and a bullet
 list), the file must tag its lists, and every ``ListNumbering`` must be a PDF 1.7
 value: latex-lab writes the PDF 2.0 ones unless the template redeclares them.
 
+The raw Poppler extraction must have no hyphenated word at a line end and no
+non-whitespace C0 control characters. Requires ``pdftotext``; extraction errors
+fail the build rather than skipping the guard.
+
 Usage: ``smoke_check.py PDF [--require-double-struck] [--require-lists] [EXPECTED_ALT ...]``.
 """
 
 import re
+import subprocess
 import sys
 import zlib
 from contextlib import suppress
@@ -209,6 +214,35 @@ def list_numbering_errors(numbering: list[str], *, require_lists: bool) -> list[
     return errors
 
 
+def text_extraction_errors(text: str) -> list[str]:
+    """Reject split words and non-whitespace C0 controls in Poppler's raw text.
+
+    Raw order matters: normal pdftotext joins hyphenated halves and hides the
+    regression. Form feeds are page separators, not document control defects.
+    """
+    errors = []
+    hyphenated = [
+        index for index, line in enumerate(text.splitlines(), start=1)
+        if re.search(r"[^\W\d_][-\u00ad]$", line.rstrip())
+    ]
+    if hyphenated:
+        errors.append(f"hyphenated word at raw line end: {hyphenated}")
+    controls = sorted({ord(char) for char in text if ord(char) < 32 and char not in "\t\n\v\f\r"})
+    if controls:
+        errors.append("non-whitespace control characters in text layer: " +
+                      ", ".join(f"U+{code:04X}" for code in controls))
+    return errors
+
+
+def raw_text_errors(path: Path) -> list[str]:
+    """Fail closed if the raw extractor is absent, fails or emits invalid UTF-8."""
+    result = subprocess.run(
+        ["pdftotext", "-raw", "-enc", "UTF-8", str(path), "-"],
+        check=True, capture_output=True, timeout=60,
+    )
+    return text_extraction_errors(result.stdout.decode("utf-8"))
+
+
 REQUIRE_DOUBLE_STRUCK = "--require-double-struck"
 REQUIRE_LISTS = "--require-lists"
 
@@ -238,6 +272,7 @@ if __name__ == "__main__":
     errors = list_numbering_errors(
         list_numbering_values(pdf), require_lists=require_lists
     )
+    errors.extend(raw_text_errors(Path(sys.argv[1])))
     if errors:
         sys.exit("\n".join(errors))
     print("smoke: formula alternate text present, math text layer has U+2260 and base letters")

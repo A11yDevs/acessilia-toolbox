@@ -657,3 +657,51 @@ def test_smoke_check_requires_lists_when_asked() -> None:
     ]
     assert module.list_numbering_errors([], require_lists=False) == []
     assert module.list_numbering_errors(["Decimal", "Disc"], require_lists=True) == []
+
+
+@pytest.mark.parametrize("text", ["in-\nstante", "aproximação-  \n", "word\u00ad\nnext"])
+def test_raw_text_guard_rejects_split_words(text: str) -> None:
+    assert _smoke_check().text_extraction_errors(text) == ["hyphenated word at raw line end: [1]"]
+
+
+@pytest.mark.parametrize("code", [0, 1, 2, 8, 14, 31])
+def test_raw_text_guard_rejects_non_whitespace_controls(code: int) -> None:
+    assert _smoke_check().text_extraction_errors("a" + chr(code) + "b") == [
+        f"non-whitespace control characters in text layer: U+{code:04X}"
+    ]
+
+
+def test_raw_text_guard_accepts_page_breaks_and_intact_words() -> None:
+    text = "instante\nvelocidade\taproximação\f\r\n42-\n"
+    assert _smoke_check().text_extraction_errors(text) == []
+
+
+def test_raw_text_guard_uses_raw_extraction(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    checker = _smoke_check()
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, b"in-\nstante", b"")
+
+    monkeypatch.setattr(checker.subprocess, "run", run)
+    pdf = tmp_path / "input.pdf"
+    assert checker.raw_text_errors(pdf)
+    assert commands == [(["pdftotext", "-raw", "-enc", "UTF-8", str(pdf), "-"],
+                         {"check": True, "capture_output": True, "timeout": 60})]
+
+
+@pytest.mark.parametrize(
+    "failure", [FileNotFoundError(), subprocess.CalledProcessError(1, "pdftotext")]
+)
+def test_raw_text_guard_does_not_skip_extraction_failures(monkeypatch, tmp_path, failure) -> None:
+    checker = _smoke_check()
+
+    def run(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(checker.subprocess, "run", run)
+    with pytest.raises(type(failure)):
+        checker.raw_text_errors(tmp_path / "input.pdf")
