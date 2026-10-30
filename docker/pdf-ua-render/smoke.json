@@ -2,5 +2,7 @@
   {"t":"Para","c":[{"t":"Str","c":"ok"}]},
   {"t":"Para","c":[{"t":"Span","c":[["",["accessilia-formula"],[["alt","conjunto dos h reais com h maior ou igual a menos 2 e h diferente de 0"]]],[{"t":"Math","c":[{"t":"DisplayMath"},"\\{h \\in \\mathbb{R} : h \\geq -2 \\text{ e } h \\neq 0\\}"]}]]}]},
   {"t":"Para","c":[{"t":"Math","c":[{"t":"InlineMath"},"\\begin{aligned} v(t) &= \\lim_{h \\to 0} \\frac{s(t + h) - s(t)}{h} \\\\ &= 3t^{2} \\end{aligned}"]}]},
-  {"t":"Para","c":[{"t":"Math","c":[{"t":"InlineMath"},"a \\varpropto b \\smallsetminus \\lozenge \\circlearrowleft \\square \\subseteqq \\bigstar \\nleqslant \\nsubseteqq"]}]}
+  {"t":"Para","c":[{"t":"Math","c":[{"t":"InlineMath"},"a \\varpropto b \\smallsetminus \\lozenge \\circlearrowleft \\square \\subseteqq \\bigstar \\nleqslant \\nsubseteqq"]}]},
+  {"t": "OrderedList", "c": [[1, {"t": "Decimal"}, {"t": "Period"}], [[{"t": "Para", "c": [{"t": "Str", "c": "um"}]}], [{"t": "Para", "c": [{"t": "Str", "c": "dois"}]}]]]},
+  {"t": "BulletList", "c": [[{"t": "Para", "c": [{"t": "Str", "c": "a"}]}], [{"t": "Para", "c": [{"t": "Str", "c": "b"}]}]]}
 ]}

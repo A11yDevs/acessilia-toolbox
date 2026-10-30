@@ -20,17 +20,29 @@ symbol. With ``--require-double-struck`` (the default smoke, whose formula has
 ``\\mathbb{R}``), U+211D must also be there: a double-struck letter means
 something else than its base letter.
 
-Usage: ``smoke_check.py PDF [--require-double-struck] [EXPECTED_ALT ...]``.
+With ``--require-lists`` (the default smoke, which has an ordered and a bullet
+list), the file must tag its lists, and every ``ListNumbering`` must be a PDF 1.7
+value: latex-lab writes the PDF 2.0 ones unless the template redeclares them.
+
+Usage: ``smoke_check.py PDF [--require-double-struck] [--require-lists] [EXPECTED_ALT ...]``.
 """
 
 import re
 import sys
+import zlib
+from contextlib import suppress
 from pathlib import Path
 
 EXPECTED = "conjunto dos h reais com h maior ou igual a menos 2 e h diferente de 0"
 MATH_FONT = b"TeXGyreDejaVuMath"
 NOT_EQUAL, COMBINING_NOT = "\u2260", "\u0338"
 DOUBLE_STRUCK_R = "\u211d"
+#: ListNumbering values of PDF 1.7 (ISO 32000-1, 14.8.5.5), the base of PDF/UA-1.
+#: Ordered, Unordered and Description exist only in PDF 2.0.
+PDF17_LIST_NUMBERING = frozenset(
+    {"None", "Disc", "Circle", "Square", "Decimal", "UpperRoman", "LowerRoman",
+     "UpperAlpha", "LowerAlpha"}
+)
 
 
 _ESCAPES = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b", b"f": b"\f"}
@@ -161,14 +173,52 @@ def math_italic_letters(texts: set[str]) -> set[str]:
     }
 
 
+def list_numbering_values(pdf: bytes) -> list[str]:
+    """Every /ListNumbering value of the file, in its objects or its Flate streams.
+
+    Only direct name operands (``/ListNumbering/Decimal``) are read. An indirect
+    reference (``/ListNumbering 12 0 R``) or a stream this check cannot inflate
+    (for example a Flate stream with a predictor) is not seen; the
+    ``--require-lists`` check still fails the build when the attribute is
+    missing entirely.
+    """
+    blobs = [pdf]
+    for stream in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S):
+        with suppress(zlib.error):
+            blobs.append(zlib.decompress(stream.group(1)))
+    return [
+        value.decode()
+        for blob in blobs
+        for value in re.findall(rb"/ListNumbering\s*/([A-Za-z]+)", blob)
+    ]
+
+
+def list_numbering_errors(numbering: list[str], *, require_lists: bool) -> list[str]:
+    """PDF/UA-1 list-numbering errors; empty when every value is valid.
+
+    ``numbering`` is the output of :func:`list_numbering_values`. With
+    ``require_lists`` (the default smoke) finding no numbering at all is also an
+    error: latex-lab stopped tagging the list, so the check would otherwise pass
+    on a file that no longer exercises the rule.
+    """
+    errors = []
+    if invalid := sorted(set(numbering) - PDF17_LIST_NUMBERING):
+        errors.append(f"ListNumbering values outside PDF 1.7 (PDF/UA-1): {invalid}")
+    if require_lists and not numbering:
+        errors.append("no ListNumbering in a smoke that has lists: latex-lab stopped tagging them")
+    return errors
+
+
 REQUIRE_DOUBLE_STRUCK = "--require-double-struck"
+REQUIRE_LISTS = "--require-lists"
 
 
 if __name__ == "__main__":
     pdf = Path(sys.argv[1]).read_bytes()
     options = sys.argv[2:]
     require_double_struck = REQUIRE_DOUBLE_STRUCK in options
-    expected_alts = [arg for arg in options if arg != REQUIRE_DOUBLE_STRUCK]
+    require_lists = REQUIRE_LISTS in options
+    expected_alts = [arg for arg in options if arg not in (REQUIRE_DOUBLE_STRUCK, REQUIRE_LISTS)]
     texts = formula_alternate_texts(pdf)
     for expected in expected_alts or [EXPECTED]:
         if expected not in texts:
@@ -185,4 +235,9 @@ if __name__ == "__main__":
         sys.exit(f"math letters reach the text layer as symbols: {sorted(italic)}")
     if require_double_struck and DOUBLE_STRUCK_R not in layer:
         sys.exit("\\mathbb{R} lost U+211D in the text layer")
+    errors = list_numbering_errors(
+        list_numbering_values(pdf), require_lists=require_lists
+    )
+    if errors:
+        sys.exit("\n".join(errors))
     print("smoke: formula alternate text present, math text layer has U+2260 and base letters")

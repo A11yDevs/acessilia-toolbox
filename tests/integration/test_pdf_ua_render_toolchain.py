@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -140,3 +141,60 @@ def test_an_h_written_in_prose_keeps_its_code_point(server: Any) -> None:
 
     assert "\u210e" in layer
     assert "h" not in layer
+
+
+def test_lists_carry_pdf17_list_numbering(server: Any) -> None:
+    """#332: latex-lab's PDF 2.0 values (Ordered, Unordered) are not PDF/UA-1."""
+
+    def para(text: str) -> list[dict[str, Any]]:
+        return [{"t": "Para", "c": [{"t": "Str", "c": text}]}]
+
+    spec = importlib.util.spec_from_file_location(
+        "pdf_ua_smoke_check_lists", SERVER_PATH.parent / "smoke_check.py"
+    )
+    assert spec is not None and spec.loader is not None
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
+    ast = {
+        "pandoc-api-version": [1, 23, 1],
+        "meta": {},
+        "blocks": [
+            {"t": "OrderedList", "c": [[1, {"t": "Decimal"}, {"t": "Period"}],
+                                      [para("um"), para("dois")]]},
+            {"t": "BulletList", "c": [para("a"), para("b")]},
+        ],
+    }
+    response = TestClient(server.app).post(
+        "/render",
+        files={"file": ("lists.json", json.dumps(ast).encode(), "application/json")},
+    )
+    assert response.status_code == 200, response.text[:500]
+
+    values = checker.list_numbering_values(response.content)
+    assert set(values) == {"Decimal", "Disc"}
+
+
+@pytest.mark.skipif(shutil.which("pdftotext") is None, reason="needs pdftotext")
+def test_words_are_not_hyphenated_across_lines(server: Any, tmp_path) -> None:
+    """#332: in- / stante reaches readers as two words; the template does not hyphenate."""
+    import subprocess
+
+    words = "instante velocidade aproximação concluímos introduziremos eventualmente " * 12
+    ast = {
+        "pandoc-api-version": [1, 23, 1],
+        "meta": {},
+        "blocks": [{"t": "Para", "c": [{"t": "Str", "c": words}]}],
+    }
+    response = TestClient(server.app).post(
+        "/render",
+        files={"file": ("words.json", json.dumps(ast).encode(), "application/json")},
+    )
+    assert response.status_code == 200, response.text[:500]
+    pdf = tmp_path / "words.pdf"
+    pdf.write_bytes(response.content)
+
+    text = subprocess.run(
+        ["pdftotext", "-raw", str(pdf), "-"], capture_output=True, text=True, check=True
+    ).stdout
+    hyphenated = [line for line in text.splitlines() if re.search(r"[^\W\d_]-$", line)]
+    assert hyphenated == []
