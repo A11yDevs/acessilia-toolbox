@@ -42,6 +42,10 @@ class TestHttpSupport:
         assert "body.files: field required" in detail
         assert "body.pipeline: invalid choice" in detail
 
+    def test_extract_detail_from_validation_list_without_loc(self) -> None:
+        resp = httpx.Response(422, json={"detail": [{"msg": "field required"}]})
+        assert extract_error_detail(resp) == "field required"
+
     def test_extract_detail_from_plain_text(self) -> None:
         resp = httpx.Response(503, text="Service   Temporarily \n Unavailable ")
         assert extract_error_detail(resp) == "Service Temporarily Unavailable"
@@ -50,10 +54,55 @@ class TestHttpSupport:
         resp = httpx.Response(500, text="A" * 1000)
         assert len(extract_error_detail(resp, max_length=100)) == 100
 
+    def test_extract_detail_caps_json_detail_length(self) -> None:
+        resp = httpx.Response(500, json={"detail": "B" * 1000})
+        assert len(extract_error_detail(resp, max_length=100)) == 100
+
+    def test_extract_detail_strips_control_characters(self) -> None:
+        resp = httpx.Response(500, text="crash\x00\x01\x07 while importing")
+        assert extract_error_detail(resp) == "crash while importing"
+
+    def test_extract_detail_strips_ansi_escapes(self) -> None:
+        resp = httpx.Response(500, text="\x1b[31mfatal\x1b[0m: no CUDA device")
+        assert extract_error_detail(resp) == "fatal: no CUDA device"
+
+    def test_extract_detail_keeps_non_ascii_text(self) -> None:
+        resp = httpx.Response(500, json={"detail": "Falha na conversão"})
+        assert extract_error_detail(resp) == "Falha na conversão"
+
+    def test_extract_detail_from_body_without_known_key(self) -> None:
+        resp = httpx.Response(500, json={"code": 500, "errors": ["boom"]})
+        assert extract_error_detail(resp) == '{"code":500,"errors":["boom"]}'
+
+    def test_extract_detail_null_detail_is_empty(self) -> None:
+        resp = httpx.Response(500, json={"detail": None})
+        assert extract_error_detail(resp) == ""
+
+    def test_extract_detail_empty_json_body(self) -> None:
+        resp = httpx.Response(500, content=b"")
+        assert extract_error_detail(resp) == ""
+
+    def test_extract_detail_invalid_json_with_json_content_type(self) -> None:
+        resp = httpx.Response(
+            502,
+            text="upstream crashed",
+            headers={"content-type": "application/json"},
+        )
+        assert extract_error_detail(resp) == "upstream crashed"
+
+    def test_extract_detail_bounded_binary_body(self) -> None:
+        resp = httpx.Response(500, content=b"\x00\x01\x02\xff\xfe")
+        assert extract_error_detail(resp, max_length=10) == ""
+
     def test_format_http_error_with_detail(self) -> None:
         resp = httpx.Response(500, json={"detail": "CUDA out of memory"})
         msg = format_http_error("pp-formulanet", resp)
         assert msg == "pp-formulanet rejected: HTTP 500 - CUDA out of memory"
+
+    def test_format_http_error_with_action(self) -> None:
+        resp = httpx.Response(422, json={"detail": "bad file"})
+        msg = format_http_error("mineru-api", resp, action="rejected the document")
+        assert msg == "mineru-api rejected the document: HTTP 422 - bad file"
 
     def test_extract_detail_from_nested_error_dict(self) -> None:
         resp = httpx.Response(500, json={"error": {"message": "Resource exhausted"}})

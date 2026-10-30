@@ -285,7 +285,6 @@ def test_http_error_maps_to_provider_execution_error() -> None:
     assert "mineru-api rejected the document: HTTP 422 - bad file" in str(excinfo.value)
 
 
-
 def test_timeout_maps_to_provider_timeout_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectTimeout("too slow")

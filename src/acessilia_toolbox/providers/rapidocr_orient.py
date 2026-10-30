@@ -138,7 +138,7 @@ class RapidOcrOrientProvider:
 
         if response.status_code != 200:
             raise ProviderExecutionError(
-                format_http_error("RapidOCR orientation", response),
+                format_http_error("rapidocr-orient", response, action="failed"),
                 provider=self.descriptor.id,
                 status_code=response.status_code,
             )

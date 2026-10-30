@@ -222,5 +222,5 @@ def test_orient_server_error() -> None:
             media_type="image/png",
         )
     assert exc_info.value.details.get("status_code") == 500
-    assert "RapidOCR orientation rejected: HTTP 500 - Internal Server Error" in str(exc_info.value)
+    assert "rapidocr-orient failed: HTTP 500 - Internal Server Error" in str(exc_info.value)
 
