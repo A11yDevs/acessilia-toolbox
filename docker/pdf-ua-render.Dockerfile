@@ -102,7 +102,7 @@ RUN luaotfload-tool --update && \
         --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
         --lua-filter=/app/filters/formula_alt.lua \
         -V lang=pt-BR -o /tmp/smoke.pdf /tmp/smoke.json && \
-    python /tmp/smoke_check.py /tmp/smoke.pdf --require-double-struck && \
+    python /tmp/smoke_check.py /tmp/smoke.pdf --require-double-struck --require-lists && \
     pandoc --from json --to pdf --standalone --syntax-highlighting=none \
         --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
         --lua-filter=/app/filters/formula_alt.lua \

@@ -162,11 +162,29 @@
 \usepackage{tagpdf}
 \tagpdfsetup{activate-all,uncompress}
 \usepackage{latex-lab-testphase-table}
+% latex-lab tags lists with the PDF 2.0 ListNumbering values (Ordered,
+% Unordered, Description; latex-lab-testphase-block.sty). PDF/UA-1 is PDF 1.7,
+% whose values are None, Disc, Circle, Square, Decimal and the Roman and Alpha
+% styles (ISO 32000-1, 14.8.5.5), and veraPDF's PDF/UA-1 profile does not check
+% them. A lettered or Roman enumerate still reads Decimal here: the attribute
+% is per environment, not per numbering style.
+\tagpdfsetup{
+  role/new-attribute = {itemize}{/O /List /ListNumbering/Disc},
+  role/new-attribute = {enumerate}{/O /List /ListNumbering/Decimal},
+  role/new-attribute = {description}{/O /List /ListNumbering/None},
+  role/new-attribute = {list}{/O /List /ListNumbering/None},
+}
 
 \usepackage{geometry}
 \geometry{margin=2.2cm}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.5em}
+% No hyphenation: a word broken at a line end reaches the text layer as two
+% (in- / stante), which screen readers, search and copy and paste read as
+% such. Ragged right keeps the unbroken lines from stretching instead.
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\raggedright
 
 \usepackage{hyperref}
 \usepackage{bookmark}

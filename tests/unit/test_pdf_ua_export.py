@@ -597,3 +597,39 @@ def test_smoke_check_finds_italic_math_letters_in_the_text_layer() -> None:
         "\U0001d463", "\u210e", "\U0001d6fc", "\U0001d482"
     }
     assert module.math_italic_letters({"v(t) = s\u2032(t)", "\u211d"}) == set()
+
+
+def test_template_tags_lists_with_pdf17_list_numbering() -> None:
+    """latex-lab writes the PDF 2.0 values (Ordered...); PDF/UA-1 is PDF 1.7."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    for environment, value in (
+        ("itemize", "Disc"),
+        ("enumerate", "Decimal"),
+        ("description", "None"),
+        ("list", "None"),
+    ):
+        line = f"role/new-attribute = {{{environment}}}{{/O /List /ListNumbering/{value}}}"
+        assert line in template, line
+    assert template.index("ListNumbering/Decimal") < template.index("\\begin{document}")
+
+
+def test_template_does_not_hyphenate() -> None:
+    """A hyphenated word reaches the text layer as two words (in- / stante)."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    assert "\\hyphenpenalty=10000" in template
+    assert "\\exhyphenpenalty=10000" in template
+    assert "\\raggedright" in template
+
+
+def test_smoke_check_reads_list_numbering_in_objects_and_streams() -> None:
+    import zlib
+
+    module = _smoke_check()
+    compressed = zlib.compress(b"<< /O /List /ListNumbering /Ordered >>")
+    pdf = (
+        b"5 0 obj\n<< /O /List /ListNumbering /Decimal >>\nendobj\n"
+        b"6 0 obj\n<< /Length 9 >>\nstream\n" + compressed + b"\nendstream\nendobj\n"
+    )
+
+    assert sorted(module.list_numbering_values(pdf)) == ["Decimal", "Ordered"]
+    assert set(module.list_numbering_values(pdf)) - module.PDF17_LIST_NUMBERING == {"Ordered"}
