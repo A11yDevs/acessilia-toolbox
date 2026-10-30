@@ -7,11 +7,10 @@ DoclingProvider helpers.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
@@ -22,6 +21,12 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.docling_support import (
+    extract_page_number,
+    float_or_none,
+    page_height,
+    top_left_bbox,
+)
 from acessilia_toolbox.providers.http_support import format_http_error
 
 CONVERT_PATH = "/v1/convert/file"
@@ -91,9 +96,7 @@ class DoclingMathProvider:
                 return ProviderHealth(
                     provider=self.descriptor.id,
                     healthy=True,
-                    version=_pick_version(
-                        self._server_versions(client), self.descriptor.version
-                    ),
+                    version=_pick_version(self._server_versions(client), self.descriptor.version),
                     checked_at=checked_at,
                 )
         except Exception as exc:
@@ -162,9 +165,7 @@ class DoclingMathProvider:
             return {}
         return {str(key): str(value) for key, value in data.items()}
 
-    def _extract_formulas(
-        self, raw: dict[str, Any]
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+    def _extract_formulas(self, raw: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         """Build an artifact/latex@1 document from the docling-serve response.
 
         artifact/latex@1 carries a single expression, and math.convert and
@@ -181,8 +182,7 @@ class DoclingMathProvider:
             item
             for collection in ("groups", "texts")
             for item in json_content.get(collection, [])
-            if self._get_label(item) in ("formula", "equation")
-            and (item.get("text") or "").strip()
+            if self._get_label(item) in ("formula", "equation") and (item.get("text") or "").strip()
         ]
         if not formulas:
             raise ProviderExecutionError(
@@ -196,18 +196,17 @@ class DoclingMathProvider:
 
         raw_conf = primary.get("confidence")
         if raw_conf is not None:
-            conf = _float_or_none(raw_conf)
+            conf = float_or_none(raw_conf)
             if conf is not None and 0.0 <= conf <= 1.0:
                 document_payload["confidence"] = conf
             else:
                 notes["dropped_confidence"] = str(raw_conf)
 
         prov = (primary.get("prov") or [{}])[0]
-        page = prov.get("page_no") or prov.get("page") or 1
-        if isinstance(page, int) and page >= 1:
-            document_payload["page"] = page
+        page = extract_page_number(prov, default=1)
+        document_payload["page"] = page
 
-        bbox = _top_left_bbox(prov.get("bbox"), _page_height(json_content, page))
+        bbox = top_left_bbox(prov.get("bbox"), page_height(json_content, page))
         if bbox is not None:
             document_payload["bbox"] = list(bbox)
 
@@ -232,59 +231,3 @@ def _pick_version(versions: dict[str, str], fallback: str) -> str:
 
 def _components(versions: dict[str, str]) -> dict[str, str]:
     return {key: versions[key] for key in COMPONENT_KEYS if key in versions}
-
-
-def _float_or_none(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    try:
-        result = float(value)
-    except (ValueError, TypeError):
-        return None
-    return result if math.isfinite(result) else None
-
-
-def _page_height(json_content: Mapping[str, Any], page: Any) -> float | None:
-    pages = json_content.get("pages") or {}
-    if not isinstance(pages, Mapping):
-        return None
-    entry = pages.get(str(page)) or pages.get(page) or {}
-    if not isinstance(entry, Mapping):
-        return None
-    size = entry.get("size") or {}
-    height = entry.get("height", size.get("height") if isinstance(size, Mapping) else None)
-    return _float_or_none(height)
-
-
-def _top_left_bbox(
-    bbox: Any, page_height: float | None
-) -> tuple[float, float, float, float] | None:
-    """Normalize a Docling bbox to [left, top, right, bottom] with a top-left origin.
-
-    Docling dict boxes carry ``coord_origin``; ``BOTTOMLEFT`` boxes are flipped
-    against the page height and dropped when that height is unknown. List boxes
-    have no origin and are taken as top-left.
-    """
-    origin = "TOPLEFT"
-    if isinstance(bbox, Mapping):
-        origin = str(bbox.get("coord_origin") or "TOPLEFT").upper()
-        values = [
-            bbox.get(short, bbox.get(long))
-            for short, long in (("l", "left"), ("t", "top"), ("r", "right"), ("b", "bottom"))
-        ]
-    elif isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
-        values = list(bbox[:4])
-    else:
-        return None
-
-    coords = [_float_or_none(value) for value in values]
-    if any(value is None for value in coords):
-        return None
-    left, top, right, bottom = (cast(float, value) for value in coords)
-    if origin == "BOTTOMLEFT":
-        if page_height is None:
-            return None
-        top, bottom = page_height - top, page_height - bottom
-    elif origin != "TOPLEFT":
-        return None
-    return (min(left, right), min(top, bottom), max(left, right), max(top, bottom))
