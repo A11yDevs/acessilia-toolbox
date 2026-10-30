@@ -151,6 +151,12 @@ own OpenAI-compatible client here instead of at the model server, so that:
 - the model server's key stays with the Toolbox; the caller authenticates with
   `TOOLBOX_API_KEY`.
 
+The same route answers at `POST /v1/vlm/v1/chat/completions`, in every
+Toolbox (gateway mode or not), so `/v1/vlm` also works as a model server's
+root. A Toolbox whose VLM provider points at another Toolbox's `/v1/vlm`
+posts `{endpoint}/v1/chat/completions` and checks `{endpoint}/health`, as it
+would against llama-server.
+
 The body's `model` is the provider id; the Toolbox replaces it with the
 provider's `config.model` and sends the provider's `api_key`. The response
 streams as server-sent events only when the body sets `"stream": true`; any

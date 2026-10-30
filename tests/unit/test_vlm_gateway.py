@@ -541,3 +541,70 @@ def test_a_provider_behind_a_gateway_checks_its_health_route(monkeypatch) -> Non
 
     assert adapter.health().healthy
     assert seen == ["http://gateway:8002/v1/vlm/health"]
+
+
+def test_a_chat_relayed_through_a_gateway_reaches_the_model_server(monkeypatch) -> None:
+    """The whole chain: core → environment Toolbox → gateway → llama-server.
+
+    The environment's qwen3-vl-8b points at the gateway's /v1/vlm and posts
+    {endpoint}/v1/chat/completions, as it would to llama-server's root; the
+    gateway must serve that path, or every chat answers 404 while the health
+    check, {endpoint}/health, stays green.
+    """
+    from acessilia_toolbox.api.gateway_app import create_gateway_app
+
+    key = "shared-key"
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", key)
+
+    def vlm(endpoint: str, api_key: str = "") -> ProviderRegistry:
+        return ProviderRegistry(
+            [
+                ProviderDescriptor.model_validate(
+                    {
+                        "id": "qwen3-vl-8b",
+                        "endpoint": endpoint,
+                        "capabilities": list(openai_vlm.CAPABILITIES),
+                        "config": {"model": "qwen3-vl-8b", "api_key": api_key},
+                    }
+                )
+            ]
+        )
+
+    gateway = create_gateway_app(vlm("http://127.0.0.1:8080"))
+    # The environment is the full Toolbox, as deployed (rate limiter,
+    # capability routes and all), not another gateway.
+    environment = create_app(CapabilityRegistry([]), vlm("http://gateway:8002/v1/vlm", api_key=key))
+    served: list[str] = []
+
+    def llama(request: httpx.Request) -> httpx.Response:
+        served.append(str(request.url))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    def client(self: OpenAiCompatibleVlmProvider) -> httpx.AsyncClient:
+        # The environment's provider talks to the gateway app; the gateway's to llama.
+        transport: httpx.AsyncBaseTransport = (
+            httpx.ASGITransport(gateway)
+            if self.base_url.startswith("http://gateway")
+            else httpx.MockTransport(llama)
+        )
+        return httpx.AsyncClient(
+            transport=transport, base_url=self.base_url, headers=self._headers()
+        )
+
+    monkeypatch.setattr(OpenAiCompatibleVlmProvider, "async_client", client)
+
+    async def chat() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(environment), base_url="http://toolbox"
+        ) as http:
+            return await http.post(
+                "/v1/vlm/chat/completions",
+                json={"model": "qwen3-vl-8b", "messages": []},
+                headers={"Authorization": f"Bearer {key}"},
+            )
+
+    response = asyncio.run(chat())
+
+    assert response.status_code == 200, response.text
+    assert response.json()["choices"][0]["message"]["content"] == "ok"
+    assert served == ["http://127.0.0.1:8080/v1/chat/completions"]
