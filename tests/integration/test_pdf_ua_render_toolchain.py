@@ -129,7 +129,8 @@ def test_greek_variants_and_dotless_letters_reach_their_base_letters(server: Any
 
     assert checker.math_italic_letters(layer) == set()
     capitals = "\u0393\u0398\u03f4\u03a9\u2207"  # Gamma, Theta, Theta symbol, Omega, nabla
-    variants = "\u2202\u03f5\u03d1\u03f0\u03c6\u03f1\u03d6\u03c2"  # partial, epsilon, theta, kappa, phi, rho, pi, sigma variants
+    # partial, epsilon, theta, kappa, phi, rho, pi and final sigma variants
+    variants = "\u2202\u03f5\u03d1\u03f0\u03c6\u03f1\u03d6\u03c2"
     assert set(capitals + variants + "\u0131\u0237h") <= layer
 
 
