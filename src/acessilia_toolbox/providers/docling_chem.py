@@ -40,6 +40,8 @@ CHEM_PROMPT = (
 class DoclingChemProvider:
     """Chemistry recognition via docling-serve VLM pipeline."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")

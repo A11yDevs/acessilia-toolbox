@@ -41,6 +41,8 @@ REPORT_KEYS = ("compliant", "profile", "profile_name", "statement", "summary", "
 class VeraPdfProvider:
     """Calls the verapdf-validate sidecar to check a PDF against PDF/UA."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")

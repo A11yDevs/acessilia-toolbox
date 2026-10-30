@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -31,7 +32,12 @@ from acessilia_toolbox.core.errors import (
     ToolboxError,
     UnsupportedMediaTypeError,
 )
-from acessilia_toolbox.core.fingerprint import fingerprint_bytes, fingerprint_parameters
+from acessilia_toolbox.core.fingerprint import (
+    fingerprint_bytes,
+    fingerprint_parameters,
+    fingerprint_stream,
+)
+from acessilia_toolbox.core.input_memory import check_in_memory_size, read_in_memory
 from acessilia_toolbox.core.normalization import build_processing_manifest
 from acessilia_toolbox.core.preprocessing import (
     OrientationResult,
@@ -82,7 +88,7 @@ class CapabilityExecutor:
     def execute(
         self,
         capability_id: str,
-        payload: bytes,
+        payload: bytes | BinaryIO,
         *,
         filename: str,
         media_type: str,
@@ -102,9 +108,23 @@ class CapabilityExecutor:
         descriptor = self._providers.resolve(manifest.id, provider_id)
         adapter = self._adapter_factory(descriptor)
 
-        input_fingerprint = fingerprint_bytes(payload)
+        needs_bytes = not getattr(adapter, "supports_streaming_input", False) or bool(
+            parameters and parameters.get("auto_rotate") and is_supported_image(media_type)
+        )
+        if isinstance(payload, bytes):
+            input_fingerprint = fingerprint_bytes(payload)
+        else:
+            payload.seek(0)
+            input_fingerprint = fingerprint_stream(payload)
+            payload.seek(0)
         versions = _versions_of(adapter)
         provider_version = versions.pop("provider", descriptor.version)
+        if needs_bytes:
+            if isinstance(payload, bytes):
+                check_in_memory_size(len(payload))
+            else:
+                payload = read_in_memory(payload)
+
         execution_payload = payload
         orientation: OrientationResult | None = None
         preprocessing: dict[str, Any] | None = None
@@ -141,7 +161,7 @@ class CapabilityExecutor:
                     exc_info=True,
                 )
             execution_payload, orientation = detect_and_orient_image(
-                payload, media_type=media_type, orient_provider=orient_adapter
+                cast(bytes, payload), media_type=media_type, orient_provider=orient_adapter
             )
             if orientation.auto_rotated:
                 # The rotated bytes are the real input, so they replace the
@@ -188,7 +208,7 @@ class CapabilityExecutor:
         version_kwargs = (
             {"capability_version": manifest.version} if manifest.version > 1 else {}
         )
-        extraction = adapter.execute(
+        extraction = cast(Any, adapter).execute(
             manifest.id,
             execution_payload,
             filename=filename,
@@ -210,7 +230,12 @@ class CapabilityExecutor:
                 source = Path(staging) / filename
                 # Stage the bytes the provider actually saw, so `source.sha256`
                 # matches the rotated input when auto-rotate applied.
-                source.write_bytes(execution_payload)
+                if isinstance(execution_payload, bytes):
+                    source.write_bytes(execution_payload)
+                else:
+                    execution_payload.seek(0)
+                    with source.open("wb") as staged:
+                        shutil.copyfileobj(execution_payload, staged, length=1024 * 1024)
                 document = build_processing_manifest(source, extraction, language=language)
             document_payload = document.model_dump(mode="json", by_alias=True)
             artifact_suffix = f"{Path(filename).stem}.structured-document.json"
@@ -278,6 +303,19 @@ class CapabilityExecutor:
     ) -> ArtifactRef:
         return self._require_store().put(payload, media_type=media_type, filename=filename)
 
+    def store_artifact_stream(
+        self, stream: BinaryIO, *, media_type: str, filename: str | None = None
+    ) -> ArtifactRef:
+        store = self._require_store()
+        put_stream = getattr(store, "put_stream", None)
+        if callable(put_stream):
+            return cast(ArtifactRef, put_stream(stream, media_type=media_type, filename=filename))
+        return store.put(read_in_memory(stream), media_type=media_type, filename=filename)
+
+    def stat_artifact(self, artifact_id: str) -> ArtifactRef:
+        shards(artifact_id)
+        return self._require_store().stat(artifact_id)
+
     def retrieve_artifact(
         self, artifact_id: str, *, max_bytes: int | None = None
     ) -> tuple[bytes, ArtifactRef]:
@@ -287,6 +325,27 @@ class CapabilityExecutor:
         if max_bytes is not None and ref.size > max_bytes:
             raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
         return store.get(artifact_id), ref
+
+    def retrieve_artifact_to(
+        self, artifact_id: str, destination: BinaryIO, *, max_bytes: int
+    ) -> ArtifactRef:
+        shards(artifact_id)
+        store = self._require_store()
+        ref = store.stat(artifact_id)
+        if ref.size > max_bytes:
+            raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+        copy_to = getattr(store, "copy_to", None)
+        if callable(copy_to):
+            copy_to(artifact_id, destination, max_bytes=max_bytes)
+        else:
+            check_in_memory_size(ref.size)
+            payload = store.get(artifact_id)
+            check_in_memory_size(len(payload))
+            if len(payload) > max_bytes:
+                raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+            destination.write(payload)
+        destination.seek(0)
+        return ref
 
     def _servable_cached(
         self, result: CapabilityResult, *, allow_inline_json: bool = False
@@ -382,11 +441,17 @@ def _restore(cached: dict[str, Any], cache_key: str) -> CapabilityResult:
 
 def _validate_input(
     manifest: CapabilityManifest,
-    payload: bytes,
+    payload: bytes | BinaryIO,
     filename: str,
     media_type: str,
 ) -> None:
-    if not payload:
+    if not isinstance(payload, bytes):
+        payload.seek(0)
+        first = payload.read(1)
+        payload.seek(0)
+        if not first:
+            raise InvalidInputError("empty payload", capability=manifest.id)
+    elif not payload:
         raise InvalidInputError("empty payload", capability=manifest.id)
 
     # Uploads are untrusted: reject path traversal before the name reaches disk.

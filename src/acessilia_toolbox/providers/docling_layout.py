@@ -51,6 +51,8 @@ FORMULA_MIN_AREA = 500
 class DoclingLayoutProvider:
     """Calls docling-serve and returns a layout analysis with classified regions."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")

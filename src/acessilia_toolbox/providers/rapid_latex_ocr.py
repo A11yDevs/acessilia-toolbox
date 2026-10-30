@@ -31,6 +31,8 @@ class RapidLatexOcrProvider:
     ``/health`` and ``/version`` API only override :attr:`backend`.
     """
 
+    supports_streaming_input = True
+
     #: Identity reported in the extraction and in error messages.
     backend: ClassVar[str] = "rapid-latex-ocr"
 

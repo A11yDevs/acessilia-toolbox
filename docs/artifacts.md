@@ -86,6 +86,13 @@ need the same persistent shared filesystem at this path. Set
 `ARTIFACT_FALLBACK_SOURCE` to the host path of that shared mount in each
 Compose deployment; the default named volume only covers one host.
 
+Metadata is published from a complete temporary file. Filesystems without hard
+links use atomic rename under a per-artifact advisory lock to preserve the first
+upload's metadata. The shared mount must propagate these locks across hosts
+(for example, SMB on Linux 5.5 or later, with remote locking enabled). The empty
+`.meta.json.lock` sidecars remain in place so writers always lock the same file;
+the lock itself is released when the writer closes the file or exits.
+
 ## Cache
 
 Cache should be external and replaceable.

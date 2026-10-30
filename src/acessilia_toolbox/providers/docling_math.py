@@ -31,6 +31,8 @@ COMPONENT_KEYS = ("docling-serve", "docling", "docling-core", "docling-ibm-model
 class DoclingMathProvider:
     """Calls docling-serve and extracts LaTeX from formula groups."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")
@@ -112,7 +114,13 @@ class DoclingMathProvider:
             response = client.post(
                 CONVERT_PATH,
                 files={"files": (filename, payload, media_type)},
-                data={"to_formats": ["json"]},
+                data={
+                    "to_formats": ["json"],
+                    "pipeline": "vlm",
+                    "vlm_pipeline_preset": self.descriptor.config.get(
+                        "vlm_pipeline_preset", "granite_docling"
+                    ),
+                },
             )
             response.raise_for_status()
         except httpx.TimeoutException as exc:

@@ -9,6 +9,7 @@ providers:
       - document.structure.extract
     media_types:
       - application/pdf
+      - text/html
       - application/vnd.openxmlformats-officedocument.wordprocessingml.document
       - image/png
       - image/jpeg
@@ -69,6 +70,8 @@ providers:
       - image/png
       - image/jpeg
       - image/tiff
+    config:
+      vlm_pipeline_preset: granite_docling
   - id: rapid-latex-ocr
     version: "0.1"
     transport: http
@@ -285,6 +288,7 @@ providers:
       - image/tiff
       - image/bmp
       - application/pdf
+      - text/html
 
   - id: pure-accessibility
     version: "1.0"

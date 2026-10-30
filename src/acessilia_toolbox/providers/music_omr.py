@@ -174,6 +174,8 @@ CONVERT_PATH = "/convert"
 class AudiverisProvider:
     """Calls the audiveris-serve sidecar (POST /convert multipart)."""
 
+    supports_streaming_input = True
+
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")

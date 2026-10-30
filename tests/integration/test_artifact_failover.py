@@ -48,7 +48,7 @@ def test_filesystem_only_api_keeps_artifact_uploads_available(tmp_path, monkeypa
 @pytest.mark.parametrize("shared", [False, True], ids=["private-disks", "shared-volume"])
 def test_two_replicas_during_primary_outage(tmp_path: Path, shared: bool) -> None:
     primary = Mock()
-    for method in (primary.put, primary.get, primary.stat, primary.exists):
+    for method in (primary.put, primary.put_stream, primary.get, primary.stat, primary.exists):
         method.side_effect = ProviderUnavailableError("S3 offline")
     roots = [tmp_path / "shared"] * 2 if shared else [tmp_path / "a", tmp_path / "b"]
     stores = [

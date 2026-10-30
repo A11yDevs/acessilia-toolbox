@@ -29,6 +29,17 @@ GET  /v1/planning/domain
 GET  /v1/planning/capabilities/{capability_id}
 ```
 
+### Readiness: `GET /v1/ready`
+
+The public readiness route checks the capability catalogue, the structural
+provider selected by `TOOLBOX_READY_PROVIDER`, and artifact storage. A `provider`
+query may repeat that configured provider; requesting a different provider
+returns HTTP 400 so anonymous callers cannot trigger arbitrary provider health
+checks. Storage readiness succeeds when either configured failover backend is
+usable. If only the fallback is available, the response remains ready and the
+server logs the degraded primary. Storage probe results are cached for five
+seconds to limit public S3 writes and request cost.
+
 ### Capability catalogue: `providers` and `declared_providers`
 
 `GET /v1/capabilities` and `GET /v1/capabilities/{capability_id}` return two
@@ -529,5 +540,15 @@ set in the environment before starting.
 
 ### Upload and capacity errors
 
-- HTTP **413**: the request body exceeds the 201 MiB limit (200 MiB upload plus 1 MiB multipart overhead). Reduce the upload size.
+- HTTP **413**: the request body exceeds the 201 MiB limit (200 MiB upload plus 1 MiB multipart overhead), or an input exceeds the in-memory limit of a provider or storage adapter that requires bytes. Reduce the input or use a streaming provider.
+
+PyMuPDF operations (`pdf.split`, `pdf.render`, and `document.text.spans`) and
+`media.inspect` accept seekable streams and keep the 200 MiB upload limit. Other
+in-process providers such as `homr` and `qwen3-vl-8b`, image auto-rotation, and
+legacy storage adapters still require the entire input in memory. Those paths
+accept at most 64 MiB by default; `TOOLBOX_MAX_IN_MEMORY_INPUT_BYTES` changes
+the limit to a positive number of bytes. This is an input-size compatibility
+limit for those byte-based paths. Size it together with execution concurrency
+and available memory. The limit bounds the input allocation, not decoded
+images, models, outputs, or total process memory.
 - HTTP **503**: execution capacity is exhausted or a required provider/dependency is unavailable. Retry capacity failures after load decreases; check provider health and installation for unavailable dependencies.

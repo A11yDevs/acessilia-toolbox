@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -127,8 +128,10 @@ class FakeS3Client:
     def put_object(self, **kwargs: object) -> None:
         if not self.available:
             raise ConnectionError("MinIO offline")
+        body = kwargs["Body"]
+        content = body.read() if hasattr(body, "read") else bytes(body)
         self.objects[str(kwargs["Key"])] = (
-            bytes(kwargs["Body"]),
+            content,
             str(kwargs["ContentType"]),
             dict(kwargs["Metadata"]),
         )
@@ -162,10 +165,10 @@ class MissingObjectError(Exception):
 
 class ByteBody:
     def __init__(self, payload: bytes) -> None:
-        self.payload = payload
+        self.payload = BytesIO(payload)
 
-    def read(self) -> bytes:
-        return self.payload
+    def read(self, size: int = -1) -> bytes:
+        return self.payload.read(size)
 
 
 def test_runtime_failover_preserves_artifacts_after_recovery(tmp_path: Path) -> None:
