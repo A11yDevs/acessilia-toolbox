@@ -61,8 +61,12 @@ a formula its spoken form, wrap the `Math` in a span with the class
 only that formula's `/Alt` changes. The filter first replaces each of
 `\ { } $ & # ^ _ % ~` in the text with a space and collapses the spaces
 (`a}b` reads `a b`), so the text can neither inject commands nor unbalance the
-group. A span without the class, or with an empty `alt`, renders its content
-as before, and other writers (`document.export.docx`) ignore the span.
+group. The group also calls `\AccessiliaFormulaCollect`, which turns
+`latex-lab`'s math collection back on: table alignment can switch it off while
+it builds a cell, and a formula in a table cell would otherwise get no
+`Formula` element. A span with an empty `alt` keeps that element with the
+default `/Alt`; a span without the class renders its content as before, and
+other writers (`document.export.docx`) ignore the span.
 
 ### Math font
 
