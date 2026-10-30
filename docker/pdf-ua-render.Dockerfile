@@ -27,6 +27,7 @@ RUN apt-get update && \
         fontconfig \
         fonts-dejavu-core \
         perl \
+        poppler-utils \
         xz-utils && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -95,7 +96,8 @@ WORKDIR /app
 # including formulas in a table header and data cell, that the math font
 # is embedded with \neq as U+2260 and math letters as base letters in the
 # text layer, and (for the default smoke) that its lists are tagged with
-# PDF 1.7 ListNumbering values.
+# PDF 1.7 ListNumbering values. Raw pdftotext must also have no split words
+# at line ends and no non-whitespace control characters.
 COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json \
     docker/pdf-ua-render/table-smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
 RUN luaotfload-tool --update && \

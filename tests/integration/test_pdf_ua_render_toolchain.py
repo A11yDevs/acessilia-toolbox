@@ -198,3 +198,23 @@ def test_words_are_not_hyphenated_across_lines(server: Any, tmp_path) -> None:
     ).stdout
     hyphenated = [line for line in text.splitlines() if re.search(r"[^\W\d_]-$", line)]
     assert hyphenated == []
+
+
+def test_build_smoke_checks_raw_text_and_list_numbering(server: Any, tmp_path: Path) -> None:
+    """Run the same checker as the Docker build against the rendered smoke."""
+    import subprocess
+
+    response = TestClient(server.app).post(
+        "/render",
+        files={"file": ("smoke.json", (SERVER_PATH.parent / "smoke.json").read_bytes(),
+                        "application/json")},
+    )
+    assert response.status_code == 200, response.text[:500]
+    pdf = tmp_path / "smoke.pdf"
+    pdf.write_bytes(response.content)
+    result = subprocess.run(
+        [sys.executable, str(SERVER_PATH.parent / "smoke_check.py"), str(pdf),
+         "--require-lists", "--require-double-struck"],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
