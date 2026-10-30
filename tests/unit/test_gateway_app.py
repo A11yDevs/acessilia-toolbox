@@ -56,8 +56,9 @@ def test_gateway_mode_serves_only_health_and_the_vlm_routes() -> None:
     assert paths == {"/v1/health", "/v1/vlm/chat/completions", "/v1/vlm/health"}
     assert asyncio.run(call(app, "GET", "/v1/health")).status_code == 200
     assert asyncio.run(call(app, "GET", "/v1/capabilities")).status_code == 404
-    # No API docs on the relay: only the three routes the deployment lists.
-    for path in ("/v1/docs", "/v1/openapi.json", "/redoc"):
+    # Only the three routes the deployment lists: no API docs, and no
+    # readiness route, which checks extraction and storage a gateway lacks.
+    for path in ("/v1/docs", "/v1/openapi.json", "/redoc", "/v1/ready"):
         assert asyncio.run(call(app, "GET", path)).status_code == 404, path
 
 

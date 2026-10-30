@@ -23,7 +23,8 @@ from fastapi.responses import JSONResponse
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.api import auth
-from acessilia_toolbox.api.rest import public_router
+from acessilia_toolbox.api.rest import health
+from acessilia_toolbox.api.schemas import HealthResponse
 from acessilia_toolbox.api.vlm_gateway import vlm_router
 from acessilia_toolbox.core.errors import ToolboxError
 from acessilia_toolbox.core.provider import ProviderRegistry
@@ -54,7 +55,12 @@ def create_gateway_app(providers: ProviderRegistry | None = None) -> FastAPI:
     async def _toolbox_error(_: Request, error: ToolboxError) -> JSONResponse:
         return JSONResponse(status_code=error.http_status, content=error.to_payload())
 
-    app.include_router(public_router)
+    # The liveness route only, not the whole public router: its /v1/ready
+    # checks structure extraction and storage, which a gateway does not have,
+    # and a route added there later must not reach the relay unannounced.
+    app.add_api_route(
+        "/v1/health", health, methods=["GET"], response_model=HealthResponse, tags=["health"]
+    )
     app.include_router(vlm_router)
 
     if not auth.TOOLBOX_API_KEY:
