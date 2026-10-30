@@ -22,6 +22,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.http_support import format_http_error
 
 CONVERT_PATH = "/v1/convert/file"
 
@@ -31,6 +32,8 @@ COMPONENT_KEYS = ("docling-serve", "docling", "docling-core", "docling-ibm-model
 
 class DoclingMathProvider:
     """Calls docling-serve and extracts LaTeX from formula groups."""
+
+    supports_streaming_input = True
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -114,7 +117,13 @@ class DoclingMathProvider:
             response = client.post(
                 CONVERT_PATH,
                 files={"files": (filename, payload, media_type)},
-                data={"to_formats": ["json"]},
+                data={
+                    "to_formats": ["json"],
+                    "pipeline": "vlm",
+                    "vlm_pipeline_preset": self.descriptor.config.get(
+                        "vlm_pipeline_preset", "granite_docling"
+                    ),
+                },
             )
             response.raise_for_status()
         except httpx.TimeoutException as exc:
@@ -124,7 +133,7 @@ class DoclingMathProvider:
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                f"docling-serve rejected: HTTP {exc.response.status_code}",
+                format_http_error("docling-serve", exc.response),
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc

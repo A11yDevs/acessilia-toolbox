@@ -21,6 +21,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.http_support import format_http_error
 
 CONVERT_PATH = "/v1/convert/file"
 
@@ -30,6 +31,8 @@ COMPONENT_KEYS = ("docling-serve", "docling", "docling-core", "docling-ibm-model
 
 class DoclingOcrProvider:
     """Calls docling-serve with OCR enabled and returns recognized text."""
+
+    supports_streaming_input = True
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -138,7 +141,7 @@ class DoclingOcrProvider:
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                f"docling-serve rejected: HTTP {exc.response.status_code}",
+                format_http_error("docling-serve", exc.response),
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc

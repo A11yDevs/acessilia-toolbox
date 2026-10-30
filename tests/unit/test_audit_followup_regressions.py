@@ -208,7 +208,8 @@ def test_mineru_lines_keep_word_boundaries(lines, expected):
     assert _ItemProxy(block, 0, [100, 100]).text == expected
 
 
-def test_orientation_cache_provenance_is_bound_to_original_source():
+@pytest.mark.parametrize("second_source", [b"upright", b"rotated-other"])
+def test_orientation_cache_provenance_is_bound_to_original_source(second_source):
     import base64
     from datetime import UTC, datetime
 
@@ -226,18 +227,20 @@ def test_orientation_cache_provenance_is_bound_to_original_source():
         ]
     )
     calls = []
+    extracted_payloads = []
 
     def orient(capability, payload, **kw):
         calls.append(payload)
         return SimpleNamespace(
             document={
-                "angle": 90 if payload == b"rotated" else 0,
+                "angle": 90 if payload.startswith(b"rotated") else 0,
                 "confidence": 0.9,
                 "image_base64": base64.b64encode(b"upright").decode(),
             }
         )
 
     def extract(capability, payload, **kw):
+        extracted_payloads.append(payload)
         now = datetime.now(UTC)
         return ExtractionResult(
             document={"text": payload.decode()},
@@ -271,13 +274,17 @@ def test_orientation_cache_provenance_is_bound_to_original_source():
         )
 
     first = run(b"rotated")
-    second = run(b"upright")
+    second = run(second_source)
     assert first.provenance.orientation["angle"] == 90
-    assert second.provenance.orientation["angle"] == 0
+    assert second.provenance.orientation["angle"] == (
+        90 if second_source.startswith(b"rotated") else 0
+    )
     assert not second.provenance.cache_hit
     assert run(b"rotated").provenance.cache_hit
-    assert run(b"upright").provenance.cache_hit
-    assert calls == [b"rotated", b"upright"]
+    assert run(second_source).provenance.cache_hit
+    # Orientation is rechecked on every request; only extraction is reused.
+    assert calls == [b"rotated", second_source, b"rotated", second_source]
+    assert extracted_payloads == [b"upright", b"upright"]
 
 
 @pytest.mark.parametrize("splits", [("train", "test"), ("test", "train")])

@@ -34,6 +34,7 @@ services:
       MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      TOOLBOX_ARTIFACT_FALLBACK_MODE: ${TOOLBOX_ARTIFACT_FALLBACK_MODE:-disabled}
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
       TOOLBOX_API_KEY: ${TOOLBOX_API_KEY:-}
       # The toolbox refuses to start without TOOLBOX_API_KEY; 1 here starts it
@@ -48,6 +49,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
       valkey:
         condition: service_healthy
     restart: unless-stopped
@@ -181,8 +184,10 @@ services:
       - "${MINERU_SERVE_PORT:-5002}:8000"
     environment:
       MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+      HF_HOME: /home/mineru/.cache/huggingface
     volumes:
       - mineru-models:/home/mineru/.cache/modelscope
+      - mineru-huggingface:/home/mineru/.cache/huggingface
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')"]
       interval: 15s
@@ -297,6 +302,7 @@ volumes:
   artifact-fallback:
   docling-models:
   mineru-models:
+  mineru-huggingface:
   minio-data:
   nougat-models:
   nougat-torch-models:

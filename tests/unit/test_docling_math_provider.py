@@ -152,6 +152,16 @@ def extract(adapter: DoclingMathProvider):
 
 
 class TestDoclingMathProvider:
+    def test_conversion_uses_formula_aware_vlm_pipeline(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/v1/convert/file":
+                assert b'name="pipeline"' in request.content
+                assert b"\r\n\r\nvlm\r\n" in request.content
+                assert b"granite_docling" in request.content
+            return convert_handler(request)
+
+        extract(provider_with(handler))
+
     def test_extraction_returns_latex_and_conforms_to_schema(self) -> None:
         schema_path = Path(__file__).parents[2] / "schemas" / "latex@1.json"
         schema = json.loads(schema_path.read_text(encoding="utf-8"))

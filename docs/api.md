@@ -29,6 +29,17 @@ GET  /v1/planning/domain
 GET  /v1/planning/capabilities/{capability_id}
 ```
 
+### Readiness: `GET /v1/ready`
+
+The public readiness route checks the capability catalogue, the structural
+provider selected by `TOOLBOX_READY_PROVIDER`, and artifact storage. A `provider`
+query may repeat that configured provider; requesting a different provider
+returns HTTP 400 so anonymous callers cannot trigger arbitrary provider health
+checks. Storage readiness succeeds when either configured failover backend is
+usable. If only the fallback is available, the response remains ready and the
+server logs the degraded primary. Storage probe results are cached for five
+seconds to limit public S3 writes and request cost.
+
 ### Capability catalogue: `providers` and `declared_providers`
 
 `GET /v1/capabilities` and `GET /v1/capabilities/{capability_id}` return two
@@ -127,6 +138,71 @@ curl http://localhost:8002/v1/health
 
 The OpenAPI document at `/v1/openapi.json` includes the security scheme
 and can be explored interactively at `/v1/docs` (Swagger UI).
+
+## VLM chat gateway
+
+`POST /v1/vlm/chat/completions` relays an OpenAI chat-completions request to an
+OpenAI-compatible VLM provider (`qwen3-vl-8b`). The agentic core points its
+own OpenAI-compatible client here instead of at the model server, so that:
+
+- its requests share the provider's `max_concurrency` limiter with the VLM
+  capabilities, and the server never receives more requests than it has
+  parallel slots;
+- the model server's key stays with the Toolbox; the caller authenticates with
+  `TOOLBOX_API_KEY`.
+
+The body's `model` is the provider id; the Toolbox replaces it with the
+provider's `config.model` and sends the provider's `api_key`. The response
+streams as server-sent events only when the body sets `"stream": true`; any
+other `stream` value is sent to the server as `false`.
+
+The request waits for a free slot for at most the provider's
+`slot_wait_seconds` (its `timeout_seconds` when unset), then gets
+`timeout_seconds` at the server. A slot can stay taken for a whole long
+generation, so the wait has its own, longer bound: the shipped `qwen3-vl-8b`
+waits up to 1800 s, then gets 600 s.
+
+**A client's own timeout must be longer than `slot_wait_seconds` +
+`timeout_seconds`, with a margin.** At exactly the sum the client gives up
+first and never reads the 504, and the wait can overrun its bound by up to
+0.5 s (the polling interval). For `qwen3-vl-8b` that is more than 2400 s; the
+core's `MODEL_CALL_TIMEOUT_SECONDS=2700` leaves 300 s.
+
+The gateway takes a slot without queueing behind a capability already blocked
+on the same limiter, so under heavy gateway load a capability may wait longer
+for its turn. A client that disconnects, while waiting or
+during the generation, frees its slot, and the upstream connection is closed
+so the server stops generating.
+
+Errors the gateway raises itself, an unexpected failure (500) included, have
+the OpenAI shape, `{"error": {"message", "type", "code"}}`, with the Toolbox
+error code (see [Errors](#errors)) in `type` and `code`; a 401 also carries
+`WWW-Authenticate: Bearer`. Unlike the rest of the API, the gateway does not
+use the Toolbox envelope: OpenAI-compatible clients such as Agno read the
+message only from `error.message`, and reported the envelope as "Unknown model
+error". The model server's errors are relayed as they are; llama-server and
+vLLM answer in the OpenAI shape, but the gateway does not rewrite them.
+
+| Status | Source | Meaning |
+|--------|--------|---------|
+| 400 | Toolbox | Body is not a JSON object with a string `model`, or the provider is not an OpenAI-compatible VLM |
+| 401 | Toolbox | Missing or invalid `TOOLBOX_API_KEY` |
+| 404 | Toolbox | `model` names no provider |
+| 499 | Toolbox | The client disconnected; it never sees this status, which only appears in access logs |
+| 502 | Toolbox | The model server rejected the Toolbox's own key |
+| 500 | Toolbox | Unexpected failure in the gateway (logged with its traceback) |
+| 503 | Toolbox | The model server is unreachable |
+| 504 | Toolbox | No free slot within `slot_wait_seconds`, or no answer from the model server within `timeout_seconds` |
+| any other | Model server | Relayed as is, for example a 400 for a request larger than the context window |
+
+The core uses it with its `toolbox` client:
+
+``` bash
+AI_CLIENT=toolbox
+TOOLBOX_BASE_URL=http://toolbox:8002
+TOOLBOX_API_KEY=<TOOLBOX_API_KEY>
+TOOLBOX_VLM_PROVIDER=qwen3-vl-8b
+```
 
 ## Execution request
 
@@ -464,5 +540,15 @@ set in the environment before starting.
 
 ### Upload and capacity errors
 
-- HTTP **413**: the request body exceeds the 201 MiB limit (200 MiB upload plus 1 MiB multipart overhead). Reduce the upload size.
+- HTTP **413**: the request body exceeds the 201 MiB limit (200 MiB upload plus 1 MiB multipart overhead), or an input exceeds the in-memory limit of a provider or storage adapter that requires bytes. Reduce the input or use a streaming provider.
+
+PyMuPDF operations (`pdf.split`, `pdf.render`, and `document.text.spans`) and
+`media.inspect` accept seekable streams and keep the 200 MiB upload limit. Other
+in-process providers such as `homr` and `qwen3-vl-8b`, image auto-rotation, and
+legacy storage adapters still require the entire input in memory. Those paths
+accept at most 64 MiB by default; `TOOLBOX_MAX_IN_MEMORY_INPUT_BYTES` changes
+the limit to a positive number of bytes. This is an input-size compatibility
+limit for those byte-based paths. Size it together with execution concurrency
+and available memory. The limit bounds the input allocation, not decoded
+images, models, outputs, or total process memory.
 - HTTP **503**: execution capacity is exhausted or a required provider/dependency is unavailable. Retry capacity failures after load decreases; check provider health and installation for unavailable dependencies.
