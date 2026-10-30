@@ -1728,51 +1728,71 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Invalid body, or the provider is not an OpenAI-compatible VLM",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid TOOLBOX_API_KEY",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "model names no provider",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
                     },
                     "502": {
-                        "description": "Bad Gateway",
+                        "description": "The model server rejected the Toolbox's own key",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
                     },
                     "503": {
-                        "description": "Service Unavailable",
+                        "description": "The model server is unreachable",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
                     },
                     "504": {
-                        "description": "Gateway Timeout",
+                        "description": "No free slot within slot_wait_seconds, or no answer within timeout_seconds",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Unexpected failure in the gateway",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
                                 }
                             }
                         }
@@ -2313,6 +2333,48 @@
                     "version"
                 ],
                 "title": "HealthResponse"
+            },
+            "OpenAiError": {
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Type"
+                    },
+                    "code": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Code"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "message",
+                    "type"
+                ],
+                "title": "OpenAiError"
+            },
+            "OpenAiErrorResponse": {
+                "properties": {
+                    "error": {
+                        "$ref": "#/components/schemas/OpenAiError"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "error"
+                ],
+                "title": "OpenAiErrorResponse",
+                "description": "Error of the VLM chat gateway, in the shape OpenAI-compatible clients read."
             },
             "ProviderHealth": {
                 "properties": {

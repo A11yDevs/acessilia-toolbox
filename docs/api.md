@@ -146,17 +146,31 @@ streams as server-sent events only when the body sets `"stream": true`; any
 other `stream` value is sent to the server as `false`.
 
 The request waits for a free slot for at most the provider's
-`timeout_seconds`, then gets the same bound at the server, so the worst case
-is twice that. The gateway takes a slot without queueing behind a capability
-already blocked on the same limiter, so under heavy gateway load a capability
-may wait longer for its turn. A client that disconnects, while waiting or
+`slot_wait_seconds` (its `timeout_seconds` when unset), then gets
+`timeout_seconds` at the server. A slot can stay taken for a whole long
+generation, so the wait has its own, longer bound: the shipped `qwen3-vl-8b`
+waits up to 1800 s, then gets 600 s.
+
+**A client's own timeout must be longer than `slot_wait_seconds` +
+`timeout_seconds`, with a margin.** At exactly the sum the client gives up
+first and never reads the 504, and the wait can overrun its bound by up to
+0.5 s (the polling interval). For `qwen3-vl-8b` that is more than 2400 s; the
+core's `MODEL_CALL_TIMEOUT_SECONDS=2700` leaves 300 s.
+
+The gateway takes a slot without queueing behind a capability already blocked
+on the same limiter, so under heavy gateway load a capability may wait longer
+for its turn. A client that disconnects, while waiting or
 during the generation, frees its slot, and the upstream connection is closed
 so the server stops generating.
 
-Only bodies from the model server are OpenAI-shaped (`{"error": {...}}` for
-its errors) and are relayed with their status. Errors raised by the Toolbox
-itself use the Toolbox envelope (`{"code", "message", "details"}`, see
-[Errors](#errors)); the OpenAI SDK reads the message from either.
+Errors the gateway raises itself, an unexpected failure (500) included, have
+the OpenAI shape, `{"error": {"message", "type", "code"}}`, with the Toolbox
+error code (see [Errors](#errors)) in `type` and `code`; a 401 also carries
+`WWW-Authenticate: Bearer`. Unlike the rest of the API, the gateway does not
+use the Toolbox envelope: OpenAI-compatible clients such as Agno read the
+message only from `error.message`, and reported the envelope as "Unknown model
+error". The model server's errors are relayed as they are; llama-server and
+vLLM answer in the OpenAI shape, but the gateway does not rewrite them.
 
 | Status | Source | Meaning |
 |--------|--------|---------|
@@ -165,8 +179,9 @@ itself use the Toolbox envelope (`{"code", "message", "details"}`, see
 | 404 | Toolbox | `model` names no provider |
 | 499 | Toolbox | The client disconnected; it never sees this status, which only appears in access logs |
 | 502 | Toolbox | The model server rejected the Toolbox's own key |
+| 500 | Toolbox | Unexpected failure in the gateway (logged with its traceback) |
 | 503 | Toolbox | The model server is unreachable |
-| 504 | Toolbox | No free slot, or no answer from the model server, within the provider's `timeout_seconds` |
+| 504 | Toolbox | No free slot within `slot_wait_seconds`, or no answer from the model server within `timeout_seconds` |
 | any other | Model server | Relayed as is, for example a 400 for a request larger than the context window |
 
 The core uses it with its `toolbox` client:
