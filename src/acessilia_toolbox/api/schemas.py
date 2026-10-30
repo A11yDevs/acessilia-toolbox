@@ -6,13 +6,14 @@ manifests so REST, MCP and PDDL keep describing the same contract.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityManifest
 from acessilia_toolbox.core.provenance import ExecutionProvenance
+from acessilia_toolbox.core.provider import ProviderHealth
 
 
 class HealthResponse(BaseModel):
@@ -117,3 +118,10 @@ class OpenAiErrorResponse(BaseModel):
     """Error of the VLM chat gateway, in the shape OpenAI-compatible clients read."""
 
     error: OpenAiError
+
+
+class VlmHealthResponse(BaseModel):
+    """Health of the OpenAI-compatible VLM providers behind the chat gateway."""
+
+    status: Literal["healthy", "unhealthy"]
+    providers: list[ProviderHealth]

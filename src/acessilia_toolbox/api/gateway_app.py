@@ -1,0 +1,58 @@
+"""The Toolbox in VLM gateway mode.
+
+The same package as the full Toolbox, started with another factory: it serves
+only the public health route and the VLM chat gateway (``/v1/vlm``), with a
+provider configuration that lists the model server. Run next to the model
+server, it is the one client of that server, and the Toolboxes of every
+environment point their VLM provider at it, so one limiter holds all of their
+requests to the server's parallel slots.
+
+    uvicorn acessilia_toolbox.api.gateway_app:create_gateway_app --factory
+
+See ``deploy/vlm-gateway/`` for a deployment next to llama-server.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+
+from fastapi import FastAPI
+
+from acessilia_toolbox import __version__
+from acessilia_toolbox.api import auth
+from acessilia_toolbox.api.rest import public_router
+from acessilia_toolbox.api.vlm_gateway import vlm_router
+from acessilia_toolbox.core.provider import ProviderRegistry
+
+LOG = logging.getLogger(__name__)
+
+DEFAULT_PROVIDERS_CONFIG = Path("providers-config.yaml")
+
+
+def create_gateway_app(providers: ProviderRegistry | None = None) -> FastAPI:
+    auth.ensure_key_configured()
+
+    app = FastAPI(
+        title="Acessilia VLM gateway",
+        version=__version__,
+        description="OpenAI-compatible chat relay to the vision-language model "
+        "servers, under one limiter per provider.",
+        openapi_url="/v1/openapi.json",
+        docs_url="/v1/docs",
+    )
+    app.state.providers = providers or ProviderRegistry.from_file(
+        Path(os.getenv("TOOLBOX_PROVIDERS_CONFIG", DEFAULT_PROVIDERS_CONFIG))
+    )
+    app.include_router(public_router)
+    app.include_router(vlm_router)
+
+    if not auth.TOOLBOX_API_KEY:
+        LOG.warning(
+            "%s=1 and no TOOLBOX_API_KEY: the VLM gateway is unauthenticated. "
+            "Never use this outside local development.",
+            auth.ALLOW_UNAUTHENTICATED_ENV,
+        )
+
+    return app

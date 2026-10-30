@@ -278,11 +278,13 @@ llama-server -hf Qwen/Qwen3-VL-8B-Instruct-GGUF:Q4_K_M --alias qwen3-vl-8b \
   --parallel 2 --ctx-size 16384 --threads 8 --image-min-tokens 1024 --metrics
 ```
 
-The unit lives on VM2, outside this repository, so the two sides must change
-together:
+The unit is versioned in `deploy/vlm-gateway/llama-server.service`, which
+moves the server to loopback behind the [VLM gateway](#vlm-gateway). The two
+sides must change together:
 
 - `max_concurrency` of `qwen3-vl-8b` in `providers-config.yaml` must equal
-  `--parallel`. With more requests than slots, the extra requests queue inside
+  `--parallel` in the one Toolbox that calls the server: the gateway, once it
+  is deployed. With more requests than slots, the extra requests queue inside
   llama-server, where the Toolbox's timeouts cannot see them.
 - `--ctx-size` is the **total** KV cache, divided among the slots: 16384 over 2
   slots gives 8192 tokens per slot, which `page_max_tokens`, `judge_max_chars`
@@ -313,6 +315,30 @@ requests keep taking freed slots first, because the slot is not handed out in
 arrival order. `table.recognize` makes 1 + `samples` sequential requests, each
 taking a slot. A client that disconnects
 does not free the slot until the server answers the request already running.
+
+### VLM gateway
+
+Staging and production share the model server. Each Toolbox limits only its
+own requests, so two of them with `max_concurrency: 2` together sent the server
+four requests for its two slots. The VLM gateway is one more Toolbox, in
+gateway mode (`acessilia_toolbox.api.gateway_app:create_gateway_app`), on the
+model server's host: the one client of llama-server, which moves to loopback.
+Its limiter holds every environment to the server's slots, and nothing reaches
+the server around it.
+
+The environments' Toolboxes keep their `qwen3-vl-8b` provider and point it at
+the gateway, which serves the same chat API under `/v1/vlm`:
+
+| Setting | Environment Toolbox | Gateway |
+|---|---|---|
+| `VLM_SERVE_URL` / endpoint | `http://<gateway>:8002/v1/vlm` | `http://127.0.0.1:8080` |
+| `VLM_API_KEY` | the gateway's `TOOLBOX_API_KEY` | llama-server's key |
+| `VLM_MAX_CONCURRENCY` | 4: relay, do not queue | 2: `--parallel` |
+| `VLM_TIMEOUT_SECONDS` | 2700: longer than the gateway's 1800 + 600 | 600 |
+
+The provider's health check reaches `GET /v1/vlm/health` on the gateway.
+`deploy/vlm-gateway/` has the compose file, the configuration, both systemd
+units and the switch-over steps.
 
 ## Chemistry
 

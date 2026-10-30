@@ -1807,6 +1807,53 @@
                     }
                 ]
             }
+        },
+        "/v1/vlm/health": {
+            "get": {
+                "tags": [
+                    "vlm"
+                ],
+                "summary": "Vlm Health",
+                "description": "Probe the VLM providers this gateway relays to.\n\nA Toolbox whose ``qwen3-vl-8b`` points at another Toolbox's gateway\n(``{endpoint}/v1/vlm``) checks its health here: the provider probes\n``{endpoint}/health``, which is this route.",
+                "operationId": "vlm_health_v1_vlm_health_get",
+                "responses": {
+                    "200": {
+                        "description": "Every VLM provider answers",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VlmHealthResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Missing or invalid TOOLBOX_API_KEY",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "A VLM provider does not answer",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VlmHealthResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
         }
     },
     "components": {
@@ -2462,6 +2509,32 @@
                     "type"
                 ],
                 "title": "ValidationError"
+            },
+            "VlmHealthResponse": {
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "healthy",
+                            "unhealthy"
+                        ],
+                        "title": "Status"
+                    },
+                    "providers": {
+                        "items": {
+                            "$ref": "#/components/schemas/ProviderHealth"
+                        },
+                        "type": "array",
+                        "title": "Providers"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "status",
+                    "providers"
+                ],
+                "title": "VlmHealthResponse",
+                "description": "Health of the OpenAI-compatible VLM providers behind the chat gateway."
             }
         },
         "securitySchemes": {

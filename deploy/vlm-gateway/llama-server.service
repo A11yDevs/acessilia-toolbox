@@ -1,0 +1,32 @@
+# /etc/systemd/system/llama-server.service on the model server's host.
+#
+# The key lives in /etc/llama-server.env (chmod 600), as LLAMA_API_KEY=<key>,
+# never on the command line. Loopback only: the VLM gateway is the one client.
+#
+# max_concurrency of the gateway's qwen3-vl-8b must equal --parallel.
+# --ctx-size is the total KV cache, divided among the slots (8192 tokens each
+# here): more room per slot needs a larger --ctx-size and more RAM.
+[Unit]
+Description=llama.cpp server (Qwen3-VL-8B-Instruct)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/llama.cpp
+EnvironmentFile=/etc/llama-server.env
+ExecStart=/root/llama.cpp/build/bin/llama-server \
+  -hf Qwen/Qwen3-VL-8B-Instruct-GGUF:Q4_K_M \
+  --alias qwen3-vl-8b \
+  --host 127.0.0.1 --port 8080 \
+  --parallel 2 \
+  --ctx-size 16384 \
+  --threads 8 \
+  --image-min-tokens 1024 \
+  --metrics
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

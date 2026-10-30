@@ -1,0 +1,34 @@
+# VLM gateway next to llama-server: the Toolbox image in gateway mode.
+#
+#   cp .env.example .env && chmod 600 .env   # then fill it in
+#   docker compose up -d
+services:
+  vlm-gateway:
+    image: ghcr.io/a11ydevs/acessilia-toolbox:${TOOLBOX_IMAGE_TAG:?set TOOLBOX_IMAGE_TAG in .env}
+    container_name: vlm-gateway
+    # Host networking: the container reaches llama-server on the host's
+    # loopback, and listens on the host's internal address.
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      TOOLBOX_PROVIDERS_CONFIG: /app/vlm-gateway/providers-config.yaml
+    volumes:
+      - ./providers-config.yaml:/app/vlm-gateway/providers-config.yaml:ro
+    command:
+      - uvicorn
+      - acessilia_toolbox.api.gateway_app:create_gateway_app
+      - --factory
+      - --host
+      - ${GATEWAY_HOST:?set GATEWAY_HOST in .env}
+      - --port
+      - ${GATEWAY_PORT:-8002}
+    restart: unless-stopped
+    # The image's own healthcheck probes localhost, where the gateway does not
+    # listen.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://${GATEWAY_HOST}:${GATEWAY_PORT:-8002}/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

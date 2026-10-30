@@ -34,10 +34,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 
 from acessilia_toolbox.api.auth import bearer_scheme, require_api_key
 from acessilia_toolbox.api.rest import providers
-from acessilia_toolbox.api.schemas import OpenAiErrorResponse
+from acessilia_toolbox.api.schemas import OpenAiErrorResponse, VlmHealthResponse
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
     ProviderExecutionError,
@@ -46,7 +47,7 @@ from acessilia_toolbox.core.errors import (
     ToolboxError,
 )
 from acessilia_toolbox.core.provider import ProviderRegistry
-from acessilia_toolbox.providers import create_adapter
+from acessilia_toolbox.providers import ADAPTERS, create_adapter
 from acessilia_toolbox.providers.openai_vlm import CHAT_PATH, OpenAiCompatibleVlmProvider
 
 LOG = logging.getLogger(__name__)
@@ -133,6 +134,43 @@ async def chat_completions(
         # "Unknown model error" again.
         LOG.exception("VLM gateway failed")
         return _openai_error(500, "unexpected failure in the VLM gateway", "internal_error")
+
+
+@vlm_router.get(
+    "/health",
+    responses={
+        200: {"model": VlmHealthResponse, "description": "Every VLM provider answers"},
+        401: {"model": OpenAiErrorResponse, "description": _ERROR_MEANINGS[401]},
+        503: {"model": VlmHealthResponse, "description": "A VLM provider does not answer"},
+    },
+)
+async def vlm_health(
+    registry: Annotated[ProviderRegistry, Depends(providers)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer_scheme)],
+) -> Response:
+    """Probe the VLM providers this gateway relays to.
+
+    A Toolbox whose ``qwen3-vl-8b`` points at another Toolbox's gateway
+    (``{endpoint}/v1/vlm``) checks its health here: the provider probes
+    ``{endpoint}/health``, which is this route.
+    """
+    try:
+        await require_api_key(credentials)
+    except ToolboxError as error:
+        return _openai_error(error.http_status, error.message, error.code)
+    except HTTPException as error:
+        return _openai_error(error.status_code, str(error.detail), "authorization_failed")
+
+    checks = []
+    for descriptor in registry.descriptors():
+        adapter_class = ADAPTERS.get(descriptor.id)
+        if isinstance(adapter_class, type) and issubclass(
+            adapter_class, OpenAiCompatibleVlmProvider
+        ):
+            checks.append(await run_in_threadpool(adapter_class(descriptor).health))
+    healthy = bool(checks) and all(check.healthy for check in checks)
+    body = VlmHealthResponse(status="healthy" if healthy else "unhealthy", providers=checks)
+    return JSONResponse(status_code=200 if healthy else 503, content=body.model_dump(mode="json"))
 
 
 def _openai_error(status: int, message: str, code: str) -> JSONResponse:
