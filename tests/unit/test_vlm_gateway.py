@@ -544,7 +544,7 @@ def test_a_provider_behind_a_gateway_checks_its_health_route(monkeypatch) -> Non
 
 
 def test_a_chat_relayed_through_a_gateway_reaches_the_model_server(monkeypatch) -> None:
-    """The whole chain: client → environment Toolbox → gateway → llama-server.
+    """The whole chain: core → environment Toolbox → gateway → llama-server.
 
     The environment's qwen3-vl-8b points at the gateway's /v1/vlm and posts
     {endpoint}/v1/chat/completions, as it would to llama-server's root; the
@@ -571,7 +571,9 @@ def test_a_chat_relayed_through_a_gateway_reaches_the_model_server(monkeypatch) 
         )
 
     gateway = create_gateway_app(vlm("http://127.0.0.1:8080"))
-    environment = create_gateway_app(vlm("http://gateway:8002/v1/vlm", api_key=key))
+    # The environment is the full Toolbox, as deployed (rate limiter,
+    # capability routes and all), not another gateway.
+    environment = create_app(CapabilityRegistry([]), vlm("http://gateway:8002/v1/vlm", api_key=key))
     served: list[str] = []
 
     def llama(request: httpx.Request) -> httpx.Response:

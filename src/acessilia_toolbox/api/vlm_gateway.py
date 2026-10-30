@@ -121,7 +121,9 @@ class _ClientDisconnectedError(Exception):
 # /v1/vlm/v1/chat/completions makes /v1/vlm a model server's root, as the
 # OpenAI-compatible provider sees one: it posts {endpoint}/v1/chat/completions
 # and checks {endpoint}/health, so a Toolbox whose provider points at another
-# Toolbox's /v1/vlm reaches both its chat and its health check.
+# Toolbox's /v1/vlm reaches both its chat and its health check. The router is
+# shared, so the full Toolbox serves both paths too, not only gateway mode:
+# either can be that other Toolbox.
 @vlm_router.post("/chat/completions", responses=GATEWAY_RESPONSES, openapi_extra=CHAT_REQUEST_BODY)
 @vlm_router.post(
     "/v1/chat/completions",
