@@ -27,6 +27,7 @@ ExecStart=/root/llama.cpp/build/bin/llama-server \
 Restart=on-failure
 RestartSec=3
 LimitNOFILE=65536
+LimitMEMLOCK=infinity
 
 [Install]
 WantedBy=multi-user.target
