@@ -117,12 +117,99 @@ production, configure a password via `VALKEY_URL=redis://:password@host:6379`.
 | `MINIO_ACCESS_KEY` | `change-me` | **Replace** with a real key |
 | `MINIO_SECRET_KEY` | `change-me-too` | **Replace** with a real secret |
 | `ARTIFACT_FALLBACK_SOURCE` | `artifact-fallback` | Named volume or host path for filesystem failover; use a shared mount for replicas on different hosts |
+| `TOOLBOX_ARTIFACT_FALLBACK_MODE` | `disabled` | `disabled` propagates S3 write failures (inline-only results are still returned, without a persisted location); `local` permits single-instance fallback; `shared` declares a filesystem accessible by all replicas |
 | `VALKEY_URL` | `redis://localhost:6379` | Valkey cache endpoint |
 | `VALKEY_PORT` | `6379` | Valkey port |
 | `TOOLBOX_HOST` | `0.0.0.0` | uvicorn listen address |
 | `TOOLBOX_PORT` | `8002` | Toolbox HTTP port |
 | `TOOLBOX_API_KEY` | *(empty)* | Bearer token for REST API auth. Required: without it the application refuses to start. |
 | `TOOLBOX_ALLOW_UNAUTHENTICATED` | *(empty)* | `1` starts without `TOOLBOX_API_KEY`, every endpoint open. Local development only. |
+
+#### Artifact fallback and multiple replicas
+
+With the default `TOOLBOX_ARTIFACT_FALLBACK_MODE=disabled`, a failed S3 write
+returns HTTP 503 for uploads, by-reference results and binary outputs.
+Inline-only results are returned without a persisted location (see below). It
+never acknowledges an upload stored only on one replica's private disk. Existing backup objects remain readable when an S3
+store is configured. The mode controls S3 failover writes only. Without a
+configured S3 store, the filesystem remains the primary store in every mode,
+including `disabled`. Filesystem-only deployments on multiple hosts still need
+shared storage if requests can reach different replicas.
+
+For a single instance, set `TOOLBOX_ARTIFACT_FALLBACK_MODE=local` to retain
+the former behavior. Files saved during an outage are tied to that disk and
+may become unavailable when the instance or its host is replaced.
+
+For replicas on different hosts, mount the same distributed filesystem on
+every host, then configure both Compose deployments with, for example:
+
+```dotenv
+TOOLBOX_ARTIFACT_FALLBACK_MODE=shared
+ARTIFACT_FALLBACK_SOURCE=/mnt/toolbox-shared
+```
+
+`/mnt/toolbox-shared` must already be an actual shared mount, writable by the
+container user on every host, supporting atomic file replacement. Setting
+`shared` is an operator declaration: the Toolbox cannot verify the topology or
+provision a distributed filesystem. A Docker named volume with the same name
+on two hosts is still two independent volumes. Check that the mount is present
+before starting containers; a missing mount must not silently become a local
+directory. Monitor its availability and capacity.
+
+Before rollout, stop S3, upload through replica A and download the returned ID
+through replica B, verifying its SHA-256. Stop A and repeat the download from B.
+After S3 recovery, confirm that backup objects remain readable. No automatic
+replication back to S3 is performed. If the shared filesystem is unavailable,
+the write must fail; private local disks must not be substituted for it.
+
+Existing deployments that depended on automatic local fallback must explicitly
+choose `local` for one instance or provision and verify shared storage before
+choosing `shared`. Python callers constructing `FailoverArtifactStore` directly
+must pass the same choice as `fallback_mode="local"` or `fallback_mode="shared"`.
+The constructor defaults to disabled fallback writes, like the REST factory.
+
+#### Inline extraction and cached artifacts during storage outages
+
+An operation returning only inline JSON can complete during a temporary
+storage outage. Its response identifies the JSON content without a persisted
+URI/backend. The result is still written to the execution cache, so repeated
+requests during the outage are served from the cache instead of extracting
+again. After storage recovers, the never-written object invalidates that
+entry: the next request extracts once more, publishes the JSON and replaces
+the cache entry. Binary and by-reference outputs still require storage.
+
+For a warm execution cache, the executor checks stored references before
+returning them. This costs one `exists` call per artifact, including an S3
+round trip for the JSON. If storage is temporarily unavailable and the
+contract permits inline-only JSON, the cached document is returned without
+reexecuting the extraction provider or claiming a verified stored download.
+The cache entry is left unchanged so its stored reference can be verified
+again after recovery. An object verified as missing invalidates the cache;
+required binary/by-reference objects cannot use the inline exception.
+
+The Core fallback after an unsuccessful initial upload depends on this inline
+response behavior. Required output persistence failures remain errors; this
+does not guarantee that a complete conversion with mandatory binary exports
+can finish while storage is unavailable.
+
+#### Orientation cache identity and version probes
+
+With `auto_rotate` enabled for a supported image, orientation still runs before
+the extraction cache lookup. The key includes the source and oriented image
+fingerprints, provider/configuration identity and the effective orientation
+decision. Confidence is retained in provenance but excluded from cache identity.
+
+RapidOCR version metadata is memoized per process for 30 seconds, across adapter
+instances, with a bounded cache. Deployment, declared version and configuration
+changes select a different entry. Failed refreshes retain the last successful
+identity and retry after 5 seconds; before any successful probe, the declared
+version is used. Thus model-version changes can take up to the TTL to appear in
+cache identity, and an unavailable version endpoint cannot immediately invalidate
+otherwise usable cached extraction. Effective oriented bytes and decisions are
+still evaluated on every auto-rotate request. Restarting the process clears the
+version cache. No cross-process synchronization is provided.
+
+For release migration details, see [0.2.0 storage changes](release-notes-0.2.0.md).
 
 ### 4. Load the configuration
 

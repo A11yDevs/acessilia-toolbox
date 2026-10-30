@@ -180,9 +180,19 @@ providers:
     config:
       model: qwen3-vl-8b
       api_key: ${VLM_API_KEY:-}
-      # llama-server runs 4 parallel slots of 8192 tokens each.
-      max_concurrency: 4
-      page_max_tokens: 4096
+      # Equal to llama-server's --parallel 2 (docs/tools.md, "Production
+      # server"). --ctx-size 16384 is the total KV cache, divided among the
+      # slots: 8192 tokens each. More room per slot needs a larger --ctx-size
+      # and more RAM, not fewer slots.
+      max_concurrency: 2
+      # A gateway chat waits this long for a slot, then gets timeout_seconds at
+      # the server. Any request frees its slot within timeout_seconds (600 s),
+      # so this covers about three turns of both slots (docs/tools.md,
+      # "Production server"). Clients need a longer timeout than 1800 + 600.
+      slot_wait_seconds: 1800
+      # At 3 tokens/s, 4096 tokens held a slot for over 20 minutes. A page cut
+      # here reports finish "length", and the core keeps the extractors' text.
+      page_max_tokens: 2048
       # Two candidates plus the page image must fit in one 8192-token slot.
       judge_max_chars: 6000
       # vlm_page_ocr.py used repetition_penalty 1.05 (vLLM); llama-server calls

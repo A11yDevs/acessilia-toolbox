@@ -120,3 +120,15 @@ class ErrorResponse(BaseModel):
     code: str
     message: str
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class OpenAiError(BaseModel):
+    message: str
+    type: str
+    code: str | None = None
+
+
+class OpenAiErrorResponse(BaseModel):
+    """Error of the VLM chat gateway, in the shape OpenAI-compatible clients read."""
+
+    error: OpenAiError

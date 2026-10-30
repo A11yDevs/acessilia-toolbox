@@ -14,6 +14,7 @@ from acessilia_toolbox import __version__
 from acessilia_toolbox.api import auth
 from acessilia_toolbox.api.rest import MAX_UPLOAD_BYTES, dataset_router, public_router, router
 from acessilia_toolbox.api.upload_limit import UploadLimitMiddleware
+from acessilia_toolbox.api.vlm_gateway import vlm_router
 from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import ConfigurationError, ToolboxError
@@ -21,7 +22,7 @@ from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers import configure_dataset_mirroring, create_adapter
 from acessilia_toolbox.providers.cache import create_cache
-from acessilia_toolbox.providers.storage import FailoverArtifactStore
+from acessilia_toolbox.providers.storage import FALLBACK_MODES, FailoverArtifactStore
 from acessilia_toolbox.providers.storage import create_artifact_store as _create_store
 
 LOG = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ def create_app(
     app.include_router(public_router)
     app.include_router(router)
     app.include_router(dataset_router)
+    app.include_router(vlm_router)
 
     if not auth.TOOLBOX_API_KEY:
         LOG.warning(
@@ -106,6 +108,11 @@ def create_app(
 
 
 def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
+    fallback_mode = os.getenv("TOOLBOX_ARTIFACT_FALLBACK_MODE", "disabled")
+    if fallback_mode not in FALLBACK_MODES:
+        raise ConfigurationError(
+            "TOOLBOX_ARTIFACT_FALLBACK_MODE must be disabled, local or shared"
+        )
     candidates = providers.for_capability("artifact.store")
     if not candidates:
         return None
@@ -123,10 +130,25 @@ def _store_from(providers: ProviderRegistry) -> ArtifactStore | None:
                 return store
         return None
 
-    primary = first_available([d for d in candidates if d.transport == "s3"])
+    s3_candidates = [d for d in candidates if d.transport == "s3"]
+    primary = first_available(s3_candidates)
     fallback = first_available([d for d in candidates if d.transport != "s3"])
     if primary is not None and fallback is not None:
-        return FailoverArtifactStore(primary, fallback)
+        return FailoverArtifactStore(primary, fallback, fallback_mode=fallback_mode)
+    if primary is None and fallback is not None:
+        # Without S3, filesystem is the primary store, not an outage fallback.
+        # Each replica then writes to its own disk unless that path is shared.
+        if s3_candidates:
+            LOG.warning(
+                "S3 artifact store is declared but could not be configured (unresolved "
+                "endpoint or startup failure); using the filesystem as the primary store. "
+                "Replicas on different hosts need a shared mount at this path."
+            )
+        else:
+            LOG.warning(
+                "no S3 artifact store is configured; using the filesystem as the primary "
+                "store. Replicas on different hosts need a shared mount at this path."
+            )
     return primary or fallback
 
 

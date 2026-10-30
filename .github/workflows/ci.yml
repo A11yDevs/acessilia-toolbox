@@ -21,6 +21,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  core-storage-outage:
+    name: Core extraction during artifact storage outage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: A11yDevs/acessilia
+          # Core implementation reviewed in acessilia#309. Separate environments
+          # preserve the projects' different httpx dependency requirements.
+          ref: d8751d03c5e8eaf55080463a4311893536a3f7f8
+          path: .core-source
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Install isolated project environments
+        run: |
+          python -m venv .toolbox-venv
+          .toolbox-venv/bin/python -m pip install ".[api,storage,cache]" pytest
+          python -m venv .core-venv
+          .core-venv/bin/python -m pip install ./.core-source/libs/docstruct ./.core-source/libs/sdk
+          .core-venv/bin/python -m pip install ./.core-source
+      - name: Test Core, SDK and Toolbox over HTTP
+        env:
+          ACESSILIA_CORE_PYTHON: ${{ github.workspace }}/.core-venv/bin/python
+          ACESSILIA_CORE_ROOT: ${{ github.workspace }}/.core-source
+        run: >-
+          .toolbox-venv/bin/python -m pytest tests/cross_project/test_core_storage_outage.py
+          -v --junitxml=core-storage-outage-results.xml
+
+      # The test skips without ACESSILIA_CORE_PYTHON; a skip must fail the job.
+      - name: Reject unexpected skipped tests
+        run: python scripts/check_no_skipped_tests.py core-storage-outage-results.xml
+
   # During BHS a release branch only takes bug fixes (CONTRIBUTING.md, 5.1);
   # features, improvements and refactorings keep going to develop.
   release-scope:
@@ -93,22 +131,10 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/unit/ -v --junitxml=test-results.xml
 
-      - name: Reject unexpected skipped tests
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          from xml.etree import ElementTree
+      - name: Test artifact failover and replica replacement
+        run: >-
+          python -m pytest tests/integration/test_artifact_failover.py
+          tests/statelessness/ -v --junitxml=artifact-test-results.xml
 
-          report = Path("test-results.xml")
-          root = ElementTree.parse(report).getroot()
-          skipped = sum(
-              int(suite.attrib.get("skipped", "0"))
-              for suite in root.iter("testsuite")
-          )
-          if skipped:
-              raise SystemExit(
-                  f"CI incompleto: {skipped} teste(s) foram pulado(s). "
-                  "Consulte os motivos exibidos pelo pytest."
-              )
-          print("Relatorio JUnit validado: nenhum teste foi pulado.")
-          PY
+      - name: Reject unexpected skipped tests
+        run: python scripts/check_no_skipped_tests.py test-results.xml artifact-test-results.xml

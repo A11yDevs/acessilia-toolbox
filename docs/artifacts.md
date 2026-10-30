@@ -60,10 +60,17 @@ artifact.presign
 The same contract could later be implemented by S3, Ceph, or local
 filesystem storage.
 
-If MinIO is unavailable during a write, the Toolbox stores the artifact
-on the filesystem. Reads check both stores. If MinIO is unavailable and
-the artifact is absent from the filesystem, report provider unavailability.
-Artifacts stored on the filesystem are not copied back to MinIO automatically.
+If MinIO is unavailable during a write, `TOOLBOX_ARTIFACT_FALLBACK_MODE`
+decides what happens. With the default `disabled`, the write fails with
+provider unavailability (HTTP 503) instead of creating an object on one
+replica's private disk; inline-only results are still returned, without a
+persisted location. `local` (single instance) and `shared` (a filesystem
+mounted on every replica) store the artifact on the filesystem instead. Reads
+check both stores in every mode. If MinIO is unavailable and the artifact is
+absent from the filesystem, report provider unavailability. Artifacts stored
+on the filesystem are not copied back to MinIO automatically. Without a
+configured MinIO, the filesystem is the primary store in every mode. See
+[installation](installation.md#artifact-fallback-and-multiple-replicas).
 
 The S3 client uses a 3-second connection timeout, a 5-second read timeout,
 and one attempt per operation, so an unresponsive primary can yield to the

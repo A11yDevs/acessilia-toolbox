@@ -247,21 +247,26 @@ def test_cache_hit_reuses_the_stored_pdf_without_rendering(tmp_path: Path) -> No
     assert "%PDF" not in json.dumps(next(iter(cache.data.values())))
 
 
-def test_cache_hit_with_a_deleted_pdf_renders_again(tmp_path: Path) -> None:
+@pytest.mark.parametrize("artifact_index", [0, 1], ids=["json", "pdf"])
+def test_cache_hit_with_a_deleted_artifact_renders_again(
+    tmp_path: Path, artifact_index: int
+) -> None:
     handler, calls = sidecar()
     store = FilesystemArtifactStore(tmp_path)
     executor = executor_with(provider_with(handler), store=store, cache=MemoryCache())
 
     first = export(executor)
-    for stored in tmp_path.rglob("*"):
-        if stored.is_file():
-            stored.unlink()
+    store._path(first.artifacts[artifact_index].artifact_id).unlink()
     second = export(executor)
 
     assert not second.provenance.cache_hit
     assert sum(call.url.path == "/render" for call in calls) == 2
     assert store.get(second.document["artifact_id"]) == PDF_BYTES
     assert second.document["artifact_id"] == first.document["artifact_id"]
+    for artifact in second.artifacts:
+        payload, ref = executor.retrieve_artifact(artifact.artifact_id)
+        assert fingerprint_bytes(payload) == ref.artifact_id
+    assert export(executor).provenance.cache_hit
 
 
 def test_binary_outputs_require_an_artifact_store_before_rendering() -> None:
