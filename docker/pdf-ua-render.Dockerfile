@@ -92,9 +92,10 @@ WORKDIR /app
 # degrade every formula of a document to literal text. The PDF command mirrors
 # the one /render runs in server.py, so a change to either shows up here.
 # smoke_check.py checks that each expected alt is on a Formula element,
-# including formulas in a table header and data cell, and that the math font
+# including formulas in a table header and data cell, that the math font
 # is embedded with \neq as U+2260 and math letters as base letters in the
-# text layer.
+# text layer, and (for the default smoke) that its lists are tagged with
+# PDF 1.7 ListNumbering values.
 COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json \
     docker/pdf-ua-render/table-smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
 RUN luaotfload-tool --update && \

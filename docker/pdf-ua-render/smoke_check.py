@@ -174,7 +174,14 @@ def math_italic_letters(texts: set[str]) -> set[str]:
 
 
 def list_numbering_values(pdf: bytes) -> list[str]:
-    """Every /ListNumbering value of the file, in its objects or its Flate streams."""
+    """Every /ListNumbering value of the file, in its objects or its Flate streams.
+
+    Only direct name operands (``/ListNumbering/Decimal``) are read. An indirect
+    reference (``/ListNumbering 12 0 R``) or a stream this check cannot inflate
+    (for example a Flate stream with a predictor) is not seen; the
+    ``--require-lists`` check still fails the build when the attribute is
+    missing entirely.
+    """
     blobs = [pdf]
     for stream in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", pdf, re.S):
         with suppress(zlib.error):
@@ -184,6 +191,22 @@ def list_numbering_values(pdf: bytes) -> list[str]:
         for blob in blobs
         for value in re.findall(rb"/ListNumbering\s*/([A-Za-z]+)", blob)
     ]
+
+
+def list_numbering_errors(numbering: list[str], *, require_lists: bool) -> list[str]:
+    """PDF/UA-1 list-numbering errors; empty when every value is valid.
+
+    ``numbering`` is the output of :func:`list_numbering_values`. With
+    ``require_lists`` (the default smoke) finding no numbering at all is also an
+    error: latex-lab stopped tagging the list, so the check would otherwise pass
+    on a file that no longer exercises the rule.
+    """
+    errors = []
+    if invalid := sorted(set(numbering) - PDF17_LIST_NUMBERING):
+        errors.append(f"ListNumbering values outside PDF 1.7 (PDF/UA-1): {invalid}")
+    if require_lists and not numbering:
+        errors.append("no ListNumbering in a smoke that has lists: latex-lab stopped tagging them")
+    return errors
 
 
 REQUIRE_DOUBLE_STRUCK = "--require-double-struck"
@@ -212,9 +235,9 @@ if __name__ == "__main__":
         sys.exit(f"math letters reach the text layer as symbols: {sorted(italic)}")
     if require_double_struck and DOUBLE_STRUCK_R not in layer:
         sys.exit("\\mathbb{R} lost U+211D in the text layer")
-    numbering = list_numbering_values(pdf)
-    if invalid := sorted(set(numbering) - PDF17_LIST_NUMBERING):
-        sys.exit(f"ListNumbering values outside PDF 1.7 (PDF/UA-1): {invalid}")
-    if require_lists and not numbering:
-        sys.exit("no ListNumbering in a smoke that has lists: latex-lab stopped tagging them")
+    errors = list_numbering_errors(
+        list_numbering_values(pdf), require_lists=require_lists
+    )
+    if errors:
+        sys.exit("\n".join(errors))
     print("smoke: formula alternate text present, math text layer has U+2260 and base letters")

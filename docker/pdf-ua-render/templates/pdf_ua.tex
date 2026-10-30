@@ -185,6 +185,10 @@
 \hyphenpenalty=10000
 \exhyphenpenalty=10000
 \raggedright
+% A single token wider than the line (a long URL or chemical name) has no
+% break point and overflows the margin; the text layer still extracts it as
+% one word. Hyphenating only those words would put the hyphen back in the
+% text layer, so this stays a visual limitation of the no-hyphenation rule.
 
 \usepackage{hyperref}
 \usepackage{bookmark}

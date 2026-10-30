@@ -633,3 +633,27 @@ def test_smoke_check_reads_list_numbering_in_objects_and_streams() -> None:
 
     assert sorted(module.list_numbering_values(pdf)) == ["Decimal", "Ordered"]
     assert set(module.list_numbering_values(pdf)) - module.PDF17_LIST_NUMBERING == {"Ordered"}
+
+
+def test_smoke_check_rejects_pdf20_list_numbering() -> None:
+    """The guard has to fail on latex-lab's Ordered/Unordered, not only read them."""
+    module = _smoke_check()
+
+    assert module.list_numbering_errors(["Decimal", "Ordered"], require_lists=False) == [
+        "ListNumbering values outside PDF 1.7 (PDF/UA-1): ['Ordered']"
+    ]
+    assert module.list_numbering_errors(["Disc", "Unordered"], require_lists=False) == [
+        "ListNumbering values outside PDF 1.7 (PDF/UA-1): ['Unordered']"
+    ]
+    assert module.list_numbering_errors(["Decimal", "Disc"], require_lists=False) == []
+
+
+def test_smoke_check_requires_lists_when_asked() -> None:
+    """--require-lists must fail a smoke whose list tagging disappeared."""
+    module = _smoke_check()
+
+    assert module.list_numbering_errors([], require_lists=True) == [
+        "no ListNumbering in a smoke that has lists: latex-lab stopped tagging them"
+    ]
+    assert module.list_numbering_errors([], require_lists=False) == []
+    assert module.list_numbering_errors(["Decimal", "Disc"], require_lists=True) == []
