@@ -423,8 +423,31 @@ ceiling. This preserves the existing deployment behavior while making a
 measured limit configurable without editing Compose. It is **not** host
 memory protection. MinerU's CPU models, the Toolbox, Docling and other
 sidecars compete for the same host RAM; a CPU backend does not eliminate
-memory pressure. The limit does not bound GPU VRAM, and swap follows the
-host/Docker defaults.
+memory pressure. The limit does not bound GPU VRAM.
+
+`mem_limit` bounds RAM, not combined RAM and swap. These Compose files leave
+`memswap_limit` unset: with a positive RAM limit, Docker permits up to that
+much additional swap if the host has swap configured. For example, `12g`
+allows up to 12 GiB RAM plus 12 GiB swap (24 GiB combined), subject to host
+availability and kernel support. Include swap capacity and its performance
+cost when sizing the deployment. See [Docker's memory-swap semantics](https://docs.docker.com/engine/containers/resource_constraints/#--memory-swap-details).
+
+To disable container swap for a **measured positive** RAM budget, set
+`memswap_limit` equal to `mem_limit` in a deployment-specific Compose
+override. For the measured `MINERU_MEMORY_LIMIT=12g` example:
+
+```yaml
+# docker-compose.memory.yml; use with either base Compose file.
+services:
+  mineru-serve:
+    memswap_limit: 12g
+```
+
+Pass both files to **every** Compose configuration/application command,
+e.g. `docker compose -f docker-compose.staging.yml -f docker-compose.memory.yml config`.
+Keep the positive RAM limit and this combined RAM+swap limit equal when
+changing the budget. `memswap_limit: 0` is treated as unset; it does not
+disable swap. No swap restriction is imposed by default.
 
 No fixed safe limit can be inferred from `MAX_PAGES` alone: page resolution,
 images, models and overlapping requests also affect peaks. There are no host
@@ -441,11 +464,11 @@ configuration before recreating the service:
 
 ```bash
 docker compose -f docker-compose.staging.yml config --format json |
-  python3 -c 'import json, sys; s = json.load(sys.stdin)["services"]["mineru-serve"]; print({k: s.get(k) for k in ("restart", "mem_limit")})'
+  python3 -c 'import json, sys; s = json.load(sys.stdin)["services"]["mineru-serve"]; print({k: s.get(k) for k in ("restart", "mem_limit", "memswap_limit")})'
 # Apply only during the deployment's maintenance window:
 docker compose -f docker-compose.staging.yml up -d --no-deps mineru-serve
 container=$(docker compose -f docker-compose.staging.yml ps -a -q mineru-serve)
-docker inspect --format 'restart={{.HostConfig.RestartPolicy.Name}} memory_bytes={{.HostConfig.Memory}}' "$container"
+docker inspect --format 'restart={{.HostConfig.RestartPolicy.Name}} memory_bytes={{.HostConfig.Memory}} memory_swap_bytes={{.HostConfig.MemorySwap}}' "$container"
 docker stats --no-stream "$container"
 ```
 
