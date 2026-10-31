@@ -63,6 +63,7 @@ services:
 
   # ── Providers ──────────────────────────────────────────────────
   docling-serve:
+    restart: unless-stopped
     image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.32.0}
     container_name: docling-serve
     ports:
@@ -177,6 +178,7 @@ services:
   # pre-built images). On a GPU host, build with the vllm base and add
   # `deploy.resources.reservations.devices` for GPU access.
   mineru-serve:
+    restart: unless-stopped
     image: ${MINERU_SERVE_IMAGE:-mineru:latest}
     container_name: mineru-serve
     entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]

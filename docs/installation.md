@@ -377,6 +377,72 @@ the initial download. The `/openapi.json` health check verifies that the API is
 running, not that models are loaded. Verify readiness with an extraction after
 provisioning the cache; cold starts may exceed request timeouts.
 
+### Recovering an extraction provider
+
+Both Compose files give `docling-serve` and `mineru-serve` the
+`restart: unless-stopped` policy. An exited process (including one killed by
+an out-of-memory condition) is restarted by Docker. A manually stopped
+container stays stopped. Existing healthchecks and named model-cache volumes
+are retained; do not use `down -v` to recover a provider.
+
+Apply the updated service definitions on the deployment host:
+
+```bash
+docker compose -f docker-compose.staging.yml up -d --no-deps docling-serve mineru-serve
+docker compose -f docker-compose.staging.yml ps docling-serve mineru-serve
+docker compose -f docker-compose.staging.yml logs --tail 100 mineru-serve
+```
+
+Use `docker-compose.yml` for the local stack. Docker restart policies act on
+process exit, **not** an `unhealthy` status: a live but hung API still needs
+operator diagnosis. MinerU's `/openapi.json` check only proves that its API
+answers; it does not run an extraction or load every model.
+
+If the process exits repeatedly, inspect its restart count, OOM status and
+networks before restarting it manually:
+
+```bash
+container=$(docker compose -f docker-compose.staging.yml ps -a -q mineru-serve)
+docker inspect --format '{{.State.OOMKilled}} {{.RestartCount}} {{json .NetworkSettings.Networks}}' "$container"
+```
+
+Check host memory pressure and container logs. Confirm that the Toolbox and
+MinerU share a Compose network and that `MINERU_SERVE_URL` uses its service
+name (`http://mineru-serve:8000`). Do not infer OOM solely from a DNS error.
+Set memory budgets from measured peak use and host capacity; an arbitrary
+small limit can cause a restart loop. On the **core**, confirm the effective
+`MAX_PAGES` for the deployment (default 50), rather than assuming the example
+environment file was applied. The core checks verified PDF counts before
+heavy extraction and checks the manifest count afterwards.
+
+After recovery, verify all the readiness layers, not just the container:
+
+```bash
+curl --fail --silent --show-error "$CORE_BASE_URL/ready"
+for provider in docling mineru mineru-layout mineru-ocr; do
+  curl --fail --silent --show-error \
+    -H "Authorization: Bearer $TOOLBOX_API_KEY" \
+    "$TOOLBOX_BASE_URL/providers/$provider/health" |
+    python3 -c 'import json, sys; result = json.load(sys.stdin); print(result); sys.exit(0 if result.get("healthy") is True else 1)' || exit 1
+done
+```
+
+`CORE_BASE_URL` includes `/api/v1`; `TOOLBOX_BASE_URL` includes `/v1` (or
+`/toolbox/v1` behind the staging proxy). The expected core result is HTTP 200
+with `{"status":"ready"}`. Monitor that route for non-200 responses and each
+provider's `healthy` value for `false`, with credentials stored in the monitor
+rather than in logs. A core `/health` response with `model_reachable: true`
+alone does not establish extraction readiness.
+
+Finally, submit a small known document twice through the core. Confirm
+successful dual extraction on the first request and a cache hit on the
+second using the core's cache-hit log/stage, not elapsed time alone. Exports
+may still run on a cache hit. Degraded extraction remains deliberately
+non-cacheable: recovery must restore the provider rather than cache a
+partial result. Cancelling a core job does not cancel in-flight remote
+extraction; restart policy does not change that contract. Remote cancellation
+and automated alert delivery require separate work.
+
 The `pdf-ua-render` build renders a smoke-test PDF and DOCX, the
 `verapdf-validate` build validates a smoke-test PDF, and the `math-speech`
 build converts, speaks and brailles test formulas, so a broken toolchain
