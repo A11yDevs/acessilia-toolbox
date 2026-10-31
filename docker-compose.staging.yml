@@ -87,6 +87,8 @@ services:
   # MINERU_SERVE_IMAGE and add `deploy.resources.reservations.devices`.
   mineru-serve:
     restart: unless-stopped
+    # Size from measured peak use; 0 keeps the existing uncapped behavior.
+    mem_limit: ${MINERU_MEMORY_LIMIT:-0}
     image: ${MINERU_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-mineru:${TRACK_TAG:-develop}}
     container_name: mineru-serve-staging
     entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
