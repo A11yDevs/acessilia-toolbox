@@ -415,6 +415,126 @@ small limit can cause a restart loop. On the **core**, confirm the effective
 environment file was applied. The core checks verified PDF counts before
 heavy extraction and checks the manifest count afterwards.
 
+#### MinerU memory budget
+
+Both Compose files accept `MINERU_MEMORY_LIMIT` as Docker's `mem_limit`
+(a byte value such as `12g`). The default is `0`: no container-specific RAM
+ceiling. This preserves the existing deployment behavior while making a
+measured limit configurable without editing Compose. It is **not** host
+memory protection. MinerU's CPU models, the Toolbox, Docling and other
+sidecars compete for the same host RAM; a CPU backend does not eliminate
+memory pressure. The limit does not bound GPU VRAM.
+
+`mem_limit` bounds RAM, not combined RAM and swap. These Compose files leave
+`memswap_limit` unset: with a positive RAM limit, Docker permits up to that
+much additional swap if the host has swap configured. For example, `12g`
+allows up to 12 GiB RAM plus 12 GiB swap (24 GiB combined), subject to host
+availability and kernel support. Include swap capacity and its performance
+cost when sizing the deployment. See [Docker's memory-swap semantics](https://docs.docker.com/engine/containers/resource_constraints/#--memory-swap-details).
+
+To disable container swap for a **measured positive** RAM budget, set
+`memswap_limit` equal to `mem_limit` in a deployment-specific Compose
+override. For the measured `MINERU_MEMORY_LIMIT=12g` example:
+
+```yaml
+# docker-compose.memory.yml; use with either base Compose file.
+services:
+  mineru-serve:
+    memswap_limit: 12g
+```
+
+Pass both files to **every** Compose configuration/application command,
+e.g. `docker compose -f docker-compose.staging.yml -f docker-compose.memory.yml config`.
+Keep the positive RAM limit and this combined RAM+swap limit equal when
+changing the budget. `memswap_limit: 0` is treated as unset; it does not
+disable swap. No swap restriction is imposed by default.
+
+No fixed safe limit can be inferred from `MAX_PAGES` alone: page resolution,
+images, models and overlapping requests also affect peaks. There are no host
+OOM logs or measured peaks attached to issue #128 yet. Choosing a universal
+cap now could turn accepted documents into repeated OOM/restart failures.
+Before production use, measure a representative largest accepted document
+at the intended concurrency, reserve memory for the rest of the stack and
+the OS, and set a limit above the measured peak with headroom. If that does
+not fit, reduce accepted workload/concurrency or provision more RAM.
+
+For example, **only if measurements justify 12 GiB**, set
+`MINERU_MEMORY_LIMIT=12g` in the deployment `.env`. Inspect the effective
+configuration before recreating the service:
+
+```bash
+docker compose -f docker-compose.staging.yml config --format json |
+  python3 -c 'import json, sys; s = json.load(sys.stdin)["services"]["mineru-serve"]; print({k: s.get(k) for k in ("restart", "mem_limit", "memswap_limit")})'
+# Apply only during the deployment's maintenance window:
+docker compose -f docker-compose.staging.yml up -d --no-deps mineru-serve
+container=$(docker compose -f docker-compose.staging.yml ps -a -q mineru-serve)
+docker inspect --format 'restart={{.HostConfig.RestartPolicy.Name}} memory_bytes={{.HostConfig.Memory}} memory_swap_bytes={{.HostConfig.MemorySwap}}' "$container"
+docker stats --no-stream "$container"
+```
+
+The Toolbox's `TOOLBOX_MAX_CONCURRENT_EXECUTIONS` is an admission limit per
+API process (default `4`), not a global MinerU concurrency limit across API
+replicas or direct sidecar callers. Size it along with every client's
+concurrency; start measurements with one extraction at a time. Request
+cancellation can leave remote extraction running, so a client timeout is not
+proof that MinerU capacity has been released. Core page preflight, dual-mode
+policy and user-visible degradation are tracked in Acessilia #349.
+
+#### Incident evidence and recovery validation (#128)
+
+The 2026-10-30 DNS failures affecting `mineru`, `mineru-layout` and
+`mineru-ocr` do not establish OOM. All three use the same sidecar. As of this
+change, **the host cause remains unconfirmed**: historical `OOMKilled`,
+kernel records and container events have not been collected. The restart
+policy was added in PR #127. This change adds memory configuration and the
+following operator checks; it does not claim a staging deployment or a
+successful crash-recovery drill.
+
+Before recreating a container (which can discard evidence), collect the
+following on the homologation host. The incident dates below are UTC:
+
+```bash
+container=$(docker compose -f docker-compose.staging.yml ps -a -q mineru-serve)
+# An empty ID is evidence that this Compose project has no such container.
+if [ -n "$container" ]; then
+  docker inspect --format 'id={{.Id}} state={{json .State}} restarts={{.RestartCount}} memory_bytes={{.HostConfig.Memory}} networks={{json .NetworkSettings.Networks}}' "$container"
+  docker logs --timestamps --since 2026-10-30T21:15:00Z --until 2026-10-30T22:00:00Z "$container"
+fi
+docker events --since 2026-10-30T21:15:00Z --until 2026-10-30T22:00:00Z \
+  --filter type=container --format '{{json .}}'
+journalctl -k --utc --since '2026-10-30 21:15:00 UTC' \
+  --until '2026-10-30 22:00:00 UTC' --no-pager
+```
+
+Filter the event output for the MinerU container name/ID, including older
+IDs if it was recreated. Record the ID, `oom`/`die`/`destroy`/network events,
+exit code, relevant kernel OOM messages and any permission/retention gaps
+in issue #128. Docker only retains a limited event history; an empty result
+or a currently false `OOMKilled` value cannot rule out an earlier OOM.
+If kernel journal access is unavailable, ask the host operator for the
+corresponding `dmesg`/journal excerpt. Review logs for sensitive document
+content before attaching excerpts.
+
+For a recovery drill, use an isolated stack or an approved maintenance
+window with no in-flight work. Verify the restart policy and let the
+container run at least 10 seconds first. Request application termination from
+inside the container, then observe a higher restart count and recovery:
+
+```bash
+container=$(docker compose -f docker-compose.staging.yml ps -a -q mineru-serve)
+docker inspect --format '{{.HostConfig.RestartPolicy.Name}} {{.RestartCount}} {{.State.StartedAt}}' "$container"
+docker exec --user 0 "$container" python3 -c 'import os, signal; os.kill(1, signal.SIGTERM)'
+# Repeat until running, allowing time for startup/model loading:
+docker inspect --format '{{.RestartCount}} {{json .State}}' "$container"
+```
+
+Use an application process exit for this drill rather than `docker stop` or
+`docker kill`: Docker API manual stops suppress restart policies. See
+[Docker restart policy details](https://docs.docker.com/engine/containers/start-containers-automatically/).
+Do not perform this against busy homologation to test a code-only PR.
+After the process returns, check **all three** MinerU health endpoints below
+and perform a small extraction: API liveness alone is insufficient.
+
 After recovery, verify all the readiness layers, not just the container:
 
 ```bash
