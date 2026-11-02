@@ -5,7 +5,7 @@ from __future__ import annotations
 import fitz
 import pytest
 
-from acessilia_toolbox.core.errors import ProviderExecutionError
+from acessilia_toolbox.core.errors import InvalidInputError
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
 from acessilia_toolbox.providers.pymupdf_pdf import PyMuPDFProvider
@@ -91,22 +91,12 @@ class TestPyMuPDFProvider:
         )
         assert result.document["page_count"] == 2
 
-    def test_split_empty_pdf_returns_no_pages(self) -> None:
-        # PyMuPDF cannot save a zero-page document, so we test with a
-        # 1-page PDF and max_pages=0 to simulate empty result.
-        one_page = fitz.open()
-        one_page.new_page()
-        one_page_bytes = one_page.tobytes(garbage=4, deflate=True)
-        one_page.close()
-        adapter = PyMuPDFProvider(descriptor())
-        result = adapter.execute(
-            "pdf.split",
-            one_page_bytes,
-            filename="single.pdf",
-            media_type="application/pdf",
-            parameters={"max_pages": 0},
-        )
-        assert result.document["page_count"] == 0
+    def test_split_zero_limit_is_rejected(self) -> None:
+        with pytest.raises(InvalidInputError):
+            PyMuPDFProvider(descriptor()).execute(
+                "pdf.split", _sample_pdf(), filename="sample.pdf",
+                media_type="application/pdf", parameters={"max_pages": 0},
+            )
 
     # ── pdf.render ─────────────────────────────────────────────
 
@@ -133,7 +123,7 @@ class TestPyMuPDFProvider:
 
     def test_render_out_of_range_raises_error(self) -> None:
         adapter = PyMuPDFProvider(descriptor())
-        with pytest.raises(ProviderExecutionError):
+        with pytest.raises(InvalidInputError):
             adapter.execute(
                 "pdf.render",
                 _sample_pdf(),

@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:mhchem:1.0.0",
+  "title": "Chemical Expression",
+  "description": "A chemical formula or reaction in normalized mhchem form, with structured terms and a textual rendering.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "latex"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["formula", "reaction"],
+      "description": "Whether the expression is a single formula or a full reaction."
+    },
+    "latex": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The mhchem expression body (contents of \\ce{...})."
+    },
+    "formula": {
+      "type": "string",
+      "description": "Chemical formula, when kind is formula."
+    },
+    "coefficient": {
+      "type": "string",
+      "description": "Stoichiometric coefficient, when present."
+    },
+    "charge": {
+      "type": "string",
+      "description": "Ionic charge (e.g. 2+, -), when present."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["s", "l", "g", "aq"],
+      "description": "State of matter, when annotated."
+    },
+    "text": {
+      "type": "string",
+      "description": "Human-readable pt-BR rendering for verbalization."
+    },
+    "reactants": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/term" },
+      "description": "Left-hand side terms, when kind is reaction."
+    },
+    "products": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/term" },
+      "description": "Right-hand side terms, when kind is reaction."
+    },
+    "arrow": {
+      "type": "string",
+      "description": "Reaction arrow in mhchem syntax (->, <=>, <-)."
+    },
+    "conditions": {
+      "type": ["string", "null"],
+      "description": "Reaction conditions annotated above the arrow."
+    }
+  },
+  "definitions": {
+    "term": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formula"],
+      "properties": {
+        "coefficient": { "type": ["string", "null"] },
+        "formula": { "type": "string", "minLength": 1 },
+        "charge": { "type": ["string", "null"] },
+        "state": { "type": ["string", "null"], "enum": ["s", "l", "g", "aq", null] }
+      }
+    }
+  }
+}

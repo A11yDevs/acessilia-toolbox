@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from acessilia_toolbox.core.errors import CapabilityNotFoundError, ConfigurationError
 
-CAPABILITY_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$")
+CAPABILITY_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
 PREDICATE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -27,6 +27,9 @@ class CapabilityIO(StrictModel):
     # Aliased because `schema` shadows a BaseModel attribute in Pydantic.
     schema_ref: str = Field(alias="schema", min_length=1)
     media_types: list[str] = Field(default_factory=list)
+    # Output only: the result is a binary stored in the artifact store and
+    # returned by reference, so executing requires a configured store.
+    by_reference: bool = False
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -127,7 +130,22 @@ class CapabilityRegistry:
         return max(candidates, key=lambda manifest: manifest.version)
 
     def manifests(self) -> list[CapabilityManifest]:
+        """Every registered version of every capability (the published catalogue)."""
         return sorted(self._by_key.values(), key=lambda m: (m.id, m.version))
+
+    def latest(self) -> list[CapabilityManifest]:
+        """The highest version of each capability.
+
+        Interfaces that name a capability without a version, such as MCP tools
+        and PDDL actions, expose this one; older versions stay executable by
+        explicit version while clients migrate.
+        """
+        latest: dict[str, CapabilityManifest] = {}
+        for manifest in self._by_key.values():
+            current = latest.get(manifest.id)
+            if current is None or manifest.version > current.version:
+                latest[manifest.id] = manifest
+        return sorted(latest.values(), key=lambda m: m.id)
 
     def ids(self) -> list[str]:
         return sorted({manifest.id for manifest in self._by_key.values()})

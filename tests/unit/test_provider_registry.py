@@ -98,6 +98,45 @@ def test_expand_env_preserves_placeholders_for_unset_variables(
     assert expand_env({"a": ["${TOOLBOX_ABSENT}"]}) == {"a": ["${TOOLBOX_ABSENT}"]}
 
 
+def test_expand_env_uses_the_inline_default_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`${VAR:-default}` keeps a provider usable without a deployment override."""
+    monkeypatch.delenv("RAPIDOCR_ORIENT_URL", raising=False)
+    assert (
+        expand_env("${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}")
+        == "http://rapidocr-orient:5006"
+    )
+
+
+def test_expand_env_uses_the_inline_default_when_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `KEY=` line left in an env file keeps the default, as in the shell."""
+    monkeypatch.setenv("VLM_TIMEOUT_SECONDS", "")
+    assert expand_env("${VLM_TIMEOUT_SECONDS:-600}") == "600"
+    assert expand_env("${VLM_TIMEOUT_SECONDS}") == ""
+
+
+def test_expand_env_prefers_the_environment_over_the_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("RAPIDOCR_ORIENT_URL", "http://localhost:5006")
+    assert (
+        expand_env("${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}")
+        == "http://localhost:5006"
+    )
+
+
+def test_shipped_provider_config_has_no_unresolved_default_placeholders() -> None:
+    """A literal `${VAR:-default}` would reach httpx and raise UnsupportedProtocol."""
+    registry = ProviderRegistry.from_file(PROJECT_ROOT / "providers-config.yaml")
+    for descriptor in registry.descriptors():
+        endpoint = descriptor.endpoint
+        if endpoint is not None:
+            assert ":-" not in endpoint, descriptor.id
+
+
 def test_from_mapping_requires_a_providers_list() -> None:
     with pytest.raises(ConfigurationError):
         ProviderRegistry.from_mapping({"provider": []})
@@ -115,3 +154,27 @@ def test_shipped_provider_topology_loads(monkeypatch: pytest.MonkeyPatch) -> Non
     docling = registry.get("docling")
     assert docling.endpoint == "http://localhost:5001"
     assert docling.implements("document.structure.extract")
+
+
+def test_shipped_config_declares_each_storage_backend_once() -> None:
+    """Artifact storage is resolved by transport, not by provider id.
+
+    ``_store_from`` picks the S3 descriptor as primary and any other transport as
+    the failover, so a second S3 descriptor adds nothing but a duplicate entry in
+    ``GET /providers``. A vestigial ``artifact-store`` descriptor once did exactly
+    that, and it also made ``artifact.store`` look ambiguous.
+    """
+    registry = ProviderRegistry.from_file(PROJECT_ROOT / "providers-config.yaml")
+
+    storage = [
+        descriptor
+        for descriptor in registry.descriptors()
+        if descriptor.implements("artifact.store")
+    ]
+    transports = [descriptor.transport for descriptor in storage]
+
+    assert len(transports) == len(set(transports)), (
+        f"duplicate storage transports in providers-config.yaml: {transports}"
+    )
+    assert "s3" in transports, "the S3 artifact store must stay configured"
+    assert "in_process" in transports, "the filesystem failover must stay configured"

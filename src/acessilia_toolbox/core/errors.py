@@ -56,6 +56,11 @@ class InvalidInputError(ToolboxError):
     http_status = 400
 
 
+class UploadTooLargeError(InvalidInputError):
+    code = "upload_too_large"
+    http_status = 413
+
+
 class UnsupportedMediaTypeError(ToolboxError):
     code = "unsupported_media_type"
     http_status = 415
@@ -64,6 +69,13 @@ class UnsupportedMediaTypeError(ToolboxError):
 class ArtifactNotFoundError(ToolboxError):
     code = "artifact_not_found"
     http_status = 404
+
+
+class AuthorizationError(ToolboxError):
+    """The request lacks valid authentication credentials."""
+
+    code = "authorization_failed"
+    http_status = 401
 
 
 class ProviderUnavailableError(ToolboxError):
@@ -80,4 +92,32 @@ class ProviderExecutionError(ToolboxError):
     """The provider was reached and refused or failed the work."""
 
     code = "provider_execution_failed"
+    http_status = 502
+
+
+class DatasetNotFoundError(ToolboxError):
+    """The requested dataset does not exist."""
+
+    code = "dataset_not_found"
+    http_status = 404
+
+
+class SplitNotFoundError(ToolboxError):
+    """The requested split does not exist in the dataset."""
+
+    code = "split_not_found"
+    http_status = 404
+
+
+class ItemNotFoundError(ToolboxError):
+    """The requested item does not exist in the split."""
+
+    code = "item_not_found"
+    http_status = 404
+
+
+class DatasetProviderError(ToolboxError):
+    """The dataset provider failed to fulfil the request."""
+
+    code = "dataset_provider_error"
     http_status = 502

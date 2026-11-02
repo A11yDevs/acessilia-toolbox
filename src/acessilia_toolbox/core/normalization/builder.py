@@ -1,7 +1,13 @@
 """Builds the canonical structured document from a provider extraction.
 
-Obligation rationales and observation messages are in English by default and
-internationalized via gettext (.po) files in the project locale directory.
+The document reports what was found (elements, pages) and observations about
+it; it does not decide how the document must be processed. Obligations,
+admissible methods and their costs are the agentic core's planning policy, so
+``obligations`` is always empty (the field stays in schema 1.1.0 for
+compatibility and is deprecated).
+
+Observation messages are in English by default and internationalized via
+gettext (.po) files in the project locale directory.
 """
 
 from __future__ import annotations
@@ -13,22 +19,19 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from docstruct.tables.ast import normalize_table_ast, rows_from_table_ast
+
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.normalization.models import (
     BoundingBox,
     ExtractorRun,
     ManifestElement,
     ManifestSummary,
-    Obligation,
     Observation,
     PageDescriptor,
     ProcessingManifest,
     Provenance,
     SourceDocument,
-)
-from acessilia_toolbox.core.normalization.table_ast import (
-    normalize_table_ast,
-    rows_from_table_ast,
 )
 
 LABEL_TO_TYPE = {
@@ -54,46 +57,29 @@ LABEL_TO_TYPE = {
     "form": "form",
 }
 
-# Rationale strings are manifest content; see the module docstring.
-OBLIGATION_BY_TYPE = {
+# Observation messages are manifest content; see the module docstring.
+#: Element types that need processing: (need kind, observation message).
+PROCESSING_NEED_BY_TYPE = {
     "picture": (
         "describe-image",
         "The image must receive a description or be marked as decorative.",
-        ["vision-description", "human-review"],
     ),
     "table": (
         "linearize-table",
         "The table must have headers and a verifiable reading order.",
-        ["docling-table", "pandoc-table", "human-review"],
     ),
     "formula": (
         "verbalize-formula",
         "The formula must have an accessible mathematical representation and verbalization.",
-        ["mathml", "latex-verbalizer", "human-review"],
     ),
     "code": (
         "preserve-code-semantics",
         "The code block must preserve indentation, language, and literal reading.",
-        ["pandoc-code", "human-review"],
     ),
     "unknown": (
         "review-structure",
         "The unclassified element requires structural inspection.",
-        ["docling-retry", "pymupdf-region", "human-review"],
     ),
-}
-
-DEFAULT_METHOD_COSTS = {
-    "vision-description": 20,
-    "docling-table": 10,
-    "pandoc-table": 15,
-    "mathml": 10,
-    "latex-verbalizer": 20,
-    "pandoc-code": 10,
-    "docling-retry": 25,
-    "pymupdf-region": 30,
-    "deterministic-heading-repair": 5,
-    "human-review": 100,
 }
 
 CALL_OUT_MIN_GROUP_SIZE = 3
@@ -138,7 +124,7 @@ def build_processing_manifest(
     elements = _build_elements(extraction.document, enable_callouts=enable_callouts)
     pages = _build_pages(extraction.document, elements)
     title = _infer_title(source_path, elements)
-    observations, obligations = _derive_processing_needs(elements)
+    observations = _derive_observations(elements)
     element_types = dict(sorted(Counter(e.type for e in elements).items()))
 
     source = SourceDocument(
@@ -170,12 +156,11 @@ def build_processing_manifest(
         pages=pages,
         elements=elements,
         observations=observations,
-        obligations=obligations,
         summary=ManifestSummary(
             page_count=len(pages),
             element_count=len(elements),
             observation_count=len(observations),
-            obligation_count=len(obligations),
+            obligation_count=0,
             element_types=element_types,
         ),
     )
@@ -196,11 +181,14 @@ def _build_elements(document: Any, *, enable_callouts: bool = True) -> list[Mani
         page_number = provenance[0].page_number if provenance else None
         hierarchy_level = _hierarchy_level(item, element_type, tree_level)
         metadata = _safe_metadata(item, element_type=element_type)
+        source_label = getattr(item, "raw_label", None)
         elements.append(
             ManifestElement(
                 id=f"element-{reading_order:06d}",
                 type=element_type,
-                raw_label=raw_label,
+                raw_label=(
+                    source_label if isinstance(source_label, str) and source_label else raw_label
+                ),
                 reading_order=reading_order,
                 hierarchy_level=hierarchy_level,
                 text=_item_text(item, element_type),
@@ -270,19 +258,28 @@ def _normalize_page_callouts(page_elements: list[ManifestElement]) -> None:
         return
 
     groups: list[list[ManifestElement]] = []
-    current_group: list[ManifestElement] = [candidates[0]]
-    for candidate in candidates[1:]:
-        if _is_same_callout_cluster(current_group[-1], candidate):
+    current_group: list[ManifestElement] = []
+    for candidate in candidates:
+        if (
+            current_group
+            and _is_same_callout_cluster(current_group[-1], candidate)
+            and (not _is_list_item(candidate) or _is_strong_callout_title(current_group[0]))
+        ):
             current_group.append(candidate)
-        else:
-            if len(current_group) >= CALL_OUT_MIN_GROUP_SIZE:
-                groups.append(current_group)
-            current_group = [candidate]
+            continue
+        if len(current_group) >= CALL_OUT_MIN_GROUP_SIZE:
+            groups.append(current_group)
+        # Lists are indented as a matter of course: an indented list is a list,
+        # so it neither starts a group nor joins one, unless a strong title
+        # already opened the box it sits in.
+        current_group = [] if _is_list_item(candidate) else [candidate]
     if len(current_group) >= CALL_OUT_MIN_GROUP_SIZE:
         groups.append(current_group)
 
     for group in groups:
         if any(element.metadata.get("callout_id") for element in group):
+            continue
+        if not _is_callout_title_candidate(group[0]):
             continue
         callout_id = f"callout-auto-{group[0].reading_order:06d}"
         _apply_callout_group(group[0], group, callout_id=callout_id)
@@ -399,6 +396,10 @@ def _element_bbox(element: ManifestElement) -> tuple[float, float, float, float]
     return (bbox.left, bbox.top, bbox.right, bbox.bottom)
 
 
+def _is_list_item(element: ManifestElement) -> bool:
+    return element.type == "list_item" or bool(element.metadata.get("enumerated"))
+
+
 def _is_callout_title_candidate(element: ManifestElement) -> bool:
     if element.type == "heading":
         return True
@@ -417,6 +418,18 @@ def _is_callout_title_candidate(element: ManifestElement) -> bool:
     return text.endswith(("?", ":"))
 
 
+def _is_strong_callout_title(element: ManifestElement) -> bool:
+    """A title that opens a box on its own, unlike an intro line ending in ':'."""
+    if element.type == "heading":
+        return True
+    if element.type != "paragraph":
+        return False
+    text = (element.text or "").strip()
+    if _is_known_callout_title(text):
+        return True
+    return len(text) <= 95 and _uppercase_ratio(text) >= 0.55
+
+
 def _uppercase_ratio(text: str) -> float:
     letters = [ch for ch in text if ch.isalpha()]
     if not letters:
@@ -432,21 +445,6 @@ def _normalize_text_key(text: str) -> str:
 
 def _is_known_callout_title(text: str) -> bool:
     return _normalize_text_key(text) in KNOWN_CALLOUT_TITLES
-
-
-def _is_known_callout_body_candidate(
-    element: ManifestElement,
-    main_left: float,
-    main_right: float,
-    indent_threshold: float,
-) -> bool:
-    bbox = _element_bbox(element)
-    if bbox is None:
-        return False
-    left, _top, right, _bottom = bbox
-    if left < main_left + indent_threshold:
-        return False
-    return right <= main_right + 10
 
 
 def _build_pages(document: Any, elements: list[ManifestElement]) -> list[PageDescriptor]:
@@ -482,42 +480,26 @@ def _build_pages(document: Any, elements: list[ManifestElement]) -> list[PageDes
     return pages
 
 
-def _derive_processing_needs(
-    elements: list[ManifestElement],
-) -> tuple[list[Observation], list[Obligation]]:
+def _derive_observations(elements: list[ManifestElement]) -> list[Observation]:
     observations: list[Observation] = []
-    obligations: list[Obligation] = []
 
     for element in elements:
-        spec = OBLIGATION_BY_TYPE.get(element.type)
+        spec = PROCESSING_NEED_BY_TYPE.get(element.type)
         if spec is None:
             continue
-        kind, rationale, methods = spec
+        kind, message = spec
         suffix = element.id.removeprefix("element-")
         observations.append(
             Observation(
                 id=f"observation-{kind}-{suffix}",
                 kind=f"{element.type}-requires-processing",
                 severity="warning" if element.type != "code" else "info",
-                message=rationale,
+                message=message,
                 target_ids=[element.id],
                 evidence={
                     "raw_label": element.raw_label,
                     "page_number": element.page_number,
                 },
-            )
-        )
-        obligations.append(
-            Obligation(
-                id=f"obligation-{kind}-{suffix}",
-                kind=kind,
-                target_ids=[element.id],
-                admissible_methods=methods,
-                method_costs={
-                    method: DEFAULT_METHOD_COSTS.get(method, 50)
-                    for method in methods
-                },
-                rationale=rationale,
             )
         )
 
@@ -530,37 +512,21 @@ def _derive_processing_needs(
     for element_id, level in heading_levels:
         if previous and level > previous + 1:
             suffix = element_id.removeprefix("element-")
-            message = (
-                f"Heading hierarchy skips from level {previous} to level "
-                f"{level}."
-            )
             observations.append(
                 Observation(
                     id=f"observation-heading-gap-{suffix}",
                     kind="heading-hierarchy-gap",
                     severity="error",
-                    message=message,
+                    message=(
+                        f"Heading hierarchy skips from level {previous} to level "
+                        f"{level}."
+                    ),
                     target_ids=[element_id],
                     evidence={"previous_level": previous, "current_level": level},
                 )
             )
-            obligations.append(
-                Obligation(
-                    id=f"obligation-repair-heading-{suffix}",
-                    kind="repair-heading-hierarchy",
-                    target_ids=[element_id],
-                    admissible_methods=["deterministic-heading-repair", "human-review"],
-                    method_costs={
-                        "deterministic-heading-repair": DEFAULT_METHOD_COSTS[
-                            "deterministic-heading-repair"
-                        ],
-                        "human-review": DEFAULT_METHOD_COSTS["human-review"],
-                    },
-                    rationale=message,
-                )
-            )
         previous = level
-    return observations, obligations
+    return observations
 
 
 def _item_label(item: Any) -> str:
@@ -674,6 +640,14 @@ def _confidence(item: Any) -> float | None:
 
 def _safe_metadata(item: Any, *, element_type: str | None = None) -> dict[str, Any]:
     metadata: dict[str, Any] = {"docling_class": item.__class__.__name__}
+    supplied = getattr(item, "normalization_metadata", None)
+    if isinstance(supplied, dict):
+        rotation = supplied.get("rotation_degrees")
+        if type(rotation) is int and rotation in {0, 90, 180, 270}:
+            metadata["rotation_degrees"] = rotation
+        confidence_available = supplied.get("confidence_available")
+        if isinstance(confidence_available, bool):
+            metadata["confidence_available"] = confidence_available
     content_layer = getattr(item, "content_layer", None)
     if content_layer is not None:
         metadata["content_layer"] = str(getattr(content_layer, "value", content_layer))

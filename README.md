@@ -17,8 +17,11 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 # 2. Start the extraction provider (Docker required)
+# The image caches models under /opt/app-root/src/.cache/docling/models, so the
+# volume is mounted there; /root/.cache/docling would stay empty.
 docker run -d --name docling-serve -p 5001:5001 \
-  -v docling-models:/root/.cache/docling \
+  -e DOCLING_SERVE_ARTIFACTS_PATH=/opt/app-root/src/.cache/docling/models \
+  -v docling-models:/opt/app-root/src/.cache/docling \
   ghcr.io/docling-project/docling-serve-cpu:v1.32.0
 
 # 3. Configure
@@ -117,28 +120,44 @@ docker compose up -d docling-serve minio valkey
 # Terminal 2: toolbox with hot-reload
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env
-# edit .env with credentials
-uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
+cp .env.example .env.local
+# Edit .env.local with real credentials (MINIO_ACCESS_KEY, MINIO_SECRET_KEY)
+# and override URLs for localhost:
+#   DOCLING_SERVE_URL=http://localhost:5001
+#   MINIO_URL=http://localhost:9000
+#   VALKEY_URL=redis://localhost:6379
+./scripts/run-local.sh
+```
+
+> The `run-local.sh` script loads `.env.local` automatically. If you prefer to run
+> `uvicorn` directly, ensure all env vars are exported first:
+> ```bash
+# export $(grep -v '^\s*#' .env.local | xargs)
+# uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
 ```
 
 ### Full Docker Compose (providers + toolbox)
 
 ```bash
 cp .env.docker .env
-docker compose up --build -d
+docker compose --profile toolbox up --build -d
 curl http://localhost:8002/v1/health
 ```
+
+> O serviço `toolbox` usa o profile `toolbox` para não subir junto com os providers.
+> Use `docker compose up -d docling-serve minio valkey` para rodar apenas os providers
+> (ideal para hot-reload com a toolbox rodando localmente via `uvicorn --reload`).
 
 📄 See [`docs/dev-workflow.md`](docs/dev-workflow.md) for detailed instructions.
 
 ### Auto-update (staging)
 
-The staging environment auto-updates via a systemd timer that checks for new
-images every 5 minutes:
+The staging server runs from a clone of this repository and auto-updates via a
+systemd timer that checks for new images every 5 minutes:
 
 ```bash
-./scripts/setup-homologacao.sh
+cp .env.example .env    # fill in the credentials
+./scripts/ops.sh auto-update setup
 ```
 
 📄 See [`docs/auto-update.md`](docs/auto-update.md) for setup and management.
@@ -172,11 +191,29 @@ flowchart TB
 
 ## What it can do today
 
-| Capability | Provider | Status |
+| Capability | Providers (ids from `providers-config.yaml`) | Status |
 |---|---|---|
-| `document.structure.extract` | docling-serve | ✅ |
-| `artifact.store` / `artifact.retrieve` | filesystem, MinIO (optional) | ✅ |
-| `cache.get` / `cache.put` | Valkey (optional) | ✅ |
+| `document.structure.extract` | docling, nougat, mineru (teleocr: opt-in) | ✅ |
+| `document.layout.analyze` | docling-layout, mineru-layout | ✅ |
+| `document.ocr` | docling-ocr, mineru-ocr | ✅ |
+| `pdf.split`, `pdf.render` (v1, v2), `document.text.spans` | pymupdf-pdf (in-process) | ✅ |
+| `math.recognize` | docling-math, rapid-latex-ocr, pp-formulanet | ✅ |
+| `math.convert`, `math.verbalize` | math-speech (MathJax + MathCAT sidecar) | ✅ |
+| `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
+| `music.omr` | homr (in-process, local installs only), audiveris (sidecar) | ✅ |
+| `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
+| `document.export.pdf_ua` | pandoc-pdf-ua (sidecar, optional; PDF returned as an artifact) | ✅ |
+| `document.export.docx` | pandoc-docx (same sidecar, optional; DOCX returned as an artifact) | ✅ |
+| `pdf.validate.pdf_ua` | verapdf (sidecar, optional; PDF/UA-1 or PDF/UA-2 profile) | ✅ |
+| `document.ocr.page`, `document.adjudicate.page`, `document.adjudicate.region`, `table.recognize` | qwen3-vl-8b (OpenAI-compatible VLM server, `VLM_SERVE_URL`) | ✅ |
+| `chem.recognize` | docling-chem (Granite Vision VLM) | ✅ |
+| `chem.convert` | pure-chem (in-process, mhchem) | ✅ |
+| `code.normalize` | pure-code (in-process) | ✅ |
+| `text.postprocess` | pure-text (in-process) | ✅ |
+| `accessibility.mark` | pure-accessibility (in-process) | ✅ |
+| `dataset.*` | dataset-github, dataset-huggingface (in-process, optional) | ✅ |
+| `artifact.store` / `artifact.retrieve` | minio (primary), filesystem (failover), optional | ✅ |
+| `cache.get` / `cache.put` | valkey (optional) | ✅ |
 
 ## Key endpoints
 
@@ -185,6 +222,7 @@ flowchart TB
 | `GET` | `/v1/health` | Service status |
 | `GET` | `/v1/capabilities` | List capabilities |
 | `POST` | `/v1/capabilities/{id}:execute` | Execute a capability |
+| `POST` | `/v1/vlm/chat/completions` | OpenAI-compatible chat relay to a VLM provider, under its concurrency limit |
 | `GET` | `/v1/providers` | List providers |
 | `POST` | `/v1/artifacts` | Store content |
 | `GET` | `/v1/artifacts/{id}` | Retrieve content |
@@ -262,8 +300,18 @@ pages: 1; elements: 7; obligations: 0
 | [Capability Model](docs/capability-model.md) | Contracts, manifests, interchangeability |
 | [PDDL Integration](docs/pddl.md) | Planning semantics |
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
+| [Production Deployment](docs/production-deployment.md) | Isolated, digest-pinned Toolbox stack and manual promotion |
+| [Page Orientation](docs/rapidocr-orient.md) | Optional `image.page.orient` sidecar and auto-rotate preprocessing |
+| [PDF/UA Export](docs/pdf-ua-export.md) | `document.export.pdf_ua` sidecar with a pinned Pandoc and TeX Live |
+| [DOCX Export](docs/docx-export.md) | `document.export.docx` on the same sidecar, with Pandoc sandboxed |
+| [Page rendering](docs/pdf-render.md) | `pdf.render` v2: clip, size bound and raster inputs, PNG by reference |
+| [Text spans](docs/text-spans.md) | `document.text.spans`: the text layer with fonts, sizes and baselines |
+| [PDF/UA Validation](docs/pdf-ua-validation.md) | `pdf.validate.pdf_ua` sidecar with a pinned veraPDF |
+| [TeleOCR Adapter](docs/teleocr.md) | Optional image extraction, configuration and HTTP contract |
+| [TeleOCR Evaluation](docs/teleocr-evaluation.md) | Local gains, failure cases, coverage and remaining service validation |
 | [Constitution](docs/constitution.md) | Design principles |
 | [Contributing](docs/contribution.md) | Workflow, PR checklist |
+| [Notebooks](docs/notebooks/) | Interactive provider tour (`docs/notebooks/provider_tour.ipynb`) |
 
 ## License
 

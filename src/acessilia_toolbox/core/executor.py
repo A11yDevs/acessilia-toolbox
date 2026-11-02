@@ -7,29 +7,51 @@ runs it, normalizes the output and records provenance.
 from __future__ import annotations
 
 import json
+import logging
+import shutil
 import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactStore, ExecutionCache, NullCache
+from acessilia_toolbox.core.artifact import (
+    ArtifactRef,
+    ArtifactStore,
+    ExecutionCache,
+    NullCache,
+    shards,
+)
 from acessilia_toolbox.core.cache import compute_cache_key
 from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
 from acessilia_toolbox.core.errors import (
     ConfigurationError,
     InvalidInputError,
+    ProviderUnavailableError,
+    ToolboxError,
     UnsupportedMediaTypeError,
 )
-from acessilia_toolbox.core.fingerprint import fingerprint_bytes, fingerprint_parameters
+from acessilia_toolbox.core.fingerprint import (
+    fingerprint_bytes,
+    fingerprint_parameters,
+    fingerprint_stream,
+)
+from acessilia_toolbox.core.input_memory import check_in_memory_size, read_in_memory
 from acessilia_toolbox.core.normalization import build_processing_manifest
+from acessilia_toolbox.core.preprocessing import (
+    OrientationResult,
+    detect_and_orient_image,
+    is_supported_image,
+)
 from acessilia_toolbox.core.provenance import ExecutionProvenance
 from acessilia_toolbox.core.provider import (
     ProviderAdapter,
     ProviderDescriptor,
     ProviderRegistry,
 )
+
+LOG = logging.getLogger(__name__)
 
 AdapterFactory = Callable[[ProviderDescriptor], ProviderAdapter]
 
@@ -42,7 +64,7 @@ class CapabilityResult(BaseModel):
     status: str = "succeeded"
     capability: str
     provider: str
-    document: dict[str, Any]
+    document: Any
     provenance: ExecutionProvenance
     artifacts: list[ArtifactRef] = Field(default_factory=list)
 
@@ -66,7 +88,7 @@ class CapabilityExecutor:
     def execute(
         self,
         capability_id: str,
-        payload: bytes,
+        payload: bytes | BinaryIO,
         *,
         filename: str,
         media_type: str,
@@ -74,16 +96,84 @@ class CapabilityExecutor:
         capability_version: int | None = None,
         parameters: Mapping[str, Any] | None = None,
         language: str = "pt-BR",
+        no_cache: bool = False,
     ) -> CapabilityResult:
         manifest = self._capabilities.get(capability_id, capability_version)
         _validate_input(manifest, payload, filename, media_type)
 
+        if manifest.output.by_reference:
+            # Fail before the provider runs: its output could not be kept anyway.
+            self._require_store()
+
         descriptor = self._providers.resolve(manifest.id, provider_id)
         adapter = self._adapter_factory(descriptor)
 
-        input_fingerprint = fingerprint_bytes(payload)
+        needs_bytes = not getattr(adapter, "supports_streaming_input", False) or bool(
+            parameters and parameters.get("auto_rotate") and is_supported_image(media_type)
+        )
+        if isinstance(payload, bytes):
+            input_fingerprint = fingerprint_bytes(payload)
+        else:
+            payload.seek(0)
+            input_fingerprint = fingerprint_stream(payload)
+            payload.seek(0)
         versions = _versions_of(adapter)
         provider_version = versions.pop("provider", descriptor.version)
+        if needs_bytes:
+            if isinstance(payload, bytes):
+                check_in_memory_size(len(payload))
+            else:
+                payload = read_in_memory(payload)
+
+        execution_payload = payload
+        orientation: OrientationResult | None = None
+        preprocessing: dict[str, Any] | None = None
+        auto_rotate = bool(parameters and parameters.get("auto_rotate", False))
+        if auto_rotate and is_supported_image(media_type):
+            preprocessing = {
+                "version": 1,
+                "provider": None,
+                "original_input_fingerprint": input_fingerprint,
+            }
+            orient_adapter = None
+            try:
+                orient_desc = self._providers.resolve("image.page.orient")
+                orient_adapter = self._adapter_factory(orient_desc)
+                preprocessing.update(
+                    provider=orient_desc.id,
+                    provider_version=orient_desc.version,
+                    model_versions=_versions_of(orient_adapter),
+                    configuration_hash=fingerprint_parameters(
+                        {"endpoint": orient_desc.endpoint, "config": orient_desc.config}
+                    ),
+                    parameters={"return_image": True},
+                )
+            except ToolboxError as exc:
+                # Orientation is an optional preprocessing step: a deployment
+                # without the provider still extracts, just without rotating.
+                LOG.info(
+                    "auto_rotate requested but image.page.orient is unavailable: %s",
+                    exc.message,
+                )
+            except Exception:
+                LOG.warning(
+                    "auto_rotate requested but the orientation provider could not be built",
+                    exc_info=True,
+                )
+            execution_payload, orientation = detect_and_orient_image(
+                cast(bytes, payload), media_type=media_type, orient_provider=orient_adapter
+            )
+            if orientation.auto_rotated:
+                # The rotated bytes are the real input, so they replace the
+                # fingerprint; otherwise the cache could serve a stale result.
+                input_fingerprint = fingerprint_bytes(execution_payload)
+            # Confidence is audit metadata, not a change to extraction input.
+            preprocessing["orientation"] = _orientation_payload(
+                orientation, include_confidence=False
+            )
+
+        # Cache the effective input and preprocessing context. Running orientation
+        # first also lets a recovered provider replace a degraded cached result.
         cache_key = compute_cache_key(
             capability_id=manifest.id,
             capability_version=manifest.version,
@@ -92,24 +182,45 @@ class CapabilityExecutor:
             input_fingerprints=[input_fingerprint],
             parameters=parameters,
             model_versions=versions,
+            filename=filename,
+            media_type=media_type,
+            language=language,
+            preprocessing=preprocessing,
         )
 
-        if manifest.execution.cacheable:
+        if manifest.execution.cacheable and not no_cache:
             cached = self._cache.get(cache_key)
             if cached is not None:
-                return _restore(cached, cache_key)
+                try:
+                    restored = _restore(cached, cache_key)
+                except ValidationError:
+                    # Cached results from an older contract must not block execution.
+                    restored = None
+                if restored is not None:
+                    servable = self._servable_cached(
+                        restored, allow_inline_json=not manifest.output.by_reference
+                    )
+                    if servable is not None:
+                        return servable
 
-        extraction = adapter.execute(
+        # Only adapters of capabilities with more than one version need to
+        # know which contract they serve; version 1 keeps the original call.
+        version_kwargs = (
+            {"capability_version": manifest.version} if manifest.version > 1 else {}
+        )
+        extraction = cast(Any, adapter).execute(
             manifest.id,
-            payload,
+            execution_payload,
             filename=filename,
             media_type=media_type,
             parameters=parameters,
+            **version_kwargs,
         )
 
-        # Capabilities that return a plain dict (e.g. pdf.split, pdf.render)
-        # skip the processing-manifest builder and use the document directly.
-        if isinstance(extraction.document, dict):
+        # Capabilities that return a plain dict or list (e.g. pdf.split,
+        # dataset.list) skip the processing-manifest builder and use the
+        # document directly.
+        if isinstance(extraction.document, (dict, list)):
             document_payload = extraction.document
             artifact_suffix = f"{Path(filename).stem}.json"
         else:
@@ -117,7 +228,14 @@ class CapabilityExecutor:
             # the in-memory payload is staged under its original name.
             with tempfile.TemporaryDirectory() as staging:
                 source = Path(staging) / filename
-                source.write_bytes(payload)
+                # Stage the bytes the provider actually saw, so `source.sha256`
+                # matches the rotated input when auto-rotate applied.
+                if isinstance(execution_payload, bytes):
+                    source.write_bytes(execution_payload)
+                else:
+                    execution_payload.seek(0)
+                    with source.open("wb") as staged:
+                        shutil.copyfileobj(execution_payload, staged, length=1024 * 1024)
                 document = build_processing_manifest(source, extraction, language=language)
             document_payload = document.model_dump(mode="json", by_alias=True)
             artifact_suffix = f"{Path(filename).stem}.structured-document.json"
@@ -126,16 +244,32 @@ class CapabilityExecutor:
 
         artifacts: list[ArtifactRef] = []
         if self._store is not None:
-            artifacts.append(
-                self._store.put(
+            try:
+                document_ref = self._store.put(
                     serialized,
                     media_type="application/json",
                     filename=artifact_suffix,
                 )
-            )
+            except ProviderUnavailableError:
+                if manifest.output.by_reference or extraction.outputs:
+                    raise
+                # Inline results remain usable during a storage outage. The
+                # reference never claims a persisted download, but the result is
+                # still cached: while storage stays down the cache hit is served
+                # inline, and once it recovers the missing object invalidates the
+                # entry, so the next execution publishes and replaces it.
+                LOG.warning("JSON artifact storage unavailable; returning inline result")
+                document_ref = ArtifactRef.of(serialized, media_type="application/json")
+            artifacts.append(document_ref)
         else:
-            artifacts.append(
-                ArtifactRef.of(serialized, media_type="application/json")
+            artifacts.append(ArtifactRef.of(serialized, media_type="application/json"))
+        if extraction.outputs:
+            # Binary outputs only travel by reference: the cache and the
+            # response keep the artifact id, never the bytes.
+            store = self._require_store()
+            artifacts.extend(
+                store.put(output.payload, media_type=output.media_type, filename=output.filename)
+                for output in extraction.outputs
             )
 
         result = CapabilityResult(
@@ -149,9 +283,10 @@ class CapabilityExecutor:
                 provider=descriptor.id,
                 provider_version=extraction.version,
                 input_fingerprints=[input_fingerprint],
-                output_fingerprints=[artifacts[0].artifact_id],
+                output_fingerprints=[artifact.artifact_id for artifact in artifacts],
                 parameters_hash=fingerprint_parameters(parameters),
                 model_versions=versions,
+                orientation=_orientation_payload(orientation),
                 started_at=extraction.started_at,
                 completed_at=extraction.completed_at,
                 duration_ms=extraction.duration_ms,
@@ -166,18 +301,127 @@ class CapabilityExecutor:
     def store_artifact(
         self, payload: bytes, *, media_type: str, filename: str | None = None
     ) -> ArtifactRef:
-        return self._require_store().put(
-            payload, media_type=media_type, filename=filename
-        )
+        return self._require_store().put(payload, media_type=media_type, filename=filename)
 
-    def retrieve_artifact(self, artifact_id: str) -> tuple[bytes, ArtifactRef]:
+    def store_artifact_stream(
+        self, stream: BinaryIO, *, media_type: str, filename: str | None = None
+    ) -> ArtifactRef:
         store = self._require_store()
-        return store.get(artifact_id), store.stat(artifact_id)
+        put_stream = getattr(store, "put_stream", None)
+        if callable(put_stream):
+            return cast(ArtifactRef, put_stream(stream, media_type=media_type, filename=filename))
+        return store.put(read_in_memory(stream), media_type=media_type, filename=filename)
+
+    def stat_artifact(self, artifact_id: str) -> ArtifactRef:
+        shards(artifact_id)
+        return self._require_store().stat(artifact_id)
+
+    def retrieve_artifact(
+        self, artifact_id: str, *, max_bytes: int | None = None
+    ) -> tuple[bytes, ArtifactRef]:
+        shards(artifact_id)
+        store = self._require_store()
+        ref = store.stat(artifact_id)
+        if max_bytes is not None and ref.size > max_bytes:
+            raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+        return store.get(artifact_id), ref
+
+    def retrieve_artifact_to(
+        self, artifact_id: str, destination: BinaryIO, *, max_bytes: int
+    ) -> ArtifactRef:
+        shards(artifact_id)
+        store = self._require_store()
+        ref = store.stat(artifact_id)
+        if ref.size > max_bytes:
+            raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+        copy_to = getattr(store, "copy_to", None)
+        if callable(copy_to):
+            copy_to(artifact_id, destination, max_bytes=max_bytes)
+        else:
+            check_in_memory_size(ref.size)
+            payload = store.get(artifact_id)
+            check_in_memory_size(len(payload))
+            if len(payload) > max_bytes:
+                raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+            destination.write(payload)
+        destination.seek(0)
+        return ref
+
+    def _servable_cached(
+        self, result: CapabilityResult, *, allow_inline_json: bool = False
+    ) -> CapabilityResult | None:
+        """Return the cached result to serve, or ``None`` to execute again.
+
+        Every stored reference is checked, including the inline document's JSON,
+        so each cache hit costs at least one ``exists`` call (potentially an S3
+        round trip). Verified missing objects invalidate the cache. Temporary
+        unavailability is different: an inline-only contract can still serve its
+        cached JSON, as a copy without the unverified storage location. Required
+        binary/by-reference outputs must still be verified. Without a store,
+        only an inline JSON reference without storage metadata is allowed.
+        """
+        if self._store is None:
+            inline_only = len(result.artifacts) <= 1 and all(
+                artifact.storage_backend is None and artifact.uri is None
+                for artifact in result.artifacts
+            )
+            return result if inline_only else None
+        try:
+            if all(self._store.exists(artifact.artifact_id) for artifact in result.artifacts):
+                return result
+            return None
+        except ProviderUnavailableError as exc:
+            if (
+                allow_inline_json
+                and len(result.artifacts) == 1
+                and result.artifacts[0].media_type == "application/json"
+            ):
+                LOG.info("cached JSON storage unavailable; serving inline: %s", exc.message)
+                return _without_storage_location(result)
+            LOG.info("required cached outputs could not be verified: %s", exc.message)
+            return None
+        except ToolboxError as exc:
+            LOG.info("cached outputs could not be verified; executing again: %s", exc.message)
+            return None
 
     def _require_store(self) -> ArtifactStore:
         if self._store is None:
             raise ConfigurationError("no artifact storage provider is configured")
         return self._store
+
+
+def _orientation_payload(
+    result: OrientationResult | None, *, include_confidence: bool = True
+) -> dict[str, Any] | None:
+    """Record the preprocessing decision so a rotated result stays auditable.
+
+    Provenance keeps the confidence; the cache identity leaves it out, since a
+    non-deterministic score would otherwise prevent every cache hit.
+    """
+    if result is None:
+        return None
+    payload: dict[str, Any] = {
+        "angle": result.angle,
+        "stage": result.stage,
+        "auto_rotated": result.auto_rotated,
+        "original_dimensions": list(result.original_dimensions),
+        "oriented_dimensions": list(result.oriented_dimensions),
+    }
+    if include_confidence:
+        payload["confidence"] = result.confidence
+    return payload
+
+
+def _without_storage_location(result: CapabilityResult) -> CapabilityResult:
+    """Copy a result whose artifacts no longer claim a persisted download."""
+    return result.model_copy(
+        update={
+            "artifacts": [
+                artifact.model_copy(update={"storage_backend": None, "uri": None})
+                for artifact in result.artifacts
+            ]
+        }
+    )
 
 
 def _versions_of(adapter: ProviderAdapter) -> dict[str, str]:
@@ -197,11 +441,17 @@ def _restore(cached: dict[str, Any], cache_key: str) -> CapabilityResult:
 
 def _validate_input(
     manifest: CapabilityManifest,
-    payload: bytes,
+    payload: bytes | BinaryIO,
     filename: str,
     media_type: str,
 ) -> None:
-    if not payload:
+    if not isinstance(payload, bytes):
+        payload.seek(0)
+        first = payload.read(1)
+        payload.seek(0)
+        if not first:
+            raise InvalidInputError("empty payload", capability=manifest.id)
+    elif not payload:
         raise InvalidInputError("empty payload", capability=manifest.id)
 
     # Uploads are untrusted: reject path traversal before the name reaches disk.

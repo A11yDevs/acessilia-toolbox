@@ -1,0 +1,243 @@
+{
+ "report": {
+  "buildInformation": {
+   "releaseDetails": [
+    {
+     "id": "core",
+     "version": "1.30.2",
+     "buildDate": 1780494180000
+    },
+    {
+     "id": "validation-model",
+     "version": "1.30.2",
+     "buildDate": 1780494360000
+    },
+    {
+     "id": "apps",
+     "version": "1.30.2",
+     "buildDate": 1780494900000
+    }
+   ]
+  },
+  "jobs": [
+   {
+    "itemDetails": {
+     "name": "/tmp/verapdf-x/document.pdf",
+     "size": 3112
+    },
+    "validationResult": [
+     {
+      "details": {
+       "passedRules": 100,
+       "failedRules": 6,
+       "passedChecks": 29,
+       "failedChecks": 8,
+       "tags": [
+        "artifact",
+        "metadata",
+        "syntax",
+        "text",
+        "lang",
+        "structure"
+       ],
+       "ruleSummaries": [
+        {
+         "ruleStatus": "FAILED",
+         "specification": "ISO 14289-1:2014",
+         "clause": "7.1",
+         "testNumber": 11,
+         "status": "failed",
+         "failedChecks": 1,
+         "tags": [
+          "structure"
+         ],
+         "description": "The logical structure of the conforming file shall be described by a structure hierarchy rooted in the StructTreeRoot entry of the document catalog dictionary, as described in ISO 32000-1:2008, 14.7",
+         "object": "PDDocument",
+         "test": "containsStructTreeRoot == true",
+         "checks": [
+          {
+           "status": "failed",
+           "context": "root/document[0]",
+           "errorMessage": "StructTreeRoot entry is not present in the document catalog",
+           "errorArguments": []
+          }
+         ]
+        },
+        {
+         "ruleStatus": "FAILED",
+         "specification": "ISO 14289-1:2014",
+         "clause": "7.2",
+         "testNumber": 34,
+         "status": "failed",
+         "failedChecks": 2,
+         "tags": [
+          "text",
+          "lang"
+         ],
+         "description": "Natural language for text in page content shall be determined",
+         "object": "SETextItem",
+         "test": "gContainsCatalogLang == true || Lang != null",
+         "checks": [
+          {
+           "status": "failed",
+           "context": "root/document[0]/pages[0](3 0 obj PDPage)/contentStream[0](5 0 obj PDSemanticContentStream)/content[0]/contentItem[0]",
+           "errorMessage": "Natural language for text in page content cannot be determined",
+           "errorArguments": []
+          },
+          {
+           "status": "failed",
+           "context": "root/document[0]/pages[0](3 0 obj PDPage)/contentStream[0](5 0 obj PDSemanticContentStream)/content[0]/contentItem[1]",
+           "errorMessage": "Natural language for text in page content cannot be determined",
+           "errorArguments": []
+          }
+         ]
+        },
+        {
+         "ruleStatus": "FAILED",
+         "specification": "ISO 14289-1:2014",
+         "clause": "7.1",
+         "testNumber": 8,
+         "status": "failed",
+         "failedChecks": 1,
+         "tags": [
+          "metadata"
+         ],
+         "description": "The Catalog dictionary of a conforming file shall contain the Metadata key whose value is a metadata stream as defined in ISO 32000-1:2008, 14.3.2. The metadata stream dictionary shall contain entry Type with value /Metadata and entry Subtype with value /XML",
+         "object": "PDDocument",
+         "test": "containsMetadata == true",
+         "checks": [
+          {
+           "status": "failed",
+           "context": "root/document[0]",
+           "errorMessage": "The document catalog dictionary doesn't contain metadata key or metadata stream dictionary does not contain either entry Type with value /Metadata or entry Subtype with value /XML",
+           "errorArguments": []
+          }
+         ]
+        },
+        {
+         "ruleStatus": "FAILED",
+         "specification": "ISO 14289-1:2014",
+         "clause": "7.1",
+         "testNumber": 10,
+         "status": "failed",
+         "failedChecks": 1,
+         "tags": [
+          "syntax"
+         ],
+         "description": "The document catalog dictionary shall include a ViewerPreferences dictionary containing a DisplayDocTitle key, whose value shall be true",
+         "object": "CosDocument",
+         "test": "DisplayDocTitle == true",
+         "checks": [
+          {
+           "status": "failed",
+           "context": "root",
+           "errorMessage": "ViewerPreferences dictionary is not present in the document Catalog, or DisplayDocTitle key is set to false or is not present in the ViewerPreferences dictionary (ViewerPreferences = null, DisplayDocTitle = null)",
+           "errorArguments": [
+            null,
+            null
+           ]
+          }
+         ]
+        },
+        {
+         "ruleStatus": "FAILED",
+         "specification": "ISO 14289-1:2014",
+         "clause": "6.2",
+         "testNumber": 1,
+         "status": "failed",
+         "failedChecks": 1,
+         "tags": [
+          "syntax"
+         ],
+         "description": "The document catalog dictionary shall include a MarkInfo dictionary containing an entry, Marked, whose value shall be true",
+         "object": "CosDocument",
+         "test": "Marked == true",
+         "checks": [
+          {
+           "status": "failed",
+           "context": "root",
+           "errorMessage": "MarkInfo dictionary is not present in the document catalog, or Marked entry is set to false or is not present in the MarkInfo dictionary (MarkInfo = null, Marked = null)",
+           "errorArguments": [
+            null,
+            null
+           ]
+          }
+         ]
+        },
+        {
+         "ruleStatus": "FAILED",
+         "specification": "ISO 14289-1:2014",
+         "clause": "7.1",
+         "testNumber": 3,
+         "status": "failed",
+         "failedChecks": 2,
+         "tags": [
+          "artifact"
+         ],
+         "description": "Content shall be marked as Artifact or tagged as real content",
+         "object": "SESimpleContentItem",
+         "test": "isTaggedContent == true || parentsTags.contains('Artifact') == true",
+         "checks": [
+          {
+           "status": "failed",
+           "context": "root/document[0]/pages[0](3 0 obj PDPage)/contentStream[0](5 0 obj PDSemanticContentStream)/content[0]/contentItem[0]",
+           "errorMessage": "Content is neither marked as Artifact nor tagged as real content",
+           "errorArguments": []
+          },
+          {
+           "status": "failed",
+           "context": "root/document[0]/pages[0](3 0 obj PDPage)/contentStream[0](5 0 obj PDSemanticContentStream)/content[0]/contentItem[1]",
+           "errorMessage": "Content is neither marked as Artifact nor tagged as real content",
+           "errorArguments": []
+          }
+         ]
+        }
+       ]
+      },
+      "jobEndStatus": "normal",
+      "profileName": "PDF/UA-1 validation profile",
+      "statement": "PDF file is not compliant with Validation Profile requirements.",
+      "compliant": false
+     }
+    ],
+    "processingTime": {
+     "start": 1792278408591,
+     "finish": 1792278408802,
+     "duration": "00:00:00.211",
+     "difference": 211
+    }
+   }
+  ],
+  "batchSummary": {
+   "duration": {
+    "start": 1792278408510,
+    "finish": 1792278408832,
+    "duration": "00:00:00.322",
+    "difference": 322
+   },
+   "totalJobs": 1,
+   "outOfMemory": 0,
+   "veraExceptions": 0,
+   "featuresSummary": {
+    "failedJobCount": 0,
+    "totalJobCount": 0,
+    "successfulJobCount": 0
+   },
+   "repairSummary": {
+    "failedJobCount": 0,
+    "totalJobCount": 0,
+    "successfulJobCount": 0
+   },
+   "multiJob": false,
+   "failedEncryptedJobs": 0,
+   "failedParsingJobs": 0,
+   "validationSummary": {
+    "nonCompliantPdfaCount": 1,
+    "compliantPdfaCount": 0,
+    "failedJobCount": 0,
+    "totalJobCount": 1,
+    "successfulJobCount": 1
+   }
+  }
+ }
+}

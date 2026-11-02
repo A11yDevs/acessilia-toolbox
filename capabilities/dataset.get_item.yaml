@@ -1,0 +1,28 @@
+id: dataset.get_item
+version: 1
+description: >-
+  Get a full item with artifact references and annotations.
+
+input:
+  schema: artifact/query@1
+
+output:
+  schema: artifact/dataset-item@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires:
+    - items_listed
+  produces:
+    - item_retrieved
+
+providers:
+  - id: dataset-github
+  - id: dataset-huggingface

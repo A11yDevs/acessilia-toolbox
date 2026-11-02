@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:table-candidates:1.0.0",
+  "title": "Table Candidates",
+  "description": "HTML generations of a cropped table by a vision-language model: one greedy and zero or more seeded samples.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["greedy", "samples", "temperature", "top_p", "use_hints", "header_cells", "model"],
+  "definitions": {
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "finish"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Generated text with code fences removed; the caller extracts the <table>."
+        },
+        "finish": {
+          "type": ["string", "null"],
+          "description": "Why generation stopped ('length' means the table was cut at the token limit)."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Sampling seed; absent for the greedy generation."
+        }
+      }
+    }
+  },
+  "properties": {
+    "greedy": {
+      "$ref": "#/definitions/generation",
+      "description": "Generation at temperature 0."
+    },
+    "samples": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/generation"},
+      "description": "Seeded generations at the requested temperature."
+    },
+    "temperature": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Sampling temperature of the samples."
+    },
+    "top_p": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Nucleus sampling threshold of the samples."
+    },
+    "use_hints": {
+      "type": "boolean",
+      "description": "Whether the prompt showed the providers' tables."
+    },
+    "header_cells": {
+      "type": "string",
+      "enum": ["th", "td"],
+      "description": "Tag the prompt asked for in header cells."
+    },
+    "model": {
+      "type": "string",
+      "description": "Model identifier the server answered with."
+    }
+  }
+}

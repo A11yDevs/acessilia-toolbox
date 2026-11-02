@@ -60,6 +60,39 @@ artifact.presign
 The same contract could later be implemented by S3, Ceph, or local
 filesystem storage.
 
+If MinIO is unavailable during a write, `TOOLBOX_ARTIFACT_FALLBACK_MODE`
+decides what happens. With the default `disabled`, the write fails with
+provider unavailability (HTTP 503) instead of creating an object on one
+replica's private disk; inline-only results are still returned, without a
+persisted location. `local` (single instance) and `shared` (a filesystem
+mounted on every replica) store the artifact on the filesystem instead. Reads
+check both stores in every mode. If MinIO is unavailable and the artifact is
+absent from the filesystem, report provider unavailability. Artifacts stored
+on the filesystem are not copied back to MinIO automatically. Without a
+configured MinIO, the filesystem is the primary store in every mode. See
+[installation](installation.md#artifact-fallback-and-multiple-replicas).
+
+The S3 client uses a 3-second connection timeout, a 5-second read timeout,
+and one attempt per operation, so an unresponsive primary can yield to the
+filesystem before the client's 30-second request timeout. These are socket
+timeouts, not a total deadline for transferring large artifacts. If the
+filesystem cannot be initialized, the Toolbox logs a warning and continues
+with the available S3 store.
+
+The filesystem root is `/tmp/acessilia-toolbox-artifacts`. Docker Compose
+mounts a named volume there to retain artifacts across container recreation.
+Without a mount, files in `/tmp` are temporary. Replicas on different hosts
+need the same persistent shared filesystem at this path. Set
+`ARTIFACT_FALLBACK_SOURCE` to the host path of that shared mount in each
+Compose deployment; the default named volume only covers one host.
+
+Metadata is published from a complete temporary file. Filesystems without hard
+links use atomic rename under a per-artifact advisory lock to preserve the first
+upload's metadata. The shared mount must propagate these locks across hosts
+(for example, SMB on Linux 5.5 or later, with remote locking enabled). The empty
+`.meta.json.lock` sidecars remain in place so writers always lock the same file;
+the lock itself is released when the writer closes the file or exits.
+
 ## Cache
 
 Cache should be external and replaceable.
@@ -76,6 +109,13 @@ input fingerprint
 
 Large cached results may be stored in object storage, with a fast cache
 containing only metadata or artifact references.
+
+Providers that produce files, such as `document.export.pdf_ua` and
+`document.export.docx`, return them as
+binary outputs. The executor writes each one to the artifact store and lists its
+reference in `artifacts`; neither the response nor the cached result carries
+the bytes. Before serving such a result from the cache, the executor checks that
+the stored objects still exist and executes again when one is missing.
 
 ## Provenance
 

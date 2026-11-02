@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:accessibility-report:1.0.0",
+  "title": "Accessibility Report",
+  "description": "Accessibility analysis report with obligations, summary statistics, and overall score.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "obligations",
+    "summary",
+    "score",
+    "obligation_count"
+  ],
+  "properties": {
+    "obligations": {
+      "type": "array",
+      "description": "List of accessibility obligations per element.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "element_id",
+          "element_type",
+          "page_number",
+          "obligation_id",
+          "rationale",
+          "methods",
+          "text_snippet"
+        ],
+        "properties": {
+          "element_id": {
+            "type": "string",
+            "description": "Identifier of the element with accessibility issues."
+          },
+          "element_type": {
+            "type": "string",
+            "description": "Type of element (picture, table, formula, code, unknown)."
+          },
+          "page_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Page number where the element is located."
+          },
+          "obligation_id": {
+            "type": "string",
+            "description": "Identifier of the required accessibility action."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Explanation of why this obligation is needed."
+          },
+          "methods": {
+            "type": "array",
+            "description": "Possible methods to fulfill this obligation.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "text_snippet": {
+            "type": "string",
+            "description": "First 200 characters of the element text."
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Summary statistics of accessibility issues.",
+      "required": [
+        "total_elements",
+        "elements_with_issues",
+        "images_without_alt",
+        "tables_without_linearization",
+        "formulas_without_verbalization",
+        "code_without_language",
+        "unknown_elements"
+      ],
+      "properties": {
+        "total_elements": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "elements_with_issues": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "images_without_alt": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tables_without_linearization": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "formulas_without_verbalization": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "code_without_language": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_elements": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Overall accessibility score (0-100)."
+    },
+    "obligation_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of obligations generated."
+    }
+  }
+}

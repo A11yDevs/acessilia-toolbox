@@ -1,35 +1,23 @@
 #!/usr/bin/env bash
-# staging-update.sh — Updates the Acessilia Toolbox staging container
-# via GitHub API.
+# staging-update.sh — Updates the Acessilia Toolbox staging container and its
+# sidecars via GitHub API.
 #
-# Checks the SHA of the latest commit on the develop branch via GitHub API and
-# confirms that the corresponding image (sha-<7> tag) HAS BEEN PUBLISHED on GHCR
-# before updating. Prevents updating to a commit whose build is still running
-# or has failed.
+# Checks the SHA of the latest commit on the tracked branch via GitHub API and
+# confirms that the corresponding images (sha-<7> tag) of the toolbox and of
+# every sidecar it runs HAVE BEEN PUBLISHED on GHCR before updating them
+# together. Prevents updating to a commit whose build is still running or has
+# failed, and the API running against sidecars of another commit.
 #
-# Usage:
-#   ./scripts/staging-update.sh                     # Run once
-#   systemctl start staging-update.service           # Run via systemd
+# On the staging server it runs from the clone through scripts/ops.sh
+# (`auto-update start`, which the timer installed by `auto-update setup`
+# calls); production-update.sh reuses it with production defaults.
 #
-# Installation as systemd user timer (every 5 min):
-#   1. sudo cp scripts/staging-update.sh /opt/acessilia-toolbox/scripts/
-#   2. Create ~/.config/systemd/user/staging-update.service
-#   3. Create ~/.config/systemd/user/staging-update.timer
-#   4. systemctl --user daemon-reload
-#   5. systemctl --user enable --now staging-update.timer
-#
-# Prerequisites:
-#   - Docker + Docker Compose installed
-#   - jq installed (sudo apt install jq)
-#   - docker login ghcr.io configured
-#   - GHCR_TOKEN variable set (token with read:packages scope)
-#   - Run from the project root directory
+# Prerequisites: Docker + Docker Compose, jq, and a .env in the deployment
+# directory (GHCR_TOKEN raises the GitHub API rate limit).
 #
 # Tracked branch (Bug Hunting/Squashing):
-#   By default tracks "develop". During the BHS cycle, set TRACK_BRANCH
-#   in .env (e.g. TRACK_BRANCH=release/0.1.0) to point staging to the
-#   ephemeral release branch; when BHS ends, remove the variable (or revert
-#   to "develop") to resume normal tracking.
+#   "develop" by default. During BHS `ops.sh track release/x.y.z` sets
+#   TRACK_BRANCH in .env; `ops.sh track develop` removes it again.
 
 set -euo pipefail
 
@@ -39,9 +27,13 @@ set -euo pipefail
 # Supported layouts:
 #   A) Staging server: /opt/acessilia-toolbox/staging/
 #   B) Cloned repo: <repo>/scripts/staging-update.sh -> <repo>/
-# Priority: 1. STAGING_DIR (env)  2. /opt/acessilia-toolbox/staging  3. script parent
+# Priority: 1. STAGING_DIR/DEPLOY_DIR (env)  2. known server layouts  3. script parent
 if [ -n "${STAGING_DIR:-}" ]; then
   STAGING_DIR="$STAGING_DIR"
+elif [ -n "${DEPLOY_DIR:-}" ]; then
+  STAGING_DIR="$DEPLOY_DIR"
+elif [ -d /opt/a9a-toolbox/staging ]; then
+  STAGING_DIR="/opt/a9a-toolbox/staging"
 elif [ -d /opt/acessilia-toolbox/staging ]; then
   STAGING_DIR="/opt/acessilia-toolbox/staging"
 else
@@ -49,15 +41,33 @@ else
 fi
 cd "$STAGING_DIR"
 
-COMPOSE_FILE="docker-compose.staging.yml"
-CONTAINER_NAME="acessilia-toolbox-staging"
+# Overridable so production-update.sh can reuse this script: it exports
+# COMPOSE_FILE and CONTAINER_NAME for its own deployment.
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.staging.yml}"
+CONTAINER_NAME="${CONTAINER_NAME:-acessilia-toolbox-staging}"
 GITHUB_REPO="A11yDevs/acessilia-toolbox"
+
+# Sidecars published by the Sidecars workflow (compose service names). They
+# are updated with the toolbox so the API never runs against an older sidecar.
+SIDECAR_SERVICES=(mineru-serve audiveris-serve nougat-serve rapid-latex-ocr pp-formulanet rapidocr-orient pdf-ua-render verapdf-validate math-speech)
+CI_IMAGE_PREFIX="ghcr.io/a11ydevs/acessilia-toolbox-"
 
 # Cache and status live in a local directory
 CACHE_DIR="$STAGING_DIR/var/data"
 CACHE_FILE="${STAGING_UPDATE_CACHE:-$CACHE_DIR/.last_sha}"
 STATUS_FILE="${STAGING_STATUS_FILE:-$CACHE_DIR/staging-status.json}"
 mkdir -p "$CACHE_DIR"
+
+# Run one update at a time: a manual `ops.sh auto-update start` during the
+# timer's run would have two `compose up` calls recreating the same containers.
+# The MinerU image alone can take minutes to pull, so an overlap is plausible.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$CACHE_DIR/.update.lock"
+  if ! flock -n 9; then
+    echo "[staging-update] ⏭️  Another update is already running. Skipping."
+    exit 0
+  fi
+fi
 
 # ──────────────────────────────────────────────
 # Status helpers
@@ -77,29 +87,101 @@ _write_status() {
     > "$STATUS_FILE"
 }
 
+# Prints "<service> <image>" for each sidecar this deployment runs (it has a
+# container) from a CI-published image. A sidecar whose *_IMAGE points at a
+# local build, or that was never started, is left alone.
+_managed_sidecars() {
+  local existing svc image
+  existing=$(docker compose -f "$COMPOSE_FILE" ps -a --services 2>/dev/null || true)
+  for svc in "${SIDECAR_SERVICES[@]}"; do
+    grep -qx "$svc" <<<"$existing" || continue
+    image=$(jq -r --arg s "$svc" '.services[$s].image // empty' <<<"$COMPOSE_CONFIG")
+    [[ "$image" == "$CI_IMAGE_PREFIX"* ]] || continue
+    echo "$svc $image"
+  done
+}
+
+# Removes containers left behind when a previous `compose up` was interrupted.
+# Compose creates the replacement container as <old-container-id[:12]>_<name>
+# and only afterwards stops/removes the old one and renames the new one. If
+# the process dies in between (a pull of the MinerU image can take minutes),
+# the next `up` reuses that temporary name and fails with "container name is
+# already in use". Deleting the leftovers is safe: the image is already pulled,
+# so compose creates the containers again on the `up` that follows.
+_clear_interrupted_recreations() {
+  local project svc name id cname
+  local -a stale
+  project=$(jq -r '.name // empty' <<<"$COMPOSE_CONFIG")
+  [ -n "$project" ] || return 0
+  for svc in toolbox "${SIDECARS[@]}"; do
+    name=$(jq -r --arg s "$svc" '.services[$s].container_name // empty' <<<"$COMPOSE_CONFIG")
+    [ -n "$name" ] || continue
+    stale=()
+    while read -r id cname; do
+      [ -n "$id" ] || continue
+      case "$cname" in
+        [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]_"$name")
+          stale+=("$id") ;;
+      esac
+    done < <(docker ps -a \
+      --filter "label=com.docker.compose.project=$project" \
+      --filter "label=com.docker.compose.service=$svc" \
+      --format '{{.ID}} {{.Names}}' 2>/dev/null || true)
+    [ "${#stale[@]}" -gt 0 ] || continue
+    echo "[staging-update] 🧹 Removing container left by an interrupted recreation of $svc: ${stale[*]}"
+    docker rm -f "${stale[@]}" >/dev/null
+  done
+}
+
+# Pulls and restarts the toolbox together with the managed sidecars.
+_update_services() {
+  docker compose -f "$COMPOSE_FILE" pull toolbox "${SIDECARS[@]}"
+  _clear_interrupted_recreations
+  docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox "${SIDECARS[@]}"
+}
+
 # ──────────────────────────────────────────────
-# 0. Load GHCR_TOKEN (if not set in environment)
+# 0. Load settings from .env
 # ──────────────────────────────────────────────
-# Possible sources, in order:
-#   1. GHCR_TOKEN environment variable
-#   2. <STAGING_DIR>/.env file (GHCR_TOKEN=...)
-if [ -z "${GHCR_TOKEN:-}" ]; then
-  if [ -f "$STAGING_DIR/.env" ]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$STAGING_DIR/.env"
-    set +a
-  fi
+# .env is always loaded, so TRACK_BRANCH set there for BHS applies even when
+# GHCR_TOKEN already comes from the environment. Variables already exported
+# (GHCR_TOKEN, TRACK_BRANCH) win over .env.
+ENV_GHCR_TOKEN="${GHCR_TOKEN:-}"
+ENV_TRACK_BRANCH="${TRACK_BRANCH:-}"
+
+if [ -f "$STAGING_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$STAGING_DIR/.env"
+  set +a
 fi
 
-# Tracked branch/tag: "develop" by default, or TRACK_BRANCH (env or .env)
-# during the BHS cycle (e.g. release/0.1.0)
-GITHUB_BRANCH="${TRACK_BRANCH:-develop}"
+if [ -n "$ENV_GHCR_TOKEN" ]; then
+  GHCR_TOKEN="$ENV_GHCR_TOKEN"
+fi
+
+if [ -n "$ENV_TRACK_BRANCH" ]; then
+  TRACK_BRANCH="$ENV_TRACK_BRANCH"
+fi
+
+# Tracked branch/tag: TRACK_BRANCH (env or .env) wins, then the caller's
+# DEFAULT_TRACK_BRANCH (production passes "main"), then "develop".
+GITHUB_BRANCH="${TRACK_BRANCH:-${DEFAULT_TRACK_BRANCH:-develop}}"
 
 # Docker tags don't accept "/" (e.g. release/0.1.0 -> release-0.1.0)
 TRACK_TAG="${GITHUB_BRANCH//\//-}"
 IMAGE_TAG="ghcr.io/a11ydevs/acessilia-toolbox:${TRACK_TAG}"
 export TRACK_TAG
+
+COMPOSE_CONFIG=$(docker compose -f "$COMPOSE_FILE" config --format json)
+SIDECARS=()
+SIDECAR_IMAGES=()
+while read -r svc image; do
+  [ -n "$svc" ] || continue
+  SIDECARS+=("$svc")
+  SIDECAR_IMAGES+=("$image")
+done < <(_managed_sidecars)
+echo "[staging-update] Managed sidecars: ${SIDECARS[*]:-none}"
 
 # ──────────────────────────────────────────────
 # 1. Check SHA of latest commit via GitHub API
@@ -109,30 +191,38 @@ if [ -n "${GHCR_TOKEN:-}" ]; then
   AUTH_HEADER=(-H "Authorization: token $GHCR_TOKEN")
 fi
 
-LATEST_SHA=$(curl -fsS \
+# A failed request must reach the fallback below instead of aborting under
+# set -e.
+if ! LATEST_SHA=$(curl -fsS \
   "${AUTH_HEADER[@]}" \
   "https://api.github.com/repos/$GITHUB_REPO/commits/$GITHUB_BRANCH" \
-  | jq -r '.sha')
+  | jq -r '.sha'); then
+  LATEST_SHA=""
+fi
 
 # If SHA could not be obtained, pull directly (safe fallback)
 if [ -z "$LATEST_SHA" ] || [ "$LATEST_SHA" = "null" ]; then
   echo "[staging-update] ⚠️  Failed to query GitHub API. Pulling directly..."
-  docker pull "$IMAGE_TAG" 2>/dev/null || {
-    echo "[staging-update] ❌ Failed to pull $IMAGE_TAG"
+  _update_services || {
+    echo "[staging-update] ❌ Failed to pull or restart $IMAGE_TAG and its sidecars"
     exit 1
   }
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox
   docker image prune -f
   _write_status "" "" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "[staging-update] Container updated (fallback)."
   exit 0
 fi
 
-# Compare with SHA from last execution
+# Compare with the branch and SHA of the last execution. The branch is part of
+# the key because a newly tracked branch (e.g. the BHS cut) can point at the
+# same commit: comparing only the SHA kept the containers on the previous
+# branch's images until the next commit.
+CACHE_KEY="$GITHUB_BRANCH $LATEST_SHA"
 if [ -f "$CACHE_FILE" ]; then
-  CACHED_SHA=$(cat "$CACHE_FILE")
-  if [ "$CACHED_SHA" = "$LATEST_SHA" ]; then
-    _write_status "$LATEST_SHA" "" ""
+  CACHED_KEY=$(cat "$CACHE_FILE")
+  if [ "$CACHED_KEY" = "$CACHE_KEY" ]; then
+    # Nothing to update means the cached commit is the one running.
+    _write_status "$LATEST_SHA" "$LATEST_SHA" ""
     echo "[staging-update] ✅ No new commits on $GITHUB_REPO/$GITHUB_BRANCH. Skipping."
     exit 0
   fi
@@ -152,21 +242,30 @@ else
   exit 0
 fi
 
+# The sidecars of the same commit must be published too; otherwise the API
+# would start against sidecars built from an older commit.
+for image in "${SIDECAR_IMAGES[@]}"; do
+  sidecar_sha_tag="${image%:*}:sha-$SHA7"
+  if ! docker manifest inspect "$sidecar_sha_tag" >/dev/null 2>&1; then
+    _write_status "$LATEST_SHA" "" ""
+    echo "[staging-update] ⏳ Sidecar image $sidecar_sha_tag not yet published on GHCR. Waiting for next check."
+    exit 0
+  fi
+done
+
 # ──────────────────────────────────────────────
 # 3. SHA changed and image published → update
 # ──────────────────────────────────────────────
 echo "[staging-update] 🔄 New commit detected: $SHA7. Updating..."
 
-docker pull "$IMAGE_TAG" 2>/dev/null || {
-  echo "[staging-update] ❌ Failed to pull $IMAGE_TAG"
+echo "[staging-update] 🚀 Pulling and restarting toolbox ${SIDECARS[*]}..."
+_update_services || {
+  echo "[staging-update] ❌ Failed to pull or restart $IMAGE_TAG and its sidecars"
   exit 1
 }
 
-echo "[staging-update] 🚀 Restarting container..."
-docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox
-
 # only write cache after successful restart (set -e aborts before on failure)
-echo "$LATEST_SHA" > "$CACHE_FILE"
+echo "$CACHE_KEY" > "$CACHE_FILE"
 
 docker image prune -f
 

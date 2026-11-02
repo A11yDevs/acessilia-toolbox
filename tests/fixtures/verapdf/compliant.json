@@ -1,0 +1,83 @@
+{
+ "report": {
+  "buildInformation": {
+   "releaseDetails": [
+    {
+     "id": "core",
+     "version": "1.30.2",
+     "buildDate": 1780494180000
+    },
+    {
+     "id": "validation-model",
+     "version": "1.30.2",
+     "buildDate": 1780494360000
+    },
+    {
+     "id": "apps",
+     "version": "1.30.2",
+     "buildDate": 1780494900000
+    }
+   ]
+  },
+  "jobs": [
+   {
+    "itemDetails": {
+     "name": "/tmp/verapdf-x/document.pdf",
+     "size": 77281
+    },
+    "validationResult": [
+     {
+      "details": {
+       "passedRules": 106,
+       "failedRules": 0,
+       "passedChecks": 235,
+       "failedChecks": 0,
+       "ruleSummaries": []
+      },
+      "jobEndStatus": "normal",
+      "profileName": "PDF/UA-1 validation profile",
+      "statement": "PDF file is compliant with Validation Profile requirements.",
+      "compliant": true
+     }
+    ],
+    "processingTime": {
+     "start": 1792278406981,
+     "finish": 1792278407366,
+     "duration": "00:00:00.385",
+     "difference": 385
+    }
+   }
+  ],
+  "batchSummary": {
+   "duration": {
+    "start": 1792278406894,
+    "finish": 1792278407384,
+    "duration": "00:00:00.490",
+    "difference": 490
+   },
+   "totalJobs": 1,
+   "outOfMemory": 0,
+   "veraExceptions": 0,
+   "failedEncryptedJobs": 0,
+   "failedParsingJobs": 0,
+   "validationSummary": {
+    "compliantPdfaCount": 1,
+    "failedJobCount": 0,
+    "totalJobCount": 1,
+    "nonCompliantPdfaCount": 0,
+    "successfulJobCount": 1
+   },
+   "featuresSummary": {
+    "failedJobCount": 0,
+    "totalJobCount": 0,
+    "successfulJobCount": 0
+   },
+   "repairSummary": {
+    "failedJobCount": 0,
+    "totalJobCount": 0,
+    "successfulJobCount": 0
+   },
+   "multiJob": false
+  }
+ }
+}

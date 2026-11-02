@@ -1,0 +1,35 @@
+id: document.export.docx
+version: 1
+description: >-
+  Render a Pandoc JSON AST into a Word (DOCX) document with the pinned Pandoc
+  of the export sidecar. Headings, lists, tables with header rows and math
+  (as Office Math) keep their structure. The DOCX is stored as an artifact and
+  the result carries its reference, never the bytes.
+
+input:
+  schema: artifact/pandoc-ast@1
+  media_types:
+    - application/json
+
+output:
+  schema: artifact/docx-export@1
+  media_types:
+    - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  by_reference: true
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  # Sidecar render limit (150 s) < provider timeout (180 s) <= this hint.
+  timeout_hint_seconds: 180
+
+semantics:
+  requires:
+    - document_structured
+  produces:
+    - accessible_docx_exported
+
+providers:
+  - id: pandoc-docx
+    version: "1.0+"

@@ -11,7 +11,6 @@ import os
 
 import pytest
 
-from acessilia_toolbox.core.errors import ConfigurationError
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers.cache import (
@@ -54,7 +53,9 @@ def live_cache(cache_descriptor: ProviderDescriptor) -> RedisExecutionCache | No
     """Return a connected cache or skip if Valkey is unreachable."""
     try:
         cache = create_cache(cache_descriptor)
-    except (ConfigurationError, Exception) as exc:
+        # Client creation is lazy; probe connectivity before running the contract.
+        cache._client.ping()
+    except Exception as exc:
         pytest.skip(
             f"Valkey unreachable at {cache_descriptor.endpoint}: {exc}. "
             "Start with `docker compose up -d`."

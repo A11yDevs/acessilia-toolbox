@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:a11y-devs:schema:pdf-export:1.0.0",
+  "title": "PDF export",
+  "description": "Metadata of a rendered PDF stored as an artifact; the bytes are retrieved through the artifact API.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_id",
+    "media_type",
+    "size_bytes",
+    "pdf_standard",
+    "engine",
+    "toolchain"
+  ],
+  "properties": {
+    "artifact_id": {
+      "type": "string",
+      "pattern": "^(sha256:)?[0-9a-f]{64}$",
+      "description": "Content address of the PDF in the artifact store."
+    },
+    "media_type": {
+      "type": "string",
+      "const": "application/pdf",
+      "description": "Media type of the stored artifact."
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Byte size of the PDF."
+    },
+    "pdf_standard": {
+      "type": "string",
+      "description": "Conformance target declared in the LaTeX document metadata, such as ua-1."
+    },
+    "engine": {
+      "type": "string",
+      "description": "LaTeX engine that produced the PDF."
+    },
+    "toolchain": {
+      "type": "object",
+      "description": "Versions of the components that shaped the output; they are part of the cache key.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

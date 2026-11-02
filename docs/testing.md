@@ -99,6 +99,26 @@ published semantics, not agent strategy.
 poetry run pytest tests/unit/ tests/integration/
 ```
 
+### Core and SDK during artifact storage outages
+
+`tests/cross_project/test_core_storage_outage.py` starts a local Toolbox HTTP
+server and runs the real Core extractor and SDK in a separate Python environment.
+It simulates unavailable storage for both initial upload and output JSON while
+using a stub extraction provider. This verifies inline-result continuity rather
+than production extraction quality or a multi-host deployment.
+
+Install the Core, its SDK and Docstruct in one environment, and Toolbox/API plus
+pytest in another; their HTTP client dependency requirements differ. Set
+`ACESSILIA_CORE_PYTHON` to the absolute Core Python executable and
+`ACESSILIA_CORE_ROOT` to its checkout. Run with the Toolbox Python environment:
+
+```bash
+python -m pytest tests/cross_project/test_core_storage_outage.py -v
+```
+
+The test is skipped if the Core environment variable is absent. CI provides
+both environments and pins the Core commit under test explicitly.
+
 ### Contract suite (requires containers)
 
 ```bash

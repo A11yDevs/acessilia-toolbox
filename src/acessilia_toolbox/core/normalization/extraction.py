@@ -8,6 +8,19 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class BinaryOutput:
+    """A file a provider produced next to its JSON document, such as a PDF.
+
+    The executor persists it in the artifact store, so the cached result and
+    the response carry a reference instead of the bytes.
+    """
+
+    payload: bytes
+    media_type: str
+    filename: str
+
+
+@dataclass(frozen=True)
 class ExtractionResult:
     """Raw output of a provider, before normalization.
 
@@ -22,3 +35,4 @@ class ExtractionResult:
     duration_ms: int
     version: str
     configuration: dict[str, Any] = field(default_factory=dict)
+    outputs: tuple[BinaryOutput, ...] = ()

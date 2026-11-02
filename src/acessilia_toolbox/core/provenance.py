@@ -26,6 +26,7 @@ class ExecutionProvenance(BaseModel):
     output_fingerprints: list[str] = Field(default_factory=list)
     parameters_hash: str
     model_versions: dict[str, str] = Field(default_factory=dict)
+    orientation: dict[str, Any] | None = None
     started_at: datetime
     completed_at: datetime
     duration_ms: int = Field(ge=0)

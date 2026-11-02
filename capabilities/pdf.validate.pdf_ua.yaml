@@ -1,0 +1,35 @@
+id: pdf.validate.pdf_ua
+version: 1
+description: >-
+  Check a PDF against the PDF/UA validation profile (PDF/UA-1 by default,
+  PDF/UA-2 on request) with a pinned veraPDF release. A non-compliant PDF is a
+  successful result: the report lists each failed rule, its ISO 14289 clause
+  and the first failing contexts.
+
+input:
+  schema: artifact/document@1
+  media_types:
+    - application/pdf
+
+output:
+  schema: artifact/pdf-validation-report@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  # Sidecar validation limit (240 s) < provider timeout (300 s) <= this hint.
+  timeout_hint_seconds: 300
+
+semantics:
+  # Any PDF can be validated, not only what document.export.pdf_ua produced.
+  requires:
+    - document_available
+  produces:
+    - pdf_ua_validated
+
+providers:
+  - id: verapdf
+    version: "1.0+"

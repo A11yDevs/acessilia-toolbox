@@ -46,7 +46,7 @@ class RedisExecutionCache:
             return None
         try:
             value = json.loads(raw)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return None
         return value if isinstance(value, dict) else None
 

@@ -21,34 +21,53 @@ The `docker-compose.yml` at the project root starts the Toolbox **with local bui
 
 ```bash
 # 1. Configure environment variables
-cp .env.example .env
+cp .env.example .env   # later, python scripts/sync_env.py adds new keys
 # Edit .env with credentials (MINIO_ACCESS_KEY, MINIO_SECRET_KEY...)
+# and set TOOLBOX_API_KEY (openssl rand -hex 32). Without it the toolbox
+# container refuses to start; for a throwaway local stack you can set
+# TOOLBOX_ALLOW_UNAUTHENTICATED=1 in .env instead (every endpoint open).
 
-# 2. Build and start all services
-docker compose up --build -d
+# 2. Build and start all services (toolbox + providers)
+docker compose --profile toolbox up --build -d
 
 # 3. Verify everything is working
 curl http://localhost:8002/v1/health
 ```
+
+> O serviço `toolbox` usa o profile `toolbox` para não subir automaticamente.
+> Use `docker compose up -d docling-serve minio valkey` para rodar apenas os providers.
 
 ### Development with hot-reload
 
 For interactive development, you can run the Toolbox outside the container (with uvicorn hot-reload) while providers run in Docker:
 
 ```bash
-# Terminal 1: Providers via Docker
+# Terminal 1: Providers via Docker (toolbox não sobe — tem profile "toolbox")
 docker compose up -d docling-serve minio valkey
 
 # Terminal 2: Toolbox with hot-reload
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-export DOCLING_SERVE_URL=http://localhost:5001
-export MINIO_URL=http://localhost:9000
-export VALKEY_URL=redis://localhost:6379
+cp .env.example .env.local
+# Edit .env.local with real credentials and localhost URLs:
+#   MINIO_ACCESS_KEY=your-access-key
+#   MINIO_SECRET_KEY=your-secret-key
+#   DOCLING_SERVE_URL=http://localhost:5001
+#   MINIO_URL=http://localhost:9000
+#   VALKEY_URL=redis://localhost:6379
+#   TOOLBOX_API_KEY=<openssl rand -hex 32>  (or TOOLBOX_ALLOW_UNAUTHENTICATED=1)
+./scripts/run-local.sh
+```
+
+> The `run-local.sh` script loads `.env.local` automatically and starts uvicorn
+> with `--reload`. If you prefer to run `uvicorn` directly, export the variables
+> first:
+> ```bash
+# export $(grep -v '^\s*#' .env.local | xargs)
+# uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
+```
 uvicorn acessilia_toolbox.api.app:create_app --factory --host 0.0.0.0 --port 8002 --reload
 ```
 
-> The `--reload` flag makes uvicorn restart the server automatically on every source code change.
+> O `--reload` flag makes uvicorn restart the server automatically on every source code change.
 
 ### Stop the environment
 
@@ -88,9 +107,9 @@ docker compose -f docker-compose.staging.yml up -d
 # Basic build (API only)
 docker build -t acessilia-toolbox:local .
 
-# Build with extras (storage + cache)
+# Build with extras (storage + cache + pdf + media + math)
 docker build \
-  --build-arg TOOLBOX_EXTRAS="api,storage,cache" \
+  --build-arg TOOLBOX_EXTRAS="api,storage,cache,pdf,media" \
   -t acessilia-toolbox:local .
 
 # Run
@@ -145,3 +164,50 @@ docker compose logs -f toolbox
 ```bash
 docker compose exec toolbox python -c "import acessilia_toolbox; print(acessilia_toolbox.__version__)"
 ```
+
+---
+
+## 6. Updating docstruct
+
+The Toolbox depends on
+[`acessilia-docstruct`](https://github.com/A11yDevs/acessilia/tree/develop/libs/docstruct),
+the pure structural-algorithm library shared with the core (see
+[architecture.md](architecture.md#shared-algorithms-docstruct)). It is published
+from the core repository as a wheel on a `docstruct-vX.Y.Z` GitHub Release and
+pinned in `pyproject.toml` by URL and `#sha256=`, so pip verifies the download.
+
+**Changing docstruct itself** happens in the core repository: a PR to
+`libs/docstruct`, a version bump, and a tag after the merge (see its
+[Releases](https://github.com/A11yDevs/acessilia/blob/develop/libs/docstruct/README.md#releases)
+section). Never patch the installed copy or copy its code into this repository.
+
+**Moving the Toolbox to a new release**, in its own PR:
+
+```bash
+# 1. Read the pin line from the release notes
+gh release view docstruct-vX.Y.Z -R A11yDevs/acessilia
+
+# 2. Replace the acessilia-docstruct line in pyproject.toml with that pin,
+#    then refresh the lock; the diff must touch only the acessilia-docstruct entry
+uv lock
+git diff uv.lock
+
+# 3. Reinstall and run the checks
+pip install -e ".[dev]"
+pytest
+ruff check src tests
+mypy src/
+```
+
+The image installs dependencies from `uv.lock` with `pip --require-hashes`, and
+`uv export --locked` fails the build when the lock does not match
+`pyproject.toml`, so a forgotten `uv lock` shows up in CI rather than in
+production.
+
+**Trying an unreleased docstruct change** locally, before it is published:
+
+```bash
+pip install -e ../acessilia/libs/docstruct   # path to a core checkout
+```
+
+Do not commit a path dependency; the PR must pin a published release.

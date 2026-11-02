@@ -103,3 +103,10 @@ def test_non_object_entry_is_rejected() -> None:
 def test_factory_requires_the_redis_transport() -> None:
     with pytest.raises(ConfigurationError):
         create_cache(descriptor(transport="http"))
+
+
+
+def test_invalid_utf8_entry_is_treated_as_a_miss(monkeypatch) -> None:
+    client = FakeRedis()
+    monkeypatch.setattr(client, "get", lambda _: b"\xff")
+    assert cache_with(client).get("key") is None

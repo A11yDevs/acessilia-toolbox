@@ -1,0 +1,29 @@
+id: dataset.sync
+version: 1
+description: >-
+  Re-mirror all artifacts for a dataset (or one split) to the local artifact
+  store. Requires mirroring to be enabled in the provider config.
+
+input:
+  schema: artifact/query@1
+
+output:
+  schema: artifact/dataset-sync-report@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: true
+  cacheable: false
+  timeout_hint_seconds: 600
+
+semantics:
+  requires:
+    - datasets_available
+  produces:
+    - artifacts_mirrored
+
+providers:
+  - id: dataset-github
+  - id: dataset-huggingface

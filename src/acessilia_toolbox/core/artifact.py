@@ -7,10 +7,12 @@ explicitly requested operations.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from acessilia_toolbox.core.errors import InvalidInputError
 from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 
 
@@ -88,5 +90,7 @@ class NullCache:
 
 def shards(artifact_id: str) -> tuple[str, str, str]:
     """Split a digest into directory shards, keeping buckets browsable."""
+    if not re.fullmatch(r"(?:sha256:)?[0-9a-f]{64}", artifact_id):
+        raise InvalidInputError("invalid SHA-256 artifact identifier")
     digest = artifact_id.removeprefix("sha256:")
     return digest[:2], digest[2:4], digest

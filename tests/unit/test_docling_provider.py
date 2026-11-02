@@ -136,6 +136,9 @@ def test_http_error_is_normalized_as_execution_failure() -> None:
 
     assert error.value.code == "provider_execution_failed"
     assert error.value.details["status_code"] == 422
+    # The sidecar's own wording must survive: it is what makes a deployment
+    # failure (missing dependency, OOM) diagnosable from the Toolbox error.
+    assert "docling-serve rejected the document: HTTP 422 - unsupported" in str(error.value)
 
 
 def test_timeout_is_normalized() -> None:
@@ -146,6 +149,20 @@ def test_timeout_is_normalized() -> None:
         extract(provider_with(handler))
 
     assert error.value.code == "provider_timeout"
+
+
+@pytest.mark.parametrize(
+    ("status", "error_type"),
+    [(504, ProviderTimeoutError), (503, ProviderUnavailableError)],
+)
+def test_transient_gateway_response_retains_its_error_category(status, error_type) -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, json={"detail": "conversion temporarily unavailable"})
+
+    with pytest.raises(error_type) as error:
+        extract(provider_with(handler))
+
+    assert error.value.http_status == status
 
 
 def test_connection_failure_is_normalized_as_unavailable() -> None:
@@ -188,4 +205,4 @@ def test_factory_rejects_providers_without_an_adapter() -> None:
     from acessilia_toolbox.core.errors import ProviderNotFoundError
 
     with pytest.raises(ProviderNotFoundError):
-        create_adapter(descriptor(id="mineru", capabilities=["document.ocr"]))
+        create_adapter(descriptor(id="no-such-provider", capabilities=["document.ocr"]))

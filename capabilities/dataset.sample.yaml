@@ -1,0 +1,28 @@
+id: dataset.sample
+version: 1
+description: >-
+  Get a random sample of items from a dataset split.
+
+input:
+  schema: artifact/query@1
+
+output:
+  schema: artifact/dataset-item-list@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: false
+  cacheable: false
+  timeout_hint_seconds: 60
+
+semantics:
+  requires:
+    - splits_known
+  produces:
+    - items_listed
+
+providers:
+  - id: dataset-github
+  - id: dataset-huggingface

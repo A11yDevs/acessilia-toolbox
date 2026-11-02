@@ -1,7 +1,7 @@
 """Provider-agnostic normalization into the canonical structured document."""
 
 from acessilia_toolbox.core.normalization.builder import build_processing_manifest
-from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+from acessilia_toolbox.core.normalization.extraction import BinaryOutput, ExtractionResult
 from acessilia_toolbox.core.normalization.models import (
     SCHEMA_ID,
     SCHEMA_VERSION,
@@ -16,6 +16,7 @@ from acessilia_toolbox.core.normalization.schema import (
 __all__ = [
     "SCHEMA_ID",
     "SCHEMA_VERSION",
+    "BinaryOutput",
     "ExtractionResult",
     "ProcessingManifest",
     "build_processing_manifest",

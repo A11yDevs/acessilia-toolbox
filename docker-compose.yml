@@ -2,12 +2,17 @@
 services:
   # ── Toolbox (build local) ──────────────────────────────────────
   toolbox:
+    profiles: ["toolbox"]
     build:
       context: .
       dockerfile: Dockerfile
       target: production
       args:
-        TOOLBOX_EXTRAS: api
+        TOOLBOX_EXTRAS: api,storage,cache,pdf,media
+        # Surfaced by GET /v1/health so a local container reports the revision
+        # it was built from. Override with GIT_COMMIT/IMAGE_TAG in the shell.
+        GIT_COMMIT: ${GIT_COMMIT:-}
+        IMAGE_TAG: ${IMAGE_TAG:-local}
     image: acessilia-toolbox:local
     container_name: acessilia-toolbox
     ports:
@@ -16,17 +21,36 @@ services:
       TOOLBOX_PORT: 8002
       TOOLBOX_PROVIDERS_CONFIG: /app/providers-config.yaml
       DOCLING_SERVE_URL: ${DOCLING_SERVE_URL:-http://docling-serve:5001}
-      MINIO_URL: ${MINIO_URL:-http://acessilia-minio:9000}
+      NOUGAT_SERVE_URL: ${NOUGAT_SERVE_URL:-http://nougat-serve:5004}
+      AUDIVERIS_SERVE_URL: ${AUDIVERIS_SERVE_URL:-http://audiveris-serve:5003}
+      RAPID_LATEX_OCR_URL: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
+      PP_FORMULANET_URL: ${PP_FORMULANET_URL:-http://pp-formulanet:5010}
+      RAPIDOCR_ORIENT_URL: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
+      PDF_UA_RENDER_URL: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
+      VERAPDF_VALIDATE_URL: ${VERAPDF_VALIDATE_URL:-http://verapdf-validate:5008}
+      MATH_SPEECH_URL: ${MATH_SPEECH_URL:-http://math-speech:5009}
+      VLM_SERVE_URL: ${VLM_SERVE_URL:-}
+      VLM_API_KEY: ${VLM_API_KEY:-}
+      MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      VALKEY_URL: ${VALKEY_URL:-redis://acessilia-valkey:6379}
+      TOOLBOX_ARTIFACT_FALLBACK_MODE: ${TOOLBOX_ARTIFACT_FALLBACK_MODE:-disabled}
+      VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
+      TOOLBOX_API_KEY: ${TOOLBOX_API_KEY:-}
+      # The toolbox refuses to start without TOOLBOX_API_KEY; 1 here starts it
+      # unauthenticated for local development only.
+      TOOLBOX_ALLOW_UNAUTHENTICATED: ${TOOLBOX_ALLOW_UNAUTHENTICATED:-}
     env_file:
       - .env
+    volumes:
+      - ${ARTIFACT_FALLBACK_SOURCE:-artifact-fallback}:/tmp/acessilia-toolbox-artifacts
     depends_on:
       docling-serve:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
       valkey:
         condition: service_healthy
     restart: unless-stopped
@@ -39,15 +63,21 @@ services:
 
   # ── Providers ──────────────────────────────────────────────────
   docling-serve:
+    restart: unless-stopped
     image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.32.0}
     container_name: docling-serve
     ports:
       - "${DOCLING_SERVE_PORT:-5001}:5001"
     environment:
       DOCLING_SERVE_ENABLE_UI: "${DOCLING_SERVE_ENABLE_UI:-false}"
+      # The image caches models under /opt/app-root/src/.cache/docling/models
+      # (its own DOCLING_SERVE_ARTIFACTS_PATH default), not under /root/.cache.
+      # Mounting the volume at the wrong path leaves it permanently empty, so
+      # every container start re-downloads the models.
+      DOCLING_SERVE_ARTIFACTS_PATH: /opt/app-root/src/.cache/docling/models
     volumes:
       # Models are downloaded on first request and cached here.
-      - docling-models:/root/.cache/docling
+      - docling-models:/opt/app-root/src/.cache/docling
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:5001/health')"]
       interval: 10s
@@ -57,7 +87,7 @@ services:
 
   # Artifact storage. Credentials come from the environment, never from here.
   minio:
-    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-04-22T22-12-26Z}
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034}
     container_name: acessilia-minio
     command: server /data --console-address ":9001"
     ports:
@@ -89,7 +119,195 @@ services:
       timeout: 5s
       retries: 10
 
+      # ── One-shot bucket init ──────────────────────────────────────
+  minio-init:
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034}
+    container_name: acessilia-minio-init
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        mc alias set local http://minio:9000 "$${MINIO_ACCESS_KEY}" "$${MINIO_SECRET_KEY}"
+        mc mb local/acessilia --ignore-existing
+        echo "Bucket acessilia created/verified"
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+  # Optical music recognition sidecar (optional; Audiveris + Tesseract).
+  audiveris-serve:
+    image: ${AUDIVERIS_SERVE_IMAGE:-audiveris-serve:latest}
+    container_name: audiveris-serve
+    ports:
+      - "${AUDIVERIS_SERVE_PORT:-5003}:5003"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5003/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # Nougat visual document transcription service (optional; LaTeX math/tables).
+  # Build the image locally via scripts/build-nougat-image.sh if not pulling.
+  nougat-serve:
+    image: ${NOUGAT_SERVE_IMAGE:-nougat:latest}
+    container_name: nougat-serve
+    ports:
+      - "${NOUGAT_SERVE_PORT:-5004}:5004"
+    environment:
+      NOUGAT_MODEL_TAG: "${NOUGAT_MODEL_TAG:-0.1.0-base}"
+      NOUGAT_EARLY_STOPPING: "${NOUGAT_EARLY_STOPPING:-false}"
+    volumes:
+      - nougat-torch-models:/root/.cache/torch/hub
+      - nougat-models:/root/.cache/nougat
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # MinerU document parsing (CPU pipeline backend). The image is built from the
+  # official repo via scripts/build-mineru-image.sh (MinerU publishes no
+  # pre-built images). On a GPU host, build with the vllm base and add
+  # `deploy.resources.reservations.devices` for GPU access.
+  mineru-serve:
+    restart: unless-stopped
+    # Size from measured peak use; 0 keeps the existing uncapped behavior.
+    mem_limit: ${MINERU_MEMORY_LIMIT:-0}
+    image: ${MINERU_SERVE_IMAGE:-mineru:latest}
+    container_name: mineru-serve
+    entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${MINERU_SERVE_PORT:-5002}:8000"
+    environment:
+      MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+      HF_HOME: /home/mineru/.cache/huggingface
+    volumes:
+      - mineru-models:/home/mineru/.cache/modelscope
+      - mineru-huggingface:/home/mineru/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
+  # Lightweight math formula OCR sidecar (RapidLaTeXOCR).
+  rapid-latex-ocr:
+    build:
+      context: .
+      dockerfile: docker/math-ocr.Dockerfile
+    image: ${RAPID_LATEX_OCR_IMAGE:-rapid-latex-ocr:latest}
+    container_name: rapid-latex-ocr
+    ports:
+      - "${RAPID_LATEX_OCR_PORT:-5005}:5004"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # PP-FormulaNet_plus-M formula OCR sidecar (PaddleOCR, CPU).
+  pp-formulanet:
+    build:
+      context: .
+      dockerfile: docker/pp-formulanet.Dockerfile
+    image: ${PP_FORMULANET_IMAGE:-pp-formulanet:latest}
+    container_name: pp-formulanet
+    ports:
+      - "${PP_FORMULANET_PORT:-5010}:5010"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5010/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    restart: unless-stopped
+
+  # Lightweight page orientation detection sidecar (RapidOCR).
+  rapidocr-orient:
+    build:
+      context: .
+      dockerfile: docker/rapidocr-orient.Dockerfile
+    image: ${RAPIDOCR_ORIENT_IMAGE:-rapidocr-orient:latest}
+    container_name: rapidocr-orient
+    ports:
+      - "${RAPIDOCR_ORIENT_PORT:-5006}:5006"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5006/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # Pandoc + frozen TeX Live sidecar for document.export.pdf_ua, and Pandoc alone
+  # for document.export.docx. The image build renders a smoke-test PDF and DOCX,
+  # so a broken toolchain fails at build time.
+  pdf-ua-render:
+    build:
+      context: .
+      dockerfile: docker/pdf-ua-render.Dockerfile
+    image: ${PDF_UA_RENDER_IMAGE:-pdf-ua-render:latest}
+    container_name: pdf-ua-render
+    ports:
+      - "${PDF_UA_RENDER_PORT:-5007}:5007"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5007/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  # veraPDF sidecar for pdf.validate.pdf_ua. The image build validates a
+  # smoke-test PDF, so a broken JRE or veraPDF install fails at build time.
+  verapdf-validate:
+    build:
+      context: .
+      dockerfile: docker/verapdf-validate.Dockerfile
+    image: ${VERAPDF_VALIDATE_IMAGE:-verapdf-validate:latest}
+    container_name: verapdf-validate
+    ports:
+      - "${VERAPDF_VALIDATE_PORT:-5008}:5008"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5008/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+  math-speech:
+    build:
+      context: .
+      dockerfile: docker/math-speech.Dockerfile
+    image: ${MATH_SPEECH_IMAGE:-math-speech:latest}
+    container_name: math-speech
+    ports:
+      - "${MATH_SPEECH_PORT:-5009}:5009"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5009/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
+  artifact-fallback:
   docling-models:
+  mineru-models:
+  mineru-huggingface:
   minio-data:
+  nougat-models:
+  nougat-torch-models:
   valkey-data:

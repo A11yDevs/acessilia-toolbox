@@ -219,3 +219,16 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .github/rulesets/*.json
+.DS_Store
+
+# Local development overrides (credentials, local endpoints)
+.env.local
+# Remote Toolbox the E2E smoke tests target (holds its API key)
+.env.e2e
+
+# math-speech sidecar build outputs (rebuilt inside the image).
+docker/math-speech/node_modules/
+docker/math-speech/mathcat-wasm/target/
+
+# Production deployment secrets and registry settings
+.deploy.env

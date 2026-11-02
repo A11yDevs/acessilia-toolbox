@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegistry
 
 # A single type keeps the toolbox domain simple; the agentic core can extend it.
-DEFAULT_TYPES = "document artifact"
+DEFAULT_TYPES = "document artifact dataset split item"
 
 
 def capability_action(manifest: CapabilityManifest) -> str:
@@ -89,4 +89,15 @@ def _pddl_param(predicate: str) -> str:
 
 
 def _pddl_type(predicate: str) -> str:
-    return "document"
+    """Map a predicate to its PDDL type based on naming conventions."""
+    prefix = predicate.split("_")[0] if "_" in predicate else "document"
+    type_map = {
+        "dataset": "dataset",
+        "datasets": "dataset",
+        "split": "split",
+        "splits": "split",
+        "item": "item",
+        "items": "item",
+        "artifact": "artifact",
+    }
+    return type_map.get(prefix, "document")

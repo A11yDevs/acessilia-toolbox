@@ -2,19 +2,26 @@
 
 Requires TOOLBOX_BASE_URL to be set (e.g. https://www.acessilia3.inf.ufg.br/toolbox).
 Skipped automatically when the variable is absent — never blocks the local suite.
+Set TOOLBOX_API_KEY too when the server requires authentication: every request
+then carries it as a Bearer token. Both can live in .env.e2e (copy
+.env.e2e.example), which tests/e2e/target.py reads; the environment takes precedence.
 """
 
 from __future__ import annotations
 
-import os
+import tempfile
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 
+from tests.e2e.target import e2e_setting
+
 pytestmark = pytest.mark.e2e
 
-TOOLBOX_BASE_URL = os.getenv("TOOLBOX_BASE_URL", "").rstrip("/")
+TOOLBOX_BASE_URL = e2e_setting("TOOLBOX_BASE_URL").rstrip("/")
+TOOLBOX_API_KEY = e2e_setting("TOOLBOX_API_KEY")
 DATASET_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "dataset" / "input"
 
 
@@ -24,14 +31,38 @@ def _skip_if_no_url() -> str:
     return TOOLBOX_BASE_URL
 
 
+def _headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {TOOLBOX_API_KEY}"} if TOOLBOX_API_KEY else {}
+
+
+def _get(url: str, **kwargs: Any) -> httpx.Response:
+    return httpx.get(url, headers=_headers(), **kwargs)
+
+
+def _post(url: str, **kwargs: Any) -> httpx.Response:
+    return httpx.post(url, headers=_headers(), **kwargs)
+
+
 def _pick_pdf() -> Path:
-    """Pick the smallest PDF from the dataset for quick testing."""
-    pdfs = sorted(
-        p for p in DATASET_DIR.glob("*.pdf") if p.stat().st_size < 500_000
-    )
-    if not pdfs:
-        pytest.skip("No suitable PDF found in tests/fixtures/dataset/input/")
-    return pdfs[0]
+    """Pick a small fixture or generate a deterministic two-page PDF."""
+    pdfs = sorted(p for p in DATASET_DIR.glob("*.pdf") if p.stat().st_size < 500_000)
+    if pdfs:
+        return pdfs[0]
+
+    try:
+        import fitz
+    except ImportError:
+        pytest.skip("PyMuPDF is required to generate the E2E PDF fixture")
+
+    generated = Path(tempfile.gettempdir()) / "acessilia-toolbox-e2e.pdf"
+    if not generated.exists():
+        document = fitz.open()
+        for number in (1, 2):
+            page = document.new_page()
+            page.insert_text((72, 72), f"Acessilia Toolbox E2E page {number}")
+        document.save(generated)
+        document.close()
+    return generated
 
 
 # ──────────────────────────────────────────────
@@ -44,14 +75,14 @@ class TestHealth:
 
     def test_health_returns_200(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/health", timeout=10)
+        resp = _get(f"{base}/v1/health", timeout=10)
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "healthy"
 
     def test_health_returns_version(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/health", timeout=10)
+        resp = _get(f"{base}/v1/health", timeout=10)
         data = resp.json()
         assert "version" in data
 
@@ -61,7 +92,7 @@ class TestCapabilities:
 
     def test_list_capabilities_returns_list(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/capabilities", timeout=10)
+        resp = _get(f"{base}/v1/capabilities", timeout=10)
         assert resp.status_code == 200
         caps = resp.json()
         assert isinstance(caps, list)
@@ -69,7 +100,7 @@ class TestCapabilities:
 
     def test_document_structure_extract_is_present(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/capabilities", timeout=10)
+        resp = _get(f"{base}/v1/capabilities", timeout=10)
         ids = [c["id"] for c in resp.json()]
         assert "document.structure.extract" in ids
 
@@ -79,7 +110,7 @@ class TestProviders:
 
     def test_list_providers_returns_list(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/providers", timeout=10)
+        resp = _get(f"{base}/v1/providers", timeout=10)
         assert resp.status_code == 200
         providers = resp.json()
         assert isinstance(providers, list)
@@ -88,7 +119,7 @@ class TestProviders:
     def test_docling_provider_is_healthy(self) -> None:
         base = _skip_if_no_url()
         # Health is checked via the dedicated endpoint, not embedded in /v1/providers
-        resp = httpx.get(f"{base}/v1/providers/docling/health", timeout=10)
+        resp = _get(f"{base}/v1/providers/docling/health", timeout=10)
         assert resp.status_code == 200
         data = resp.json()
         assert data["healthy"] is True
@@ -101,10 +132,10 @@ class TestExtraction:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/document.structure.extract:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"language": "pt-BR"},
+                data={"language": "pt-BR", "provider": "docling"},
                 timeout=300,
             )
         assert resp.status_code == 200
@@ -115,10 +146,10 @@ class TestExtraction:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/document.structure.extract:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"language": "pt-BR"},
+                data={"language": "pt-BR", "provider": "docling"},
                 timeout=300,
             )
         data = resp.json()
@@ -129,10 +160,10 @@ class TestExtraction:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/document.structure.extract:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"language": "pt-BR"},
+                data={"language": "pt-BR", "provider": "docling"},
                 timeout=300,
             )
         data = resp.json()
@@ -150,7 +181,7 @@ class TestArtifacts:
     def _store_or_skip(self, base: str, pdf_path: Path) -> str:
         """Try to store an artifact; skip tests if storage is not configured."""
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/artifacts",
                 files={"file": (pdf_path.name, f, "application/pdf")},
                 timeout=30,
@@ -169,9 +200,7 @@ class TestArtifacts:
         pdf_path = _pick_pdf()
         artifact_id = self._store_or_skip(base, pdf_path)
 
-        retrieve_resp = httpx.get(
-            f"{base}/v1/artifacts/{artifact_id}", timeout=30
-        )
+        retrieve_resp = _get(f"{base}/v1/artifacts/{artifact_id}", timeout=30)
         assert retrieve_resp.status_code == 200
         assert len(retrieve_resp.content) > 0
 
@@ -180,9 +209,9 @@ class TestArtifacts:
         pdf_path = _pick_pdf()
         artifact_id = self._store_or_skip(base, pdf_path)
 
-        resp = httpx.post(
+        resp = _post(
             f"{base}/v1/capabilities/document.structure.extract:execute",
-            json={
+            data={
                 "artifact_id": artifact_id,
                 "language": "pt-BR",
                 "provider": "docling",
@@ -199,12 +228,12 @@ class TestPddl:
 
     def test_domain_endpoint(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/planning/domain", timeout=10)
+        resp = _get(f"{base}/v1/planning/domain", timeout=10)
         assert resp.status_code == 200
 
     def test_predicates_endpoint(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/planning/predicates", timeout=10)
+        resp = _get(f"{base}/v1/planning/predicates", timeout=10)
         assert resp.status_code == 200
 
 
@@ -215,7 +244,7 @@ class TestPdfSplit:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.split:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
                 timeout=120,
@@ -231,7 +260,7 @@ class TestPdfSplit:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.split:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
                 timeout=120,
@@ -249,7 +278,7 @@ class TestPdfSplit:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.split:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
                 timeout=120,
@@ -262,7 +291,7 @@ class TestPdfSplit:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.split:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
                 data={"parameters": '{"max_pages": 1}'},
@@ -276,7 +305,7 @@ class TestPdfSplit:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.split:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
                 timeout=120,
@@ -288,16 +317,16 @@ class TestPdfSplit:
 
 
 class TestPdfRender:
-    """POST /v1/capabilities/pdf.render:execute"""
+    """POST /v1/capabilities/pdf.render:execute with version=1 (legacy contract)"""
 
     def test_render_returns_png_image(self) -> None:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 1}'},
+                data={"version": "1", "parameters": '{"page_number": 1}'},
                 timeout=120,
             )
         assert resp.status_code == 200
@@ -314,10 +343,10 @@ class TestPdfRender:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 2}'},
+                data={"version": "1", "parameters": '{"page_number": 2}'},
                 timeout=120,
             )
         assert resp.status_code == 200
@@ -328,10 +357,10 @@ class TestPdfRender:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 999}'},
+                data={"version": "1", "parameters": '{"page_number": 999}'},
                 timeout=120,
             )
         assert resp.status_code != 200
@@ -340,17 +369,17 @@ class TestPdfRender:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            low_resp = httpx.post(
+            low_resp = _post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 1, "dpi": 72}'},
+                data={"version": "1", "parameters": '{"page_number": 1, "dpi": 72}'},
                 timeout=120,
             )
         with open(pdf_path, "rb") as f:
-            high_resp = httpx.post(
+            high_resp = _post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 1, "dpi": 300}'},
+                data={"version": "1", "parameters": '{"page_number": 1, "dpi": 300}'},
                 timeout=120,
             )
         low_size = low_resp.json()["document"]["size_bytes"]
@@ -361,10 +390,10 @@ class TestPdfRender:
         base = _skip_if_no_url()
         pdf_path = _pick_pdf()
         with open(pdf_path, "rb") as f:
-            resp = httpx.post(
+            resp = _post(
                 f"{base}/v1/capabilities/pdf.render:execute",
                 files={"file": (pdf_path.name, f, "application/pdf")},
-                data={"parameters": '{"page_number": 1}'},
+                data={"version": "1", "parameters": '{"page_number": 1}'},
                 timeout=120,
             )
         data = resp.json()
@@ -373,30 +402,76 @@ class TestPdfRender:
         assert "provider_version" in prov
 
 
+class TestPdfRenderV2:
+    """POST /v1/capabilities/pdf.render:execute without a version (pdf.render@2)
+
+    The PNG is stored by reference, so these need the artifact store.
+    """
+
+    def _render(self, base: str, parameters: str) -> dict:
+        pdf_path = _pick_pdf()
+        with open(pdf_path, "rb") as f:
+            resp = _post(
+                f"{base}/v1/capabilities/pdf.render:execute",
+                files={"file": (pdf_path.name, f, "application/pdf")},
+                data={"parameters": parameters},
+                timeout=120,
+            )
+        if resp.status_code == 500 and "no artifact storage provider" in resp.text:
+            pytest.skip("artifact store not configured on this server")
+        assert resp.status_code == 200, resp.text
+        return dict(resp.json())
+
+    def test_default_version_stores_the_png_by_reference(self) -> None:
+        base = _skip_if_no_url()
+        data = self._render(base, '{"page_number": 1, "dpi": 72}')
+
+        assert data["provenance"]["capability_version"] == 2
+        doc = data["document"]
+        assert "image_bytes_base64" not in doc
+        assert doc["width_px"] > 0 and doc["height_px"] > 0
+        assert doc["artifact_id"] in [a["artifact_id"] for a in data["artifacts"]]
+        png = _get(f"{base}/v1/artifacts/{doc['artifact_id']}", timeout=30)
+        assert png.status_code == 200
+        assert png.content[:4] == b"\x89PNG"
+
+    def test_clip_and_max_side_are_reported(self) -> None:
+        base = _skip_if_no_url()
+        data = self._render(
+            base,
+            '{"page_number": 1, "max_side": 64,'
+            ' "clip": {"left": 0, "top": 0, "right": 100, "bottom": 50}}',
+        )
+
+        doc = data["document"]
+        assert doc["clip"] == {"left": 0, "top": 0, "right": 100, "bottom": 50}
+        assert max(doc["width_px"], doc["height_px"]) == 64
+
+
 class TestNewCapabilitiesInListing:
     """Verify the new capabilities appear in the listing."""
 
     def test_pdf_split_is_listed(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/capabilities", timeout=10)
+        resp = _get(f"{base}/v1/capabilities", timeout=10)
         ids = [c["id"] for c in resp.json()]
         assert "pdf.split" in ids
 
     def test_pdf_render_is_listed(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/capabilities", timeout=10)
+        resp = _get(f"{base}/v1/capabilities", timeout=10)
         ids = [c["id"] for c in resp.json()]
         assert "pdf.render" in ids
 
     def test_pymupdf_provider_is_listed(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/providers", timeout=10)
+        resp = _get(f"{base}/v1/providers", timeout=10)
         ids = [p["id"] for p in resp.json()]
         assert "pymupdf-pdf" in ids
 
     def test_pymupdf_provider_is_healthy(self) -> None:
         base = _skip_if_no_url()
-        resp = httpx.get(f"{base}/v1/providers/pymupdf-pdf/health", timeout=10)
+        resp = _get(f"{base}/v1/providers/pymupdf-pdf/health", timeout=10)
         assert resp.status_code == 200
         data = resp.json()
         assert data["healthy"] is True

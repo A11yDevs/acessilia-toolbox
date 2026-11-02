@@ -1,0 +1,35 @@
+﻿id: image.page.orient
+version: 1
+description: >-
+  Detect page orientation (0°, 90°, 180°, 270°) and optionally rotate raster page
+  images to upright orientation.
+
+input:
+  schema: artifact/image@1
+  media_types:
+    - image/png
+    - image/jpeg
+    - image/tiff
+    - image/webp
+
+output:
+  schema: artifact/page-orientation@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: false
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 30
+
+semantics:
+  requires:
+    - image_readable
+  produces:
+    - page_upright
+    - orientation_detected
+
+providers:
+  - id: rapidocr-orient
+    version: "1.0+"

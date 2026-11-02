@@ -1,0 +1,81 @@
+{
+ "report": {
+  "buildInformation": {
+   "releaseDetails": [
+    {
+     "id": "core",
+     "version": "1.30.2",
+     "buildDate": 1780494180000
+    },
+    {
+     "id": "validation-model",
+     "version": "1.30.2",
+     "buildDate": 1780494360000
+    },
+    {
+     "id": "apps",
+     "version": "1.30.2",
+     "buildDate": 1780494900000
+    }
+   ]
+  },
+  "jobs": [
+   {
+    "itemDetails": {
+     "name": "/tmp/verapdf-x/document.pdf",
+     "size": 8
+    },
+    "taskException": {
+     "exception": "Couldn't parse stream",
+     "type": "PARSE",
+     "duration": {
+      "start": 1792278410146,
+      "finish": 1792278410184,
+      "duration": "00:00:00.038",
+      "difference": 38
+     },
+     "executed": true,
+     "success": false,
+     "exceptionMessage": "Exception: Couldn't parse stream caused by exception: End of file is reached"
+    },
+    "processingTime": {
+     "start": 1792278410146,
+     "finish": 1792278410184,
+     "duration": "00:00:00.038",
+     "difference": 38
+    }
+   }
+  ],
+  "batchSummary": {
+   "duration": {
+    "start": 1792278410106,
+    "finish": 1792278410201,
+    "duration": "00:00:00.095",
+    "difference": 95
+   },
+   "totalJobs": 1,
+   "outOfMemory": 0,
+   "veraExceptions": 0,
+   "featuresSummary": {
+    "failedJobCount": 0,
+    "totalJobCount": 0,
+    "successfulJobCount": 0
+   },
+   "repairSummary": {
+    "failedJobCount": 0,
+    "totalJobCount": 0,
+    "successfulJobCount": 0
+   },
+   "multiJob": false,
+   "failedEncryptedJobs": 0,
+   "failedParsingJobs": 1,
+   "validationSummary": {
+    "nonCompliantPdfaCount": 0,
+    "compliantPdfaCount": 0,
+    "failedJobCount": 1,
+    "totalJobCount": 1,
+    "successfulJobCount": 0
+   }
+  }
+ }
+}

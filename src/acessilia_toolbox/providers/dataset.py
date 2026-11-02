@@ -1,0 +1,557 @@
+"""Dataset provider protocol and adapter bridge.
+
+A `DatasetProvider` knows how to talk to one remote dataset source (GitHub,
+HuggingFace, …).  The `DatasetAdapter` wraps it so it satisfies the
+`ProviderAdapter` protocol that the executor expects.
+
+Mirroring
+---------
+When an ``ArtifactStore`` is provided and the provider config has
+``mirror: true``, dataset artifacts fetched via ``get_artifact`` are
+persisted in the store for subsequent fast retrieval.  Metadata
+(list/describe/splits) is cached in ``ExecutionCache`` when available.
+"""
+
+from __future__ import annotations
+
+import json
+from collections import OrderedDict
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import suppress
+from datetime import UTC, datetime
+from time import time
+from typing import Any, Protocol, runtime_checkable
+
+from pydantic import TypeAdapter, ValidationError
+
+from acessilia_toolbox.core.artifact import (
+    ArtifactRef,
+    ArtifactStore,
+    ExecutionCache,
+    NullCache,
+    shards,
+)
+from acessilia_toolbox.core.dataset import (
+    DatasetInfo,
+    DatasetItem,
+    ItemSummary,
+    SplitInfo,
+)
+from acessilia_toolbox.core.errors import (
+    ArtifactNotFoundError,
+    DatasetProviderError,
+    InvalidInputError,
+    ToolboxError,
+)
+from acessilia_toolbox.core.fingerprint import fingerprint_bytes
+from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+
+# Cache key prefixes
+_META_CACHE_PREFIX = "dataset:meta:"
+_ARTIFACT_CACHE_PREFIX = "dataset:artifact:"
+_METADATA_SCHEMAS: dict[str, TypeAdapter[Any]] = {
+    "list_datasets": TypeAdapter(list[DatasetInfo]),
+    "describe": TypeAdapter(DatasetInfo),
+    "list_splits": TypeAdapter(list[SplitInfo]),
+    "list_items": TypeAdapter(list[ItemSummary]),
+}
+_META_TTL = 300  # 5 minutes for metadata
+_ARTIFACT_TTL = 86400 * 7  # 7 days for mirrored artifact references
+
+
+def _cache_is_fresh(cached: dict[str, Any], ttl: int) -> bool:
+    recorded = cached.get("cached_at")
+    return (
+        not isinstance(recorded, bool)
+        and isinstance(recorded, (int, float))
+        and 0 <= time() - recorded < ttl
+    )
+
+
+@runtime_checkable
+class DatasetProvider(Protocol):
+    """Protocol for dataset access providers.
+
+    Each method maps to one capability operation.  Implementations fetch from
+    the remote source and return the normalised model objects.
+    """
+
+    descriptor: ProviderDescriptor
+
+    def list_datasets(self) -> Sequence[DatasetInfo]: ...
+
+    def describe(self, dataset_id: str, revision: str | None = None) -> DatasetInfo: ...
+
+    def list_splits(
+        self, dataset_id: str, revision: str | None = None
+    ) -> Sequence[SplitInfo]: ...
+
+    def list_items(
+        self,
+        dataset_id: str,
+        split: str,
+        revision: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Sequence[ItemSummary]: ...
+
+    def get_item(
+        self,
+        dataset_id: str,
+        item_id: str,
+        split: str,
+        revision: str | None = None,
+    ) -> DatasetItem: ...
+
+    def get_artifact(
+        self,
+        dataset_id: str,
+        artifact_path: str,
+        revision: str | None = None,
+    ) -> tuple[bytes, str]: ...
+
+    def sample(
+        self,
+        dataset_id: str,
+        split: str,
+        n: int = 5,
+        revision: str | None = None,
+    ) -> Sequence[DatasetItem]: ...
+
+
+class DatasetAdapter:
+    """Wraps a DatasetProvider to conform to ProviderAdapter.
+
+    The executor's ``if isinstance(extraction.document, dict)`` branch handles
+    the plain dict returned here - no processing-manifest builder needed.
+
+    When an ``ArtifactStore`` is supplied and the provider config has
+    ``mirror: true``, artifacts are mirrored to the store on first fetch.
+    """
+
+    def __init__(
+        self,
+        descriptor: ProviderDescriptor,
+        provider: DatasetProvider,
+        *,
+        store: ArtifactStore | None = None,
+        cache: ExecutionCache | None = None,
+    ) -> None:
+        self.descriptor = descriptor
+        self._provider = provider
+        self._store = store
+        self._cache = cache or NullCache()
+        self._mirror = bool(descriptor.config.get("mirror", False))
+        # A disabled execution cache must not disable artifact mirroring.
+        self._mirror_refs: OrderedDict[str, tuple[float, ArtifactRef]] = OrderedDict()
+
+    # ------------------------------------------------------------------
+    # ProviderAdapter protocol
+    # ------------------------------------------------------------------
+
+    def execute(
+        self,
+        capability_id: str,
+        payload: bytes,
+        *,
+        filename: str = "",
+        media_type: str = "",
+        parameters: Mapping[str, Any] | None = None,
+    ) -> ExtractionResult:
+        params = dict(parameters or {})
+        dataset_id = params.pop("dataset_id", "")
+        revision = params.pop("revision", None)
+        split = params.pop("split", "")
+        item_id = params.pop("item_id", "")
+        artifact_path = params.pop("artifact_path", "")
+        integers: dict[str, int] = {}
+        for name, default, minimum, maximum in (
+            ("limit", 100, 1, 1000),
+            ("offset", 0, 0, None),
+            ("n", 5, 1, 100),
+        ):
+            raw = params.pop(name, default)
+            if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+                raise InvalidInputError(f"{name} must be an integer", capability=capability_id)
+            try:
+                value = int(raw)
+            except ValueError as exc:
+                raise InvalidInputError(
+                    f"{name} must be an integer", capability=capability_id
+                ) from exc
+            if value < minimum or (maximum is not None and value > maximum):
+                raise InvalidInputError(f"{name} is out of range", capability=capability_id)
+            integers[name] = value
+        limit, offset, n = integers["limit"], integers["offset"], integers["n"]
+
+        started = datetime.now(UTC)
+
+        try:
+            document = self._dispatch(
+                capability_id,
+                dataset_id=dataset_id,
+                revision=revision,
+                split=split,
+                item_id=item_id,
+                artifact_path=artifact_path,
+                limit=limit,
+                offset=offset,
+                n=n,
+            )
+        except ToolboxError:
+            raise
+        except Exception as exc:
+            raise DatasetProviderError(
+                f"{self.descriptor.id} failed on {capability_id}: {exc}",
+                capability=capability_id,
+                provider=self.descriptor.id,
+            ) from exc
+
+        completed = datetime.now(UTC)
+        duration = int((completed - started).total_seconds() * 1000)
+
+        return ExtractionResult(
+            document=document,
+            backend=self.descriptor.id,
+            started_at=started,
+            completed_at=completed,
+            duration_ms=duration,
+            version=self.descriptor.version,
+        )
+
+    def versions(self) -> dict[str, str]:
+        return {"provider": self.descriptor.version}
+
+    def health(self) -> ProviderHealth:
+        try:
+            self._provider.list_datasets()
+            return ProviderHealth(
+                provider=self.descriptor.id,
+                healthy=True,
+                version=self.descriptor.version,
+                checked_at=datetime.now(UTC),
+            )
+        except Exception as exc:
+            return ProviderHealth(
+                provider=self.descriptor.id,
+                healthy=False,
+                version=self.descriptor.version,
+                detail=str(exc),
+                checked_at=datetime.now(UTC),
+            )
+
+    # ------------------------------------------------------------------
+    # Dispatch
+    # ------------------------------------------------------------------
+
+    def _dispatch(self, capability_id: str, **kw: Any) -> Any:
+        """Route a capability ID to the matching provider method."""
+        mapping: dict[str, str] = {
+            "dataset.list": "list_datasets",
+            "dataset.describe": "describe",
+            "dataset.list_splits": "list_splits",
+            "dataset.list_items": "list_items",
+            "dataset.get_item": "get_item",
+            "dataset.get_artifact": "get_artifact",
+            "dataset.sample": "sample",
+            "dataset.sync": "sync",
+        }
+        method_name = mapping.get(capability_id)
+        if method_name is None:
+            raise DatasetProviderError(
+                f"unknown dataset capability {capability_id}",
+                capability=capability_id,
+            )
+
+        method = getattr(self._provider, method_name, None)
+        if method_name == "sync":
+            # sync is implemented on the adapter itself (needs store/mirror),
+            # not on the underlying provider object.
+            method = self._sync
+        if method is None:
+            raise DatasetProviderError(
+                f"provider {self.descriptor.id} does not implement {capability_id}",
+                capability=capability_id,
+            )
+
+        # Pre-compute cache key for metadata operations.
+        cache_key = self._meta_cache_key(method_name, kw)
+
+        # Metadata operations: try cache first.
+        cached_result = None
+        if method_name in _METADATA_SCHEMAS:
+            cached = self._cache.get(cache_key)
+            if cached is not None and _cache_is_fresh(cached, _META_TTL):
+                with suppress(KeyError, ValidationError):
+                    cached_result = _METADATA_SCHEMAS[method_name].validate_python(
+                        cached["data"]
+                    )
+
+        # Build the call signature from kw.
+        sig = {
+            "list_datasets": lambda: self._list_datasets_cached(cache_key),
+            "describe": lambda: self._describe_cached(
+                kw["dataset_id"], kw.get("revision"), cache_key
+            ),
+            "list_splits": lambda: self._list_splits_cached(
+                kw["dataset_id"], kw.get("revision"), cache_key
+            ),
+            "list_items": lambda: self._list_items_cached(
+                kw["dataset_id"],
+                kw["split"],
+                kw.get("revision"),
+                kw["limit"],
+                kw["offset"],
+                cache_key,
+            ),
+            "get_item": lambda: self._provider.get_item(
+                kw["dataset_id"], kw["item_id"], kw["split"], kw.get("revision")
+            ),
+            "get_artifact": lambda: self._get_artifact_maybe_mirrored(
+                kw["dataset_id"], kw["artifact_path"], kw.get("revision")
+            ),
+            "sample": lambda: self._provider.sample(
+                kw["dataset_id"], kw["split"], kw["n"], kw.get("revision")
+            ),
+            "sync": lambda: self._sync(kw["dataset_id"], kw.get("revision"), kw.get("split")),
+        }
+
+        result = cached_result if cached_result is not None else sig[method_name]()
+
+        # Serialise to plain dict so the executor's dict branch handles it.
+        if isinstance(result, tuple) and len(result) == 2:
+            # get_artifact returns (bytes, media_type) - wrap in a dict.
+            return {"payload": result[0].hex(), "media_type": result[1]}
+        if isinstance(result, list):
+            return [
+                item.model_dump(mode="json") if hasattr(item, "model_dump") else item
+                for item in result
+            ]
+        if hasattr(result, "model_dump"):
+            return result.model_dump(mode="json")
+        return result  # already a dict (sync report, cached data)
+
+    # ------------------------------------------------------------------
+    # Cached metadata helpers
+    # ------------------------------------------------------------------
+
+    def _list_datasets_cached(self, cache_key: str) -> Sequence[DatasetInfo]:
+        result = self._provider.list_datasets()
+        self._cache.put(
+            cache_key, {"cached_at": time(), "data": [d.model_dump(mode="json") for d in result]}
+        )
+        return result
+
+    def _describe_cached(
+        self, dataset_id: str, revision: str | None, cache_key: str
+    ) -> DatasetInfo:
+        result = self._provider.describe(dataset_id, revision)
+        self._cache.put(cache_key, {"cached_at": time(), "data": result.model_dump(mode="json")})
+        return result
+
+    def _list_splits_cached(
+        self, dataset_id: str, revision: str | None, cache_key: str
+    ) -> Sequence[SplitInfo]:
+        result = self._provider.list_splits(dataset_id, revision)
+        self._cache.put(
+            cache_key, {"cached_at": time(), "data": [s.model_dump(mode="json") for s in result]}
+        )
+        return result
+
+    def _list_items_cached(
+        self,
+        dataset_id: str,
+        split: str,
+        revision: str | None,
+        limit: int,
+        offset: int,
+        cache_key: str,
+    ) -> Sequence[ItemSummary]:
+        result = self._provider.list_items(dataset_id, split, revision, limit, offset)
+        # Don't cache empty listings — they usually indicate a transient
+        # upstream failure (e.g. HF rate limit) and would poison the cache.
+        if result:
+            self._cache.put(
+                cache_key,
+                {"cached_at": time(), "data": [i.model_dump(mode="json") for i in result]},
+            )
+        return result
+
+    # ------------------------------------------------------------------
+    # Mirroring
+    # ------------------------------------------------------------------
+
+    def _get_artifact_maybe_mirrored(
+        self,
+        dataset_id: str,
+        artifact_path: str,
+        revision: str | None = None,
+        *,
+        refresh: bool = False,
+    ) -> tuple[bytes, str]:
+        """Fetch an artifact, optionally bypassing mirrored content on resync."""
+        if not self._mirror or self._store is None:
+            return self._provider.get_artifact(dataset_id, artifact_path, revision)
+
+        store_key = self._store_key(dataset_id, artifact_path, revision)
+        cached = None if refresh else self._cache.get(_ARTIFACT_CACHE_PREFIX + store_key)
+        ref = None
+        if cached is not None and _cache_is_fresh(cached, _ARTIFACT_TTL):
+            try:
+                candidate = ArtifactRef.model_validate(cached["ref"])
+                shards(candidate.artifact_id)
+                ref = candidate
+            except (KeyError, ValidationError, InvalidInputError):
+                pass
+        if not refresh and ref is None:
+            local = self._mirror_refs.get(store_key)
+            if local is not None:
+                recorded, local_ref = local
+                if 0 <= time() - recorded < _ARTIFACT_TTL:
+                    ref = local_ref
+                else:
+                    self._mirror_refs.pop(store_key, None)
+        if ref is not None:
+            try:
+                return self._store.get(ref.artifact_id), ref.media_type
+            except ArtifactNotFoundError:
+                pass  # An evicted object must be fetched again.
+
+        # Fetch from remote.
+        payload, media_type = self._provider.get_artifact(dataset_id, artifact_path, revision)
+
+        ref = self._store.put(
+            payload,
+            media_type=media_type,
+            filename=artifact_path.rsplit("/", 1)[-1],
+        )
+        recorded = time()
+        self._mirror_refs[store_key] = (recorded, ref)
+        self._mirror_refs.move_to_end(store_key)
+        while len(self._mirror_refs) > 256:
+            self._mirror_refs.popitem(last=False)
+        self._cache.put(
+            _ARTIFACT_CACHE_PREFIX + store_key,
+            {"cached_at": recorded, "ref": ref.model_dump(mode="json")},
+        )
+
+        return payload, media_type
+
+    def _sync(
+        self,
+        dataset_id: str,
+        revision: str | None = None,
+        split: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Re-mirror all artifacts for a dataset (optionally one split)."""
+        if not self._mirror or self._store is None:
+            return [{"status": "skipped", "reason": "mirroring is disabled"}]
+
+        splits = [split] if split else list(
+            getattr(self._provider.describe(dataset_id, revision), "splits", [])
+        )
+
+        synced: list[dict[str, Any]] = []
+        refreshed: set[str] = set()
+        for sp in splits:
+            items = self._iter_sync_items(dataset_id, sp, revision)
+            for summary in items:
+                try:
+                    item = self._provider.get_item(dataset_id, summary.id, sp, revision)
+                except Exception as exc:
+                    # HF rate limits / transient 404s must not abort the whole
+                    # sync; record and continue.
+                    synced.append({
+                        "item": summary.id,
+                        "split": sp,
+                        "status": "skipped",
+                        "reason": str(exc),
+                    })
+                    continue
+                for art in item.artifacts:
+                    try:
+                        if art.path not in refreshed:
+                            self._get_artifact_maybe_mirrored(
+                                dataset_id, art.path, revision, refresh=True
+                            )
+                            refreshed.add(art.path)
+                        synced.append({
+                            "item": summary.id,
+                            "split": sp,
+                            "artifact": art.path,
+                            "status": "mirrored",
+                        })
+                    except Exception as exc:
+                        synced.append({
+                            "item": summary.id,
+                            "split": sp,
+                            "artifact": art.path,
+                            "status": "skipped",
+                            "reason": str(exc),
+                        })
+                for ann in item.annotations:
+                    try:
+                        if ann.path not in refreshed:
+                            self._get_artifact_maybe_mirrored(
+                                dataset_id, ann.path, revision, refresh=True
+                            )
+                            refreshed.add(ann.path)
+                        synced.append({
+                            "item": summary.id,
+                            "split": sp,
+                            "artifact": ann.path,
+                            "status": "mirrored",
+                        })
+                    except Exception as exc:
+                        synced.append({
+                            "item": summary.id,
+                            "split": sp,
+                            "artifact": ann.path,
+                            "status": "skipped",
+                            "reason": str(exc),
+                        })
+
+        return synced
+
+    def _iter_sync_items(
+        self, dataset_id: str, split: str, revision: str | None
+    ) -> Iterator[ItemSummary]:
+        offset = 0
+        seen: set[str] = set()
+        while True:
+            page = self._provider.list_items(
+                dataset_id, split, revision, limit=1000, offset=offset
+            )
+            if not page:
+                return
+            for item in page:
+                if item.id in seen:
+                    raise DatasetProviderError(
+                        "dataset pagination repeated an item", dataset=dataset_id,
+                        split=split, item=item.id,
+                    )
+                seen.add(item.id)
+                yield item
+            offset += len(page)
+
+    def _store_key(
+        self, dataset_id: str, artifact_path: str, revision: str | None = None
+    ) -> str:
+        """Reference identity; artifact identities remain content-addressed."""
+        raw = json.dumps([self.descriptor.id, dataset_id, revision, artifact_path]).encode()
+        return fingerprint_bytes(raw)
+
+    def _meta_cache_key(self, operation: str, kw: dict[str, Any]) -> str:
+        """Cache key for metadata operations."""
+        identity = [self.descriptor.id, operation, kw.get("dataset_id"), kw.get("revision")]
+        if operation == "list_items":
+            identity += [kw.get("split"), kw.get("limit"), kw.get("offset")]
+        return _META_CACHE_PREFIX + fingerprint_bytes(json.dumps(identity).encode())
+
+
+
+__all__ = [
+    "DatasetAdapter",
+    "DatasetProvider",
+]

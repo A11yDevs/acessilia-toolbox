@@ -18,11 +18,16 @@ and normalizes the result into a canonical format.
 │                                                   │
 │  REST / MCP / CLI                                 │
 └──────┬────────────────────────────────────────────┘
-       │ HTTP / S3 / Redis
+       │ HTTP / S3 / Redis / in-process
        ▼
-┌─────────────┐  ┌────────┐  ┌────────┐
-│ docling-serve│  │ MinIO  │  │ Valkey │  ← provedores externos
-└─────────────┘  └────────┘  └────────┘
+┌─────────────┐  ┌────────┐  ┌────────┐  ┌──────────────────────┐
+│ docling-serve│  │ MinIO  │  │ Valkey │  │ mineru-serve (opt.)  │
+└─────────────┘  └────────┘  └────────┘  └──────────────────────┘
+                                         ┌──────────────────────┐
+                                         │ audiveris-serve(opt.)│
+                                         └──────────────────────┘
+        ← external providers (docling, MinerU, Audiveris) and
+          in-process pure providers (pure-chem, homr, …)
 ```
 
 ---
@@ -81,6 +86,7 @@ output:
   schema: artifact/structured-document@1
   media_types:
     - application/json
+  by_reference: false    # binary stored in the artifact store, returned by id?
 
 execution:
   deterministic: true    # same input → same output?
@@ -164,6 +170,23 @@ providers:
 The toolbox now exposes the capability via REST (`GET /v1/capabilities/speech.synthesize`)
 and MCP. Trying to execute it without a provider returns a clear error:
 "no provider implements speech.synthesize".
+
+### Regenerate the published contract
+
+Adding, versioning or removing a capability or a provider changes the
+contract that consumers check against. Regenerate it in the same pull request:
+
+```bash
+python scripts/export_contract.py
+```
+
+It rewrites `contract/toolbox-contract.json` from `capabilities/` and
+`providers-config.yaml`. In each capability entry, `providers` lists the
+providers registered for the capability id, not for a specific version.
+`tests/unit/test_published_contract.py` fails while
+the file is stale. The file is attached to every release, and the Acessilia
+core's CI checks its SDK registry against it
+([A11yDevs/acessilia#186](https://github.com/A11yDevs/acessilia/issues/186)).
 
 ---
 
@@ -564,6 +587,9 @@ pip install .                        # core: pydantic, httpx, jsonschema, PyYAML
 pip install .[api]                   # + fastapi, uvicorn, python-multipart
 pip install .[storage]               # + boto3 (MinIO/S3)
 pip install .[cache]                 # + redis (Valkey)
+pip install .[pdf]                   # + pymupdf (pdf.split, pdf.render, document.text.spans)
+pip install .[media]                 # + Pillow (media.inspect image payloads)
+pip install .[music]                 # + homr (music.omr in-process)
 pip install .[dev]                   # + pytest, ruff, mypy, all extras above
 ```
 
