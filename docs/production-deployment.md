@@ -16,6 +16,11 @@ named volumes when adopting this configuration on VM1.
   example records the complete image set validated during the VM1 0.2.0 migration
   (Toolbox source `34802e44109f0324d16428d780dbedee0f7984ab`). These are an explicit
   baseline, not an instruction to follow a release tag or rebuild all images.
+  On every re-pin, record the source revision, deployed digest of each image,
+  release tag, digest published for that tag, acceptance date and test evidence
+  in the deployment inventory. The `34802e4` baseline and the future `v0.2.0`
+  merge/tag build are distinct artifacts; do not label them equivalent without
+  recorded evidence. Keep the tagged digest unset until it has been resolved.
 - The production registry omits unused Nougat and Audiveris providers and their
   services. All retained services have `*-production` names. No host ports are
   published, including the Toolbox API, sidecars, MinIO and Valkey.
@@ -84,11 +89,21 @@ gateway is deployed separately and is never updated by these commands.
    disk and RAM using actual documents; first-use models may download to volumes.
 3. Review the complete `.deploy.env` image set and runtime/registry changes.
 4. Run `./scripts/production-update.sh --apply`. It validates, pulls the full
-   pinned image set, runs Compose with `--wait`, checks every running image ID
+   pinned image set, runs Compose with `--wait` targeting only long-running
+   services (the successful initializer is handled through its dependency),
+   checks every running image ID
    and service health, and probes Docling, MinerU and the authenticated VLM chain.
 5. Test a representative document in dual fusion, required exports, interfaces,
    e-mail, retained download links and expired-link rejection before reopening
    traffic. Health is not a substitute for this acceptance.
+
+CI exercises this activation command with real disposable containers and
+Compose v5.3.1, the version reported on VM1: successful initialization, repeated
+activation and a failing initializer. This checks Compose lifecycle behavior;
+it does not replace full `--apply` and document acceptance of the approved
+production image set. Errors identify the failed service/inspection and go to
+stderr; Compose configuration stderr remains suppressed because it may contain
+credentials.
 
 A failed pull leaves the running containers unchanged. A failed activation or
 post-start probe can leave **new containers running**: keep traffic suspended,

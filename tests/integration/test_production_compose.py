@@ -164,9 +164,14 @@ def test_failed_dependency_probe_reports_possible_live_replacement(production, m
 
     monkeypatch.setattr(deploy, "verify_running", fail_probe)
     assert deploy.main() == 1
-    assert "new containers may remain running" in capsys.readouterr().out
+    output = capsys.readouterr()
+    assert "new containers may remain running" in output.err
+    assert "Production Toolbox check failed" in output.err
+    assert output.out == ""
     assert len(commands) == 2
     assert "up" in commands[-1]
+    assert "minio-init" not in commands[-1]
+    assert set(config["services"]) - {"minio-init"} <= set(commands[-1])
     assert not any("prune" in command or "down" in command for command in commands)
 
 
@@ -211,7 +216,7 @@ def test_running_stack_must_match_pins_and_be_healthy_before_acceptance(
     containers = {value: name for name, value in deploy.CONTAINERS.items()}
     commands = []
 
-    def inspect(command, _directory):
+    def inspect(command, _directory, **kwargs):
         if command[1] == "image":
             return "sha256:approved-image-id"
         name = containers[command[-1]]
@@ -232,3 +237,21 @@ def test_running_stack_must_match_pins_and_be_healthy_before_acceptance(
     with pytest.raises(ValueError):
         deploy.verify_running(config, directory)
     assert commands == []
+
+
+@pytest.mark.parametrize("sensitive", [True, False])
+def test_capture_keeps_service_context_without_leaking_compose_secrets(
+    tmp_path, monkeypatch, sensitive
+):
+    detail = "credential-must-stay-private" if sensitive else "No such container: mineru-production"
+    monkeypatch.setattr(
+        deploy.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1, "", detail),
+    )
+    label = "Compose configuration" if sensitive else "Container inspection for mineru-serve"
+    with pytest.raises(ValueError) as caught:
+        deploy.capture(["docker", "inspect"], tmp_path, label=label, sensitive=sensitive)
+    message = str(caught.value)
+    assert label in message
+    assert (detail in message) is not sensitive

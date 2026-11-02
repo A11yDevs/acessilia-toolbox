@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -65,11 +66,12 @@ def compose_command(directory: Path) -> list[str]:
     ]
 
 
-def capture(command: list[str], directory: Path) -> str:
+def capture(command: list[str], directory: Path, *, label: str, sensitive: bool = False) -> str:
     result = subprocess.run(command, cwd=directory, capture_output=True, text=True, check=False)
     if result.returncode:
-        # Compose errors can contain interpolated credentials. Inspect privately.
-        raise ValueError("Command failed; inspect configuration privately: " + command[0])
+        # Compose config errors may contain interpolated runtime credentials.
+        detail = "inspect configuration privately" if sensitive else result.stderr.strip()
+        raise ValueError(f"{label} failed (exit {result.returncode}): {detail}")
     return result.stdout
 
 
@@ -146,7 +148,12 @@ def check_config(config: dict, directory: Path) -> dict:
 
 def check(directory: Path) -> dict:
     config = json.loads(
-        capture([*compose_command(directory), "config", "--format", "json"], directory)
+        capture(
+            [*compose_command(directory), "config", "--format", "json"],
+            directory,
+            label="Compose configuration",
+            sensitive=True,
+        )
     )
     check_config(config, directory)
     print("Production Toolbox configuration verified; no services started.")
@@ -156,9 +163,17 @@ def check(directory: Path) -> dict:
 def verify_running(config: dict, directory: Path) -> None:
     for name, service in config["services"].items():
         expected = capture(
-            ["docker", "image", "inspect", service["image"], "--format", "{{.Id}}"], directory
+            ["docker", "image", "inspect", service["image"], "--format", "{{.Id}}"],
+            directory,
+            label=f"Image inspection for {name}",
         ).strip()
-        current = json.loads(capture(["docker", "inspect", CONTAINERS[name]], directory))[0]
+        current = json.loads(
+            capture(
+                ["docker", "inspect", CONTAINERS[name]],
+                directory,
+                label=f"Container inspection for {name}",
+            )
+        )[0]
         if not expected or current["Image"] != expected:
             raise ValueError(f"Running image differs from the approved digest: {name}")
         state = current["State"]
@@ -180,6 +195,21 @@ def verify_running(config: dict, directory: Path) -> None:
     )
 
 
+def activation_command(compose: list[str], config: dict) -> list[str]:
+    # The initializer is a dependency, never a long-running --wait target.
+    return [
+        *compose,
+        "up",
+        "-d",
+        "--pull",
+        "never",
+        "--wait",
+        "--wait-timeout",
+        "900",
+        *(name for name in config["services"] if name != "minio-init"),
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("check", "apply", "verify"))
@@ -194,30 +224,25 @@ def main() -> int:
             subprocess.run([*compose_command(directory), "pull"], cwd=directory, check=True)
             try:
                 subprocess.run(
-                    [
-                        *compose_command(directory),
-                        "up",
-                        "-d",
-                        "--pull",
-                        "never",
-                        "--wait",
-                        "--wait-timeout",
-                        "900",
-                    ],
+                    activation_command(compose_command(directory), config),
                     cwd=directory,
                     check=True,
                 )
                 verify_running(config, directory)
             except (ValueError, subprocess.SubprocessError):
                 print(
-                    "Activation failed; new containers may remain running. Keep ingress suspended."
+                    "Activation failed; new containers may remain running. Keep ingress suspended.",
+                    file=sys.stderr,
                 )
-                print("Inspect services and follow manual rollback; no data was restored.")
+                print(
+                    "Inspect services and follow manual rollback; no data was restored.",
+                    file=sys.stderr,
+                )
                 raise
         elif args.command == "verify":
             verify_running(config, directory)
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        print(f"Production Toolbox check failed: {error}")
+        print(f"Production Toolbox check failed: {error}", file=sys.stderr)
         return 1
     return 0
 

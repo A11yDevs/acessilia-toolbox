@@ -17,6 +17,11 @@ configuração na VM1. A versão inglesa deste documento é a referência normat
   registra o conjunto validado na migração da VM1 para 0.2.0 (Toolbox no commit
   `34802e44109f0324d16428d780dbedee0f7984ab`). É uma referência explícita, não
   uma instrução para acompanhar tags ou reconstruir todas as imagens.
+  A cada troca de digest, registre no inventário a revisão de origem, o digest
+  implantado de cada imagem, a tag da release, seu digest publicado, a data da
+  aceitação e as evidências dos testes. A referência `34802e4` e a futura imagem
+  do merge/tag `v0.2.0` são artefatos distintos; não declare equivalência sem
+  evidências registradas. Deixe o digest da tag vazio até consultá-lo.
 - O registro de produção omite Nougat e Audiveris, que não eram usados. Os
   serviços mantidos têm nomes `*-production`. Nenhuma porta é publicada no host,
   incluindo Toolbox, sidecars, MinIO e Valkey.
@@ -86,11 +91,21 @@ implantado separadamente e nunca é atualizado por esses comandos.
    disco e RAM com documentos reais; o primeiro uso pode baixar modelos.
 3. Revise o conjunto de imagens no `.deploy.env` e as alterações de configuração.
 4. Execute `./scripts/production-update.sh --apply`. O comando valida, baixa o
-   conjunto fixado, executa o Compose com `--wait`, confere os IDs das imagens e
+   conjunto fixado, executa o Compose com `--wait` somente para serviços
+   permanentes (o inicializador é tratado pela dependência de conclusão),
+   confere os IDs das imagens e
    a saúde dos serviços, Docling, MinerU e a cadeia VLM autenticada.
 5. Teste um documento representativo em fusion dual, exportações, interfaces,
    e-mail, links preservados e rejeição de links expirados antes de liberar o
    tráfego. Saúde não substitui aceitação funcional.
+
+O CI testa esse comando de ativação em containers reais descartáveis com
+Compose v5.3.1, a versão informada na VM1: inicialização com sucesso, ativação
+repetida e falha do inicializador. Isso verifica o ciclo de vida do Compose;
+não substitui o `--apply` completo e a aceitação de documentos com o conjunto
+aprovado de imagens. Os erros identificam o serviço/inspeção e são enviados a
+stderr; o stderr da resolução do Compose permanece oculto por poder conter
+credenciais.
 
 Falha no download preserva os containers em execução. Falha na ativação ou no
 teste posterior pode deixar **containers novos rodando**: mantenha o tráfego
