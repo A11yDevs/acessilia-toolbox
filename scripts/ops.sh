@@ -166,12 +166,19 @@ import sys
 from pathlib import Path
 
 root, package, version = sys.argv[1:]
+# Every place that states the package version; the API, MCP and CLI report
+# __version__, and docs/openapi.json must match what the API publishes.
 edits = [
     (Path(root, "pyproject.toml"), r'(?m)^(version = ")[^"]*(")'),
     (
         Path(root, "uv.lock"),
         rf'(\[\[package\]\]\nname = "{re.escape(package)}"\nversion = ")[^"]*(")',
     ),
+    (
+        Path(root, "src", package.replace("-", "_"), "__init__.py"),
+        r'(?m)^(__version__ = ")[^"]*(")',
+    ),
+    (Path(root, "docs", "openapi.json"), r'(?s)("info": \{.*?"version": ")[^"]*(")'),
 ]
 for path, pattern in edits:
     text, count = re.subn(pattern, rf"\g<1>{version}\g<2>", path.read_text(), count=1)

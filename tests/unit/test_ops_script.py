@@ -1,6 +1,7 @@
 """scripts/ops.sh against a local git origin and stubbed system commands."""
 
 import datetime
+import json
 import os
 import shutil
 import subprocess
@@ -617,6 +618,13 @@ def test_bhs_start_cuts_the_release_with_the_version_bump(server, tmp_path):
         '[project]\nname = "acessilia-toolbox"\nversion = "0.1.0"\n'
     )
     (seed / "uv.lock").write_text('[[package]]\nname = "acessilia-toolbox"\nversion = "0.1.0"\n')
+    (seed / "src" / "acessilia_toolbox").mkdir(parents=True)
+    (seed / "src" / "acessilia_toolbox" / "__init__.py").write_text('__version__ = "0.1.0"\n')
+    (seed / "docs").mkdir()
+    (seed / "docs" / "openapi.json").write_text(
+        '{\n    "info": {\n        "title": "T",\n        "version": "0.1.0"\n    },\n'
+        '    "paths": {"/x": {"parameters": [{"name": "version"}]}}\n}\n'
+    )
     subprocess.run(["git", "add", "-A"], cwd=seed, check=True, env=env)
     subprocess.run(["git", "commit", "-q", "-m", "project"], cwd=seed, check=True, env=env)
     subprocess.run(["git", "push", "-q", "origin", "develop"], cwd=seed, check=True, env=env)
@@ -630,6 +638,11 @@ def test_bhs_start_cuts_the_release_with_the_version_bump(server, tmp_path):
     )
     assert 'version = "0.3.0"' in _git("show", "release/0.3.0:pyproject.toml", cwd=origin)
     assert 'version = "0.3.0"' in _git("show", "release/0.3.0:uv.lock", cwd=origin)
+    init = _git("show", "release/0.3.0:src/acessilia_toolbox/__init__.py", cwd=origin)
+    assert '__version__ = "0.3.0"' in init
+    openapi = json.loads(_git("show", "release/0.3.0:docs/openapi.json", cwd=origin))
+    assert openapi["info"]["version"] == "0.3.0"
+    assert openapi["paths"]["/x"]["parameters"] == [{"name": "version"}]
     assert "ops.sh track release/0.3.0" in result.stdout
 
     again = server["run"]("bhs", "start", "0.3.0", check=False)
