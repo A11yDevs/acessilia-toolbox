@@ -3,7 +3,7 @@
     "info": {
         "title": "Acessilia Toolbox",
         "description": "Deterministic, stateless capability layer for agentic systems.\n\nCapabilities describe what can be done; providers implement it. The toolbox\nexecutes and normalizes, while goals, planning and provider choice stay with\nthe agentic core.",
-        "version": "0.1.0"
+        "version": "0.2.0"
     },
     "paths": {
         "/v1/health": {
