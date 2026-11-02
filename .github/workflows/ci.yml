@@ -37,7 +37,7 @@ jobs:
           ref: d8751d03c5e8eaf55080463a4311893536a3f7f8
           path: .core-source
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install isolated project environments
@@ -97,7 +97,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -131,10 +131,17 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/unit/ -v --junitxml=test-results.xml
 
+      - name: Validate production and staging Compose deployment gates
+        run: >-
+          python -m pytest tests/integration/test_production_compose.py
+          -v --junitxml=production-deployment-results.xml
+
       - name: Test artifact failover and replica replacement
         run: >-
           python -m pytest tests/integration/test_artifact_failover.py
           tests/statelessness/ -v --junitxml=artifact-test-results.xml
 
       - name: Reject unexpected skipped tests
-        run: python scripts/check_no_skipped_tests.py test-results.xml artifact-test-results.xml
+        run: >-
+          python scripts/check_no_skipped_tests.py test-results.xml artifact-test-results.xml
+          production-deployment-results.xml

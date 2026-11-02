@@ -4,6 +4,8 @@
 # one image per sidecar (Sidecars workflow), all tagged with the tracked branch.
 # scripts/staging-update.sh, triggered by a systemd user timer, updates the
 # toolbox and its sidecars together once the images of a new commit exist.
+# Sidecars, MinIO and Valkey bind to loopback for local diagnostics only.
+# The authenticated Toolbox API remains reachable by the core on this host.
 # Set a *_IMAGE variable only to run a locally built sidecar instead.
 #
 # Usage:
@@ -64,7 +66,7 @@ services:
     image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.32.0}
     container_name: docling-serve-staging
     ports:
-      - "${DOCLING_SERVE_PORT:-5001}:5001"
+      - "127.0.0.1:${DOCLING_SERVE_PORT:-5001}:5001"
     environment:
       DOCLING_SERVE_ENABLE_UI: "${DOCLING_SERVE_ENABLE_UI:-false}"
       # The image caches models under /opt/app-root/src/.cache/docling/models
@@ -93,7 +95,7 @@ services:
     container_name: mineru-serve-staging
     entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "${MINERU_SERVE_PORT:-5002}:8000"
+      - "127.0.0.1:${MINERU_SERVE_PORT:-5002}:8000"
     environment:
       MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
       HF_HOME: /home/mineru/.cache/huggingface
@@ -115,7 +117,7 @@ services:
     image: ${AUDIVERIS_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-audiveris-serve:${TRACK_TAG:-develop}}
     container_name: audiveris-serve-staging
     ports:
-      - "${AUDIVERIS_SERVE_PORT:-5003}:5003"
+      - "127.0.0.1:${AUDIVERIS_SERVE_PORT:-5003}:5003"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5003/health || exit 1"]
       interval: 30s
@@ -130,7 +132,7 @@ services:
     image: ${NOUGAT_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-nougat:${TRACK_TAG:-develop}}
     container_name: nougat-serve-staging
     ports:
-      - "${NOUGAT_SERVE_PORT:-5004}:5004"
+      - "127.0.0.1:${NOUGAT_SERVE_PORT:-5004}:5004"
     volumes:
       - nougat-torch-models:/root/.cache/torch/hub
       - nougat-models:/root/.cache/nougat
@@ -149,7 +151,7 @@ services:
     image: ${RAPID_LATEX_OCR_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-rapid-latex-ocr:${TRACK_TAG:-develop}}
     container_name: rapid-latex-ocr-staging
     ports:
-      - "${RAPID_LATEX_OCR_PORT:-5005}:5004"
+      - "127.0.0.1:${RAPID_LATEX_OCR_PORT:-5005}:5004"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
       interval: 15s
@@ -166,7 +168,7 @@ services:
     image: ${PP_FORMULANET_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-pp-formulanet:${TRACK_TAG:-develop}}
     container_name: pp-formulanet-staging
     ports:
-      - "${PP_FORMULANET_PORT:-5010}:5010"
+      - "127.0.0.1:${PP_FORMULANET_PORT:-5010}:5010"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5010/health || exit 1"]
       interval: 15s
@@ -181,7 +183,7 @@ services:
     image: ${RAPIDOCR_ORIENT_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-rapidocr-orient:${TRACK_TAG:-develop}}
     container_name: rapidocr-orient-staging
     ports:
-      - "${RAPIDOCR_ORIENT_PORT:-5006}:5006"
+      - "127.0.0.1:${RAPIDOCR_ORIENT_PORT:-5006}:5006"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5006/health || exit 1"]
       interval: 15s
@@ -197,7 +199,7 @@ services:
     image: ${PDF_UA_RENDER_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-pdf-ua-render:${TRACK_TAG:-develop}}
     container_name: pdf-ua-render-staging
     ports:
-      - "${PDF_UA_RENDER_PORT:-5007}:5007"
+      - "127.0.0.1:${PDF_UA_RENDER_PORT:-5007}:5007"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5007/health || exit 1"]
       interval: 15s
@@ -212,7 +214,7 @@ services:
     image: ${VERAPDF_VALIDATE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-verapdf-validate:${TRACK_TAG:-develop}}
     container_name: verapdf-validate-staging
     ports:
-      - "${VERAPDF_VALIDATE_PORT:-5008}:5008"
+      - "127.0.0.1:${VERAPDF_VALIDATE_PORT:-5008}:5008"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5008/health || exit 1"]
       interval: 15s
@@ -228,7 +230,7 @@ services:
     image: ${MATH_SPEECH_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-math-speech:${TRACK_TAG:-develop}}
     container_name: math-speech-staging
     ports:
-      - "${MATH_SPEECH_PORT:-5009}:5009"
+      - "127.0.0.1:${MATH_SPEECH_PORT:-5009}:5009"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5009/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 15s
@@ -242,8 +244,8 @@ services:
     container_name: acessilia-minio-staging
     command: server /data --console-address ":9001"
     ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
@@ -260,7 +262,7 @@ services:
     image: ${VALKEY_IMAGE:-valkey/valkey:8-alpine}
     container_name: acessilia-valkey-staging
     ports:
-      - "${VALKEY_PORT:-6379}:6379"
+      - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
     volumes:
       - valkey-data:/data
     healthcheck:

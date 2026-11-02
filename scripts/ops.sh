@@ -253,8 +253,8 @@ _bhs_finish() {
 
     echo ""
     echo "Last manual steps:"
-    echo "  1. On the staging server, in the clone: ./scripts/ops.sh track ${DEFAULT_BRANCH}"
-    echo "  2. Promote production with scripts/production-update.sh (the ${tag} tag triggers the Release workflow)."
+    echo "  1. Staging must already track ${DEFAULT_BRANCH} before deleting the release branches."
+    echo "  2. Production stays pinned: follow docs/production-deployment.md; publishing ${tag} does not promote it."
     return 0
   fi
 
