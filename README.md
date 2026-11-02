@@ -300,6 +300,7 @@ pages: 1; elements: 7; obligations: 0
 | [Capability Model](docs/capability-model.md) | Contracts, manifests, interchangeability |
 | [PDDL Integration](docs/pddl.md) | Planning semantics |
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
+| [Production Deployment](docs/production-deployment.md) | Isolated, digest-pinned Toolbox stack and manual promotion |
 | [Page Orientation](docs/rapidocr-orient.md) | Optional `image.page.orient` sidecar and auto-rotate preprocessing |
 | [PDF/UA Export](docs/pdf-ua-export.md) | `document.export.pdf_ua` sidecar with a pinned Pandoc and TeX Live |
 | [DOCX Export](docs/docx-export.md) | `document.export.docx` on the same sidecar, with Pandoc sandboxed |
