@@ -17,7 +17,9 @@ ARG TEXLIVE_REPOSITORY=https://ftp.math.utah.edu/pub/tex/historic/systems/texliv
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 
 # perl and xz drive install-tl; fontconfig lets luaotfload find DejaVu Sans,
-# the template's font; curl serves the healthcheck.
+# the template's text font (its math fonts, TeX Gyre DejaVu Math and the STIX
+# Two Math fallback, come from tex-gyre-math and stix2-otf below); curl serves
+# the healthcheck.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -25,6 +27,7 @@ RUN apt-get update && \
         fontconfig \
         fonts-dejavu-core \
         perl \
+        poppler-utils \
         xz-utils && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -57,8 +60,12 @@ RUN export TL_DOWNLOAD_PROGRAM=curl \
         fontspec \
         geometry \
         latex-lab \
+        lualatex-math \
         pdfmanagement-testphase \
-        tagpdf && \
+        stix2-otf \
+        tagpdf \
+        tex-gyre-math \
+        unicode-math && \
     rm -rf /tmp/install-tl /tmp/texlive.profile
 
 RUN pip install --no-cache-dir \
@@ -73,20 +80,42 @@ ENV TEXMFVAR=/home/appuser/.texlive/texmf-var
 
 COPY docker/pdf-ua-render/server.py /app/server.py
 COPY docker/pdf-ua-render/templates /app/templates
+COPY docker/pdf-ua-render/filters /app/filters
 RUN chown -R appuser:appuser /app
 
 USER appuser
 WORKDIR /app
 
-# Smoke test: the image only builds if the pinned toolchain renders the template.
+# Smoke test: the image only builds if the pinned toolchain renders the template,
+# math included. The formula uses what recognizers and vision models write
+# (\mathbb, \frac, \lim, aligned, amssymb names such as \varpropto that
+# pdf_ua.tex maps for unicode-math): one unrenderable formula makes the core
+# degrade every formula of a document to literal text. The PDF command mirrors
+# the one /render runs in server.py, so a change to either shows up here.
+# smoke_check.py checks that each expected alt is on a Formula element,
+# including formulas in a table header and data cell, that the math font
+# is embedded with \neq as U+2260 and math letters as base letters in the
+# text layer, and (for the default smoke) that its lists are tagged with
+# PDF 1.7 ListNumbering values. Raw pdftotext must also have no split words
+# at line ends and no non-whitespace control characters.
+COPY --chown=appuser:appuser docker/pdf-ua-render/smoke.json \
+    docker/pdf-ua-render/table-smoke.json docker/pdf-ua-render/smoke_check.py /tmp/
 RUN luaotfload-tool --update && \
-    printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
-        | pandoc --from json --to pdf --pdf-engine=lualatex \
-            --template=/app/templates/pdf_ua.tex -o /tmp/smoke.pdf && \
+    pandoc --from json --to pdf --standalone --syntax-highlighting=none \
+        --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
+        --lua-filter=/app/filters/formula_alt.lua \
+        -V lang=pt-BR -o /tmp/smoke.pdf /tmp/smoke.json && \
+    python /tmp/smoke_check.py /tmp/smoke.pdf --require-double-struck --require-lists && \
+    pandoc --from json --to pdf --standalone --syntax-highlighting=none \
+        --pdf-engine=lualatex --template=/app/templates/pdf_ua.tex \
+        --lua-filter=/app/filters/formula_alt.lua \
+        -V lang=pt-BR -o /tmp/smoke-table.pdf /tmp/table-smoke.json && \
+    python /tmp/smoke_check.py /tmp/smoke-table.pdf \
+        "t igual a 2 mais h no cabeçalho" "x diferente de um na célula" && \
     printf '%s' '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"ok"}]}]}' \
         | pandoc --from json --to docx --standalone --sandbox --metadata lang=pt-BR \
             -o /tmp/smoke.docx && \
-    rm /tmp/smoke.pdf /tmp/smoke.docx
+    rm /tmp/smoke.json /tmp/table-smoke.json /tmp/smoke_check.py /tmp/smoke.pdf /tmp/smoke-table.pdf /tmp/smoke.docx
 
 EXPOSE 5007
 

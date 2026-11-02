@@ -1,0 +1,33 @@
+id: document.text.spans
+version: 1
+description: >-
+  Read the text layer of a PDF as lines of spans, each with its font name,
+  size, style flags, bounding box and baseline origin. Fonts and geometry are
+  what a consumer needs to find inline math in a typeset PDF (TeX math fonts,
+  raised and lowered scripts), which layout models do not report.
+
+input:
+  schema: artifact/document@1
+  media_types:
+    - application/pdf
+
+output:
+  schema: artifact/text-spans@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 60
+
+semantics:
+  requires:
+    - document_available
+  produces:
+    - text_spans_extracted
+
+providers:
+  - id: pymupdf-pdf
+    version: "1.24+"

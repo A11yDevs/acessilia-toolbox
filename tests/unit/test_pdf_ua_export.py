@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -245,21 +247,26 @@ def test_cache_hit_reuses_the_stored_pdf_without_rendering(tmp_path: Path) -> No
     assert "%PDF" not in json.dumps(next(iter(cache.data.values())))
 
 
-def test_cache_hit_with_a_deleted_pdf_renders_again(tmp_path: Path) -> None:
+@pytest.mark.parametrize("artifact_index", [0, 1], ids=["json", "pdf"])
+def test_cache_hit_with_a_deleted_artifact_renders_again(
+    tmp_path: Path, artifact_index: int
+) -> None:
     handler, calls = sidecar()
     store = FilesystemArtifactStore(tmp_path)
     executor = executor_with(provider_with(handler), store=store, cache=MemoryCache())
 
     first = export(executor)
-    for stored in tmp_path.rglob("*"):
-        if stored.is_file():
-            stored.unlink()
+    store._path(first.artifacts[artifact_index].artifact_id).unlink()
     second = export(executor)
 
     assert not second.provenance.cache_hit
     assert sum(call.url.path == "/render" for call in calls) == 2
     assert store.get(second.document["artifact_id"]) == PDF_BYTES
     assert second.document["artifact_id"] == first.document["artifact_id"]
+    for artifact in second.artifacts:
+        payload, ref = executor.retrieve_artifact(artifact.artifact_id)
+        assert fingerprint_bytes(payload) == ref.artifact_id
+    assert export(executor).provenance.cache_hit
 
 
 def test_binary_outputs_require_an_artifact_store_before_rendering() -> None:
@@ -392,3 +399,309 @@ def test_template_defines_what_recent_pandoc_and_longtable_need() -> None:
     assert "\\newcounter{none}" in template
     assert "calc" in template
     assert "pdfstandard=ua-1" in template
+
+
+def test_template_leaves_headings_unnumbered_by_default() -> None:
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    # Without this the article class tags "1", "1.1" inside each heading.
+    # The numbersections metadata stays an opt-in, as in Pandoc's template.
+    assert (
+        "$if(numbersections)$\n"
+        "\\setcounter{secnumdepth}{$if(secnumdepth)$$secnumdepth$$else$5$endif$}\n"
+        "$else$\n"
+        "\\setcounter{secnumdepth}{-\\maxdimen}\n"
+        "$endif$\n"
+    ) in template
+
+
+# ── Formula alternate text (filters/formula_alt.lua) ────────────────────
+
+
+def test_server_renders_through_the_formula_alt_filter(
+    server: Any, client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(server, "_missing_components", lambda: [])
+    commands: list[list[str]] = []
+
+    def capture(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 43, b"", b"stop here")
+
+    monkeypatch.setattr(server.subprocess, "run", capture)
+    post_ast(client, AST_BYTES)
+
+    assert f"--lua-filter={server.FORMULA_ALT_FILTER_PATH}" in commands[0]
+
+
+def test_toolchain_reports_the_formula_alt_filter_digest(server: Any) -> None:
+    server.toolchain.cache_clear()
+    try:
+        digest = server.toolchain()["formula_alt_filter_sha256"]
+    finally:
+        server.toolchain.cache_clear()
+    assert digest == hashlib.sha256(server.FORMULA_ALT_FILTER_PATH.read_bytes()).hexdigest()
+
+
+def test_server_health_fails_without_the_formula_alt_filter(
+    server: Any, client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(server, "FORMULA_ALT_FILTER_PATH", tmp_path / "missing.lua")
+    monkeypatch.setattr(server.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert any("filter" in item for item in server._missing_components())
+
+
+def test_formula_alt_filter_drops_every_tex_special() -> None:
+    """The alternate text is the filter's only raw TeX: no special may survive."""
+    source = (SERVER_PATH.parent / "filters" / "formula_alt.lua").read_text(encoding="utf-8")
+    literal = re.search(r'TEX_SPECIALS = "(.*)"', source).group(1)
+    # Undo the Lua string escape (\\ -> \) and the pattern escape (%% -> %).
+    pattern_class = literal.replace("\\\\", "\\").replace("%%", "%")
+    for char in "\\{}$&#^_%~":
+        assert char in pattern_class, char
+
+
+def test_template_defines_the_formula_alt_command() -> None:
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    assert "\\NewDocumentCommand \\AccessiliaFormulaAlt" in template
+    assert "\\l__math_content_template_tl" in template
+
+
+def test_template_guards_the_internal_math_collect_command() -> None:
+    """\\MathCollectTrue is latex-lab internal: its absence must fail by name."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    assert "\\NewDocumentCommand \\AccessiliaFormulaCollect { } { \\MathCollectTrue }" in template
+    assert "\\cs_if_exist:NF \\MathCollectTrue" in template
+    source = (SERVER_PATH.parent / "filters" / "formula_alt.lua").read_text(encoding="utf-8")
+    # The filter goes through the template's command, never the internal one.
+    assert "\\\\AccessiliaFormulaCollect" in source
+    assert "MathCollectTrue" not in source
+
+
+def test_template_sets_math_with_unicode_math_after_fontspec() -> None:
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    # unicode-math needs fontspec first, and conflicts with amssymb.
+    assert "\\usepackage{fontspec}" in template
+    assert "\\usepackage{unicode-math}" in template
+    assert template.index("\\usepackage{fontspec}") < template.index(
+        "\\usepackage{unicode-math}"
+    ), "unicode-math must load after fontspec"
+    assert "\\setmathfont{texgyredejavu-math.otf}" in template
+    assert "\\usepackage{amsmath}" in template
+    assert not re.search(r"\\usepackage(\[[^]]*\])?\{[^}]*amssymb", template)
+    # amssymb names unicode-math lacks: undefined, one would fail the whole render.
+    for name in ("square", "lozenge", "varpropto", "nleqslant", "thicksim"):
+        assert f"\\providecommand\\{name}{{" in template, name
+    assert "\\let\\smallsetminus\\setminus" in template
+    assert "\\setmathfont{STIXTwoMath-Regular.otf}[range=" in template
+
+
+def test_template_maps_math_letters_to_base_letters_before_any_font() -> None:
+    """#106: the ToUnicode patch only reaches fonts loaded after it is registered."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    callback = '"luaotfload.patch_font"'
+    assert callback in template
+    assert template.index(callback) < template.index("\\usepackage{fontspec}")
+    # \directlua reads its argument as one line of TeX tokens: a Lua comment
+    # would swallow the rest, and %, # and ~ are TeX specials.
+    start = template.index("\\directlua{")
+    end = template.index('"accessilia.math_letter_tounicode")', start)
+    lua = template[start + len("\\directlua{") : end]
+    assert "--" not in lua
+    assert not set("%#~\\") & set(lua)
+
+
+def _smoke_check() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        "pdf_ua_smoke_check", SERVER_PATH.parent / "smoke_check.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_smoke_check_reads_hex_and_literal_alternate_texts() -> None:
+    """The build-time /Alt check must not miss an /Alt the writer encodes differently."""
+    module = _smoke_check()
+
+    utf16 = "<FEFF" + "x pertence".encode("utf-16-be").hex().upper() + ">"
+    pdf = f"/Alt {utf16} /Alt (a \\(b\\) (c) \\101) /Alt <41424>".encode()
+
+    assert module.alternate_texts(pdf) == ["x pertence", "a (b) (c) A", "AB@"]
+    # A hex string the writer wraps across lines.
+    assert module.alternate_texts(b"/Alt <FEFF 0061\n 0062>") == ["ab"]
+    # UTF-16 little-endian, by its byte order mark.
+    assert module.alternate_texts(b"/Alt <FFFE6100>") == ["a"]
+    # Backslash-EOL continues the line; a bare EOL of any kind reads as LF.
+    assert module.alternate_texts(b"/Alt (a\\\nb) /Alt (c\\\r\nd) /Alt (e\r\nf\rg)") == [
+        "ab",
+        "cd",
+        "e\nf\ng",
+    ]
+
+
+def test_smoke_check_reads_only_formula_alternate_texts() -> None:
+    """An /Alt on another element must not stand in for a missing Formula."""
+    module = _smoke_check()
+    pdf = (
+        b"7 0 obj\n<< /Type /StructElem /S /Figure /Alt (figura) >>\nendobj\n"
+        b"8 0 obj\n<< /Type /StructElem /C /inline /Alt (x igual a 1) /S /Formula"
+        b" /K <</Type /MCR /MCID 1>> >>\nendobj\n"
+        b"9 0 obj\n<< /Type /StructElem /S /Formula /K 2 >>\nendobj\n"
+        # The role map names Formula without being a structure element.
+        b"10 0 obj\n<< /Type /StructTreeRoot /RoleMap << /Formula /Formula >>"
+        b" /Alt (raiz) >>\nendobj\n"
+    )
+
+    assert module.formula_alternate_texts(pdf) == ["x igual a 1", ""]
+
+
+def test_smoke_check_reads_the_tounicode_text_layer() -> None:
+    """The build-time \\neq check reads bfchar and both bfrange forms of a CMap."""
+    module = _smoke_check()
+    pdf = (
+        b"/CIDInit /ProcSet findresource begin begincmap\n"
+        b"2 beginbfchar\n<0F38> <2260>\n<01D5> <D835DC60>\nendbfchar\n"
+        b"2 beginbfrange\n<0010> <0012> <0041>\n<0020> <0021> [<0063> <003D0338>]\nendbfrange\n"
+        b"endcmap\n"
+        # Outside a CMap, a hex pair is not a mapping (e.g. a content stream).
+        b"beginbfchar <0001> <0338> endbfchar"
+    )
+
+    assert module.text_layer(pdf) == {"\u2260", "\U0001d460", "A", "B", "C", "c", "=\u0338"}
+
+
+def test_smoke_check_skips_malformed_tounicode_targets() -> None:
+    """A target with no UTF-16 text is skipped, not a traceback in the image build."""
+    module = _smoke_check()
+    pdf = (
+        b"begincmap\n"
+        b"2 beginbfchar\n<0001> <D835>\n<0002> <260>\nendbfchar\n"
+        # FFFE, FFFF, then 10000: five digits, odd length.
+        b"1 beginbfrange\n<0010> <0012> <FFFE>\nendbfrange\n"
+        b"1 beginbfchar\n<0003> <2260>\nendbfchar\n"
+        b"endcmap\n"
+    )
+
+    assert module.text_layer(pdf) == {"￾", "￿", "≠"}
+
+
+def test_smoke_check_finds_italic_math_letters_in_the_text_layer() -> None:
+    module = _smoke_check()
+
+    layer = {"v", "\U0001d463", "\u210e", "\U0001d6fc", "\U0001d482", "\u211d", "\U0001d524"}
+
+    # Italic v, italic h, italic alpha and bold italic a; double-struck R and
+    # fraktur g keep their code points by design.
+    assert module.math_italic_letters(layer) == {
+        "\U0001d463", "\u210e", "\U0001d6fc", "\U0001d482"
+    }
+    assert module.math_italic_letters({"v(t) = s\u2032(t)", "\u211d"}) == set()
+
+
+def test_template_tags_lists_with_pdf17_list_numbering() -> None:
+    """latex-lab writes the PDF 2.0 values (Ordered...); PDF/UA-1 is PDF 1.7."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    for environment, value in (
+        ("itemize", "Disc"),
+        ("enumerate", "Decimal"),
+        ("description", "None"),
+        ("list", "None"),
+    ):
+        line = f"role/new-attribute = {{{environment}}}{{/O /List /ListNumbering/{value}}}"
+        assert line in template, line
+    assert template.index("ListNumbering/Decimal") < template.index("\\begin{document}")
+
+
+def test_template_does_not_hyphenate() -> None:
+    """A hyphenated word reaches the text layer as two words (in- / stante)."""
+    template = (SERVER_PATH.parent / "templates" / "pdf_ua.tex").read_text(encoding="utf-8")
+    assert "\\hyphenpenalty=10000" in template
+    assert "\\exhyphenpenalty=10000" in template
+    assert "\\raggedright" in template
+
+
+def test_smoke_check_reads_list_numbering_in_objects_and_streams() -> None:
+    import zlib
+
+    module = _smoke_check()
+    compressed = zlib.compress(b"<< /O /List /ListNumbering /Ordered >>")
+    pdf = (
+        b"5 0 obj\n<< /O /List /ListNumbering /Decimal >>\nendobj\n"
+        b"6 0 obj\n<< /Length 9 >>\nstream\n" + compressed + b"\nendstream\nendobj\n"
+    )
+
+    assert sorted(module.list_numbering_values(pdf)) == ["Decimal", "Ordered"]
+    assert set(module.list_numbering_values(pdf)) - module.PDF17_LIST_NUMBERING == {"Ordered"}
+
+
+def test_smoke_check_rejects_pdf20_list_numbering() -> None:
+    """The guard has to fail on latex-lab's Ordered/Unordered, not only read them."""
+    module = _smoke_check()
+
+    assert module.list_numbering_errors(["Decimal", "Ordered"], require_lists=False) == [
+        "ListNumbering values outside PDF 1.7 (PDF/UA-1): ['Ordered']"
+    ]
+    assert module.list_numbering_errors(["Disc", "Unordered"], require_lists=False) == [
+        "ListNumbering values outside PDF 1.7 (PDF/UA-1): ['Unordered']"
+    ]
+    assert module.list_numbering_errors(["Decimal", "Disc"], require_lists=False) == []
+
+
+def test_smoke_check_requires_lists_when_asked() -> None:
+    """--require-lists must fail a smoke whose list tagging disappeared."""
+    module = _smoke_check()
+
+    assert module.list_numbering_errors([], require_lists=True) == [
+        "no ListNumbering in a smoke that has lists: latex-lab stopped tagging them"
+    ]
+    assert module.list_numbering_errors([], require_lists=False) == []
+    assert module.list_numbering_errors(["Decimal", "Disc"], require_lists=True) == []
+
+
+@pytest.mark.parametrize("text", ["in-\nstante", "aproximação-  \n", "word\u00ad\nnext"])
+def test_raw_text_guard_rejects_split_words(text: str) -> None:
+    assert _smoke_check().text_extraction_errors(text) == ["hyphenated word at raw line end: [1]"]
+
+
+@pytest.mark.parametrize("code", [0, 1, 2, 8, 14, 31])
+def test_raw_text_guard_rejects_non_whitespace_controls(code: int) -> None:
+    assert _smoke_check().text_extraction_errors("a" + chr(code) + "b") == [
+        f"non-whitespace control characters in text layer: U+{code:04X}"
+    ]
+
+
+def test_raw_text_guard_accepts_page_breaks_and_intact_words() -> None:
+    text = "instante\nvelocidade\taproximação\f\r\n42-\n"
+    assert _smoke_check().text_extraction_errors(text) == []
+
+
+def test_raw_text_guard_uses_raw_extraction(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    checker = _smoke_check()
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, b"in-\nstante", b"")
+
+    monkeypatch.setattr(checker.subprocess, "run", run)
+    pdf = tmp_path / "input.pdf"
+    assert checker.raw_text_errors(pdf)
+    assert commands == [(["pdftotext", "-raw", "-enc", "UTF-8", str(pdf), "-"],
+                         {"check": True, "capture_output": True, "timeout": 60})]
+
+
+@pytest.mark.parametrize(
+    "failure", [FileNotFoundError(), subprocess.CalledProcessError(1, "pdftotext")]
+)
+def test_raw_text_guard_does_not_skip_extraction_failures(monkeypatch, tmp_path, failure) -> None:
+    checker = _smoke_check()
+
+    def run(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(checker.subprocess, "run", run)
+    with pytest.raises(type(failure)):
+        checker.raw_text_errors(tmp_path / "input.pdf")

@@ -153,9 +153,23 @@ def test_page_transcription_sends_the_validated_prompt_and_image() -> None:
     jsonschema.validate(result.document, schema("page-transcription"))
 
 
-def test_page_transcription_reports_a_truncated_generation() -> None:
-    adapter = provider_with(lambda r: chat_response("partial", finish="length"))
-    assert run(adapter, "document.ocr.page").document["finish"] == "length"
+def test_page_transcription_reports_a_truncated_generation(caplog) -> None:
+    adapter = provider_with(lambda r: chat_response("partial", finish="length"), page_max_tokens=99)
+    with caplog.at_level("WARNING", logger=openai_vlm.__name__):
+        assert run(adapter, "document.ocr.page").document["finish"] == "length"
+    # The core drops a cut page, so the log is where the loss can be counted.
+    assert "page_max_tokens=99" in caplog.text
+
+
+@pytest.mark.parametrize("value", ["30m", -1, True, [10]])
+def test_an_invalid_slot_wait_fails_when_the_adapter_is_built(value) -> None:
+    with pytest.raises(ConfigurationError, match="slot_wait_seconds"):
+        OpenAiCompatibleVlmProvider(descriptor(slot_wait_seconds=value))
+
+
+def test_slot_wait_falls_back_to_the_timeout_only_when_unset() -> None:
+    assert OpenAiCompatibleVlmProvider(descriptor()).slot_wait_seconds == 5.0
+    assert OpenAiCompatibleVlmProvider(descriptor(slot_wait_seconds=0)).slot_wait_seconds == 0.0
 
 
 # -- document.adjudicate.page -------------------------------------------------

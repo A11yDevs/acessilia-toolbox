@@ -1,0 +1,29 @@
+# /etc/systemd/system/vlm-gateway.service: the gateway without Docker.
+#
+# Install the Toolbox at a pinned release into a virtualenv first:
+#   python3 -m venv /opt/vlm-gateway/venv
+#   /opt/vlm-gateway/venv/bin/pip install \
+#     "acessilia-toolbox[api] @ git+https://github.com/A11yDevs/acessilia-toolbox@release/0.2.0"
+# and put providers-config.yaml and .env (chmod 600) in /opt/vlm-gateway.
+# GATEWAY_HOST and GATEWAY_PORT come from the .env.
+# One process: the limiter is a semaphore in the process, so --workers N would
+# let N times max_concurrency requests reach llama-server. Do not add --workers.
+[Unit]
+Description=Acessilia VLM gateway (Toolbox in gateway mode)
+After=network-online.target llama-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vlm-gateway
+EnvironmentFile=/opt/vlm-gateway/.env
+Environment=TOOLBOX_PROVIDERS_CONFIG=/opt/vlm-gateway/providers-config.yaml
+ExecStart=/bin/sh -c 'exec /opt/vlm-gateway/venv/bin/uvicorn \
+  acessilia_toolbox.api.gateway_app:create_gateway_app --factory \
+  --host "$GATEWAY_HOST" --port "$GATEWAY_PORT"'
+Restart=on-failure
+RestartSec=3
+DynamicUser=yes
+
+[Install]
+WantedBy=multi-user.target

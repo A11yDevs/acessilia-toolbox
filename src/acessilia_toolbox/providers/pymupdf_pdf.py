@@ -9,16 +9,23 @@ returns it inline as base64. Version 2 also takes PNG and JPEG inputs, an
 optional ``clip`` region and a ``max_side`` bound, and returns the PNG as a
 binary output that the executor stores as an artifact, together with the
 transformation actually applied (see docs/pdf-render.md).
+
+``document.text.spans`` reads the text layer as lines of spans with their
+font, size, style flags and geometry (see docs/text-spans.md).
 """
 
 from __future__ import annotations
 
 import base64
 import math
-from collections.abc import Mapping
+import shutil
+import tempfile
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, BinaryIO
 
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
@@ -43,6 +50,32 @@ MAX_SIDE_RANGE = (16, 10_000)
 #: Input media types pdf.render@2 opens, mapped to the PyMuPDF file type.
 RENDER_FILETYPES = {"application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpeg"}
 CLIP_ORIGINS = {"TOPLEFT", "BOTTOMLEFT"}
+#: document.text.spans reads at most this many pages per call.
+MAX_SPAN_PAGES = 200
+
+
+@contextmanager
+def _open_document(payload: bytes | BinaryIO, filetype: str) -> Iterator[Any]:
+    """Open bytes directly, or stage a stream to disk for PyMuPDF."""
+    if isinstance(payload, bytes):
+        document = fitz.open(stream=payload, filetype=filetype)
+        try:
+            yield document
+        finally:
+            document.close()
+        return
+
+    with tempfile.TemporaryDirectory(prefix="toolbox-pymupdf-") as staging:
+        path = Path(staging) / f"input.{filetype}"
+        payload.seek(0)
+        with path.open("wb") as destination:
+            shutil.copyfileobj(payload, destination, length=1024 * 1024)
+        payload.seek(0)
+        document = fitz.open(filename=str(path), filetype=filetype)
+        try:
+            yield document
+        finally:
+            document.close()
 
 
 def _positive_integer(params: dict[str, Any], name: str, default: int, maximum: int) -> int:
@@ -54,6 +87,8 @@ def _positive_integer(params: dict[str, Any], name: str, default: int, maximum: 
 
 class PyMuPDFProvider:
     """Calls PyMuPDF directly for deterministic PDF operations."""
+
+    supports_streaming_input = True
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -67,7 +102,7 @@ class PyMuPDFProvider:
     def execute(
         self,
         capability_id: str,
-        payload: bytes,
+        payload: bytes | BinaryIO,
         *,
         filename: str,
         media_type: str,
@@ -81,6 +116,14 @@ class PyMuPDFProvider:
 
         if capability_id == "pdf.split":
             document = self._split(payload, filename, params)
+        elif capability_id == "document.text.spans" and capability_version == 1:
+            document = self._text_spans(payload, params)
+        elif capability_id == "document.text.spans":
+            raise ProviderExecutionError(
+                f"document.text.spans@{capability_version} is not implemented "
+                "by the PyMuPDF provider",
+                provider=self.descriptor.id,
+            )
         elif capability_id == "pdf.render" and capability_version == 1:
             document = self._render(payload, filename, params)
         elif capability_id == "pdf.render" and capability_version == 2:
@@ -142,7 +185,7 @@ class PyMuPDFProvider:
         )
 
     def _split(
-        self, payload: bytes, filename: str, params: dict[str, Any]
+        self, payload: bytes | BinaryIO, filename: str, params: dict[str, Any]
     ) -> dict[str, Any]:
         """Split a multi-page PDF into individual pages."""
         max_pages = _positive_integer(params, "max_pages", 50, 1000)
@@ -150,8 +193,7 @@ class PyMuPDFProvider:
 
         pages: list[dict[str, Any]] = []
         total = 0
-        doc = fitz.open(stream=payload, filetype="pdf")
-        try:
+        with _open_document(payload, "pdf") as doc:
             total = min(len(doc), max_pages)
             for i in range(total):
                 page = doc[i]
@@ -164,17 +206,78 @@ class PyMuPDFProvider:
                     "image_bytes_base64": _b64encode(png_bytes),
                     "size_bytes": len(png_bytes),
                 })
-        finally:
-            doc.close()
-
         return {
             "pages": pages,
             "page_count": total,
             "source_filename": filename,
         }
 
+    def _text_spans(
+        self, payload: bytes | BinaryIO, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """The text layer of the requested pages as lines of styled spans.
+
+        Coordinates are the unrotated page space PyMuPDF extracts in (top-left
+        origin, points); a rotated page reports its rotation. Image blocks and
+        whitespace-only spans are skipped and spans are trimmed (``_span``):
+        TeX writes inter-word glue as spans of its own, about a third of a
+        page's spans, and the gap they leave is still in the boxes around it.
+        """
+        requested = params.get("pages")
+        try:
+            with _open_document(payload, "pdf") as doc:
+                page_count = len(doc)
+                numbers = self._span_page_numbers(requested, page_count)
+                try:
+                    # A password-protected PDF opens but fails on its first page.
+                    loaded = [doc[number - 1] for number in numbers]
+                except Exception as error:
+                    raise InvalidInputError(
+                        f"cannot open the input as application/pdf: {error}",
+                        provider=self.descriptor.id,
+                    ) from error
+                pages = [
+                    _page_spans(page, number)
+                    for page, number in zip(loaded, numbers, strict=True)
+                ]
+        except InvalidInputError:
+            raise
+        except Exception as error:
+            raise InvalidInputError(
+                f"cannot open the input as application/pdf: {error}",
+                provider=self.descriptor.id,
+            ) from error
+        return {"page_count": page_count, "coord_origin": "TOPLEFT", "pages": pages}
+
+    def _span_page_numbers(self, requested: Any, page_count: int) -> list[int]:
+        if requested is None:
+            if page_count > MAX_SPAN_PAGES:
+                raise InvalidInputError(
+                    f"the document has {page_count} pages; request at most "
+                    f"{MAX_SPAN_PAGES} with the pages parameter",
+                    provider=self.descriptor.id,
+                )
+            return list(range(1, page_count + 1))
+        if (
+            not isinstance(requested, list)
+            or not requested
+            or len(requested) > MAX_SPAN_PAGES
+            or any(type(number) is not int for number in requested)
+        ):
+            raise InvalidInputError(
+                f"pages must be a list of 1 to {MAX_SPAN_PAGES} page numbers",
+                provider=self.descriptor.id,
+            )
+        out_of_range = [n for n in requested if not 1 <= n <= page_count]
+        if out_of_range:
+            raise InvalidInputError(
+                f"pages {out_of_range} out of range (1-{page_count})",
+                provider=self.descriptor.id,
+            )
+        return sorted(set(requested))
+
     def _render(
-        self, payload: bytes, filename: str, params: dict[str, Any]
+        self, payload: bytes | BinaryIO, filename: str, params: dict[str, Any]
     ) -> dict[str, Any]:
         """Render a single PDF page to PNG."""
         dpi = _positive_integer(params, "dpi", 150, 600)
@@ -182,8 +285,7 @@ class PyMuPDFProvider:
 
         width = height = 0.0
         png_bytes = b""
-        doc = fitz.open(stream=payload, filetype="pdf")
-        try:
+        with _open_document(payload, "pdf") as doc:
             if page_number < 1 or page_number > len(doc):
                 raise InvalidInputError(
                     f"page {page_number} out of range (1-{len(doc)})",
@@ -194,9 +296,6 @@ class PyMuPDFProvider:
             height = page.rect.height
             pix = page.get_pixmap(dpi=dpi)
             png_bytes = pix.tobytes("png")
-        finally:
-            doc.close()
-
         return {
             "page_number": page_number,
             "width": width,
@@ -208,7 +307,8 @@ class PyMuPDFProvider:
 
 
     def _render_v2(
-        self, payload: bytes, filename: str, media_type: str, params: dict[str, Any]
+        self, payload: bytes | BinaryIO, filename: str, media_type: str,
+        params: dict[str, Any],
     ) -> tuple[dict[str, Any], bytes]:
         """pdf.render@2: one page, optionally clipped and bounded, as a stored PNG."""
         filetype = RENDER_FILETYPES.get(media_type)
@@ -228,61 +328,60 @@ class PyMuPDFProvider:
             )
 
         try:
-            doc = fitz.open(stream=payload, filetype=filetype)
+            with _open_document(payload, filetype) as doc:
+                page_count = len(doc)
+                if not 1 <= page_number <= page_count:
+                    raise InvalidInputError(
+                        f"page {page_number} out of range (1-{page_count})",
+                        provider=self.descriptor.id,
+                    )
+                try:
+                    # Raster formats are decoded lazily: a corrupt image fails here.
+                    page = doc[page_number - 1]
+                    page_rect = page.rect
+                except Exception as error:
+                    raise InvalidInputError(
+                        f"cannot open the input as {media_type}: {error}",
+                        provider=self.descriptor.id,
+                    ) from error
+                rect = _clip_rect(page_rect, params.get("clip"), self.descriptor.id)
+                scale = dpi / 72
+                if max_side is not None:
+                    scale = min(scale, max_side / max(rect.width, rect.height))
+                if rect.width * scale * rect.height * scale > MAX_RENDER_PIXELS:
+                    raise InvalidInputError(
+                        f"render exceeds {MAX_RENDER_PIXELS} pixels; lower dpi or set max_side",
+                        provider=self.descriptor.id,
+                    )
+                pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=rect, alpha=False)
+                png = pix.tobytes("png")
+                document = {
+                    "artifact_id": fingerprint_bytes(png),
+                    "media_type": "image/png",
+                    "size_bytes": len(png),
+                    "page_number": page_number,
+                    "page_count": page_count,
+                    "page_width": page_rect.width,
+                    "page_height": page_rect.height,
+                    "clip": {
+                        "left": rect.x0,
+                        "top": rect.y0,
+                        "right": rect.x1,
+                        "bottom": rect.y1,
+                    },
+                    "scale": scale,
+                    "dpi": scale * 72,
+                    "width_px": pix.width,
+                    "height_px": pix.height,
+                    "source_media_type": media_type,
+                    "source_filename": filename,
+                }
+        except InvalidInputError:
+            raise
         except Exception as error:
             raise InvalidInputError(
                 f"cannot open the input as {media_type}: {error}", provider=self.descriptor.id
             ) from error
-        try:
-            page_count = len(doc)
-            if not 1 <= page_number <= page_count:
-                raise InvalidInputError(
-                    f"page {page_number} out of range (1-{page_count})",
-                    provider=self.descriptor.id,
-                )
-            try:
-                # Raster formats are decoded lazily: a corrupt image fails here.
-                page = doc[page_number - 1]
-                page_rect = page.rect
-            except Exception as error:
-                raise InvalidInputError(
-                    f"cannot open the input as {media_type}: {error}",
-                    provider=self.descriptor.id,
-                ) from error
-            rect = _clip_rect(page_rect, params.get("clip"), self.descriptor.id)
-            scale = dpi / 72
-            if max_side is not None:
-                scale = min(scale, max_side / max(rect.width, rect.height))
-            if rect.width * scale * rect.height * scale > MAX_RENDER_PIXELS:
-                raise InvalidInputError(
-                    f"render exceeds {MAX_RENDER_PIXELS} pixels; lower dpi or set max_side",
-                    provider=self.descriptor.id,
-                )
-            pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=rect, alpha=False)
-            png = pix.tobytes("png")
-            document = {
-                "artifact_id": fingerprint_bytes(png),
-                "media_type": "image/png",
-                "size_bytes": len(png),
-                "page_number": page_number,
-                "page_count": page_count,
-                "page_width": page_rect.width,
-                "page_height": page_rect.height,
-                "clip": {
-                    "left": rect.x0,
-                    "top": rect.y0,
-                    "right": rect.x1,
-                    "bottom": rect.y1,
-                },
-                "scale": scale,
-                "dpi": scale * 72,
-                "width_px": pix.width,
-                "height_px": pix.height,
-                "source_media_type": media_type,
-                "source_filename": filename,
-            }
-        finally:
-            doc.close()
         return document, png
 
 
@@ -323,3 +422,66 @@ def _clip_rect(page_rect: Any, clip: Any, provider: str) -> Any:
 
 def _b64encode(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
+
+
+def _page_spans(page: Any, page_number: int) -> dict[str, Any]:
+    """One page of document.text.spans@1."""
+    text = page.get_text("rawdict")
+    lines = [
+        {
+            "bbox": _rounded(line["bbox"]),
+            "spans": spans,
+        }
+        for block in text["blocks"]
+        if block.get("type") == 0
+        for line in block["lines"]
+        if (spans := [out for span in line["spans"] if (out := _span(span))])
+    ]
+    return {
+        "page_number": page_number,
+        "width": round(text["width"], 2),
+        "height": round(text["height"], 2),
+        "rotation": page.rotation,
+        "lines": lines,
+    }
+
+
+def _span(span: Mapping[str, Any]) -> dict[str, Any] | None:
+    """A span trimmed to its visible characters, or None when it has none.
+
+    PyMuPDF synthesizes a space where it sees a gap and puts it at the start
+    of the next span, with the line's baseline: a lowered subscript would
+    report the body's origin. The origin and box are therefore taken from the
+    characters themselves, without the whitespace at either end.
+
+    The text is the PDF's character mapping, not always what a reader sees: an
+    OT1-encoded TeX font draws accents as glyphs of their own, so an accented
+    letter comes back as the letter and a separate spacing accent.
+    """
+    chars = list(span["chars"])
+    while chars and not chars[0]["c"].strip():
+        chars.pop(0)
+    while chars and not chars[-1]["c"].strip():
+        chars.pop()
+    if not chars:
+        return None
+    return {
+        "text": "".join(char["c"] for char in chars),
+        # A subset font is embedded as ABCDEF+CMMI12; the name is what matters.
+        "font": str(span["font"]).split("+", 1)[-1],
+        "size": round(span["size"], 2),
+        "flags": int(span["flags"]),
+        "bbox": _rounded(
+            (
+                min(char["bbox"][0] for char in chars),
+                min(char["bbox"][1] for char in chars),
+                max(char["bbox"][2] for char in chars),
+                max(char["bbox"][3] for char in chars),
+            )
+        ),
+        "origin": _rounded(chars[0]["origin"]),
+    }
+
+
+def _rounded(values: Any) -> list[float]:
+    return [round(float(value), 2) for value in values]

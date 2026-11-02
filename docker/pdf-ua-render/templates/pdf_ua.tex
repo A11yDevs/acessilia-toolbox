@@ -11,20 +11,184 @@
   \errmessage{The PDF/UA template requires LuaLaTeX or XeLaTeX}
 \fi
 
+% Math from the core is LaTeX written by recognizers and vision models, which
+% use amsmath environments (aligned). Without them one formula fails the render
+% and the core degrades every formula of the document to literal text. The
+% symbols (\mathbb, \neq, ...) come from unicode-math, loaded after fontspec.
+\usepackage{amsmath}
+
+% Alternate text of the next formula, for its Formula structure element.
+% latex-lab builds /Alt from \l__math_content_template_tl ("LaTeX formula
+% starts ... ends"); filters/formula_alt.lua wraps a formula in a group that
+% calls this command, so the override ends with the group and the following
+% formulas keep the default. The argument comes with TeX specials removed.
+\ExplSyntaxOn
+\NewDocumentCommand \AccessiliaFormulaAlt { m }
+  { \tl_set:Nn \l__math_content_template_tl { \exp_not:n {#1} } }
+
+% Turns math collection back on for the rest of the group, so the next formula
+% gets its Formula element: table alignment (latex-lab-testphase-table) can
+% switch collection off while it builds a cell. \MathCollectTrue is internal to
+% latex-lab (latex-lab-math.ltx; despite the name it sets
+% \l__math_collected_bool to false, the flag that suppresses collection), not
+% a documented interface. The image pins TeX Live 2025 and its build smoke
+% renders a formula in a table cell; if a latex-lab update drops the command,
+% this check names it instead of failing on an undefined control sequence.
+\msg_new:nnn { accessilia } { math-collect-missing }
+  { latex-lab~no~longer~defines~\iow_char:N\\MathCollectTrue;~formulas~in~table~cells~would~lose~their~Formula~element. }
+\AtBeginDocument
+  {
+    \cs_if_exist:NF \MathCollectTrue
+      { \msg_error:nn { accessilia } { math-collect-missing } }
+  }
+\NewDocumentCommand \AccessiliaFormulaCollect { } { \MathCollectTrue }
+\ExplSyntaxOff
+
+% unicode-math sets a math letter as its Mathematical Alphanumeric Symbol
+% (v is U+1D463 MATHEMATICAL ITALIC SMALL V), and the font's ToUnicode CMap
+% gives that plane-1 character to the text layer. A reader that ignores the
+% Formula /Alt (a browser viewer, read aloud, search, copy and paste) then gets
+% "símbolo 1a" for a variable. Each math font loaded from here on maps its
+% italic and bold italic Latin and Greek letters (and the italic h, dotless i
+% and j) to their base letters; the glyphs stay the same. Double-struck,
+% script, fraktur, sans and monospace letters keep their code points, which
+% carry meaning (R is not ℝ). A math font is one with the math alphabet
+% (U+1D44E): the text fonts are left alone, so an ℎ (U+210E, which DejaVu Sans
+% has) written in prose keeps its code point. It must come before the first
+% font is loaded.
+% The Lua below has no TeX specials (percent, hash, tilde, backslash) and no
+% comments: \directlua reads it as one line.
+\directlua{
+  local function hex4(code)
+    local digits = "0123456789ABCDEF"
+    local out = ""
+    for _ = 1, 4 do
+      local digit = code - 16 * math.floor(code / 16)
+      out = digits:sub(digit + 1, digit + 1) .. out
+      code = math.floor(code / 16)
+    end
+    return out
+  end
+  local base = {}
+  for _, block in ipairs({{0x1D434, 0x41}, {0x1D44E, 0x61}, {0x1D468, 0x41}, {0x1D482, 0x61}}) do
+    for offset = 0, 25 do base[block[1] + offset] = block[2] + offset end
+  end
+  base[0x210E] = 0x68
+  base[0x1D6A4] = 0x131
+  base[0x1D6A5] = 0x237
+  local greek = {}
+  for offset = 0, 24 do greek[offset] = 0x391 + offset end
+  greek[17] = 0x3F4
+  greek[25] = 0x2207
+  for offset = 0, 24 do greek[26 + offset] = 0x3B1 + offset end
+  for offset, code in ipairs({0x2202, 0x3F5, 0x3D1, 0x3F0, 0x3D5, 0x3F1, 0x3D6}) do
+    greek[50 + offset] = code
+  end
+  for _, first in ipairs({0x1D6E2, 0x1D71C}) do
+    for offset = 0, 57 do base[first + offset] = greek[offset] end
+  end
+  luatexbase.add_to_callback("luaotfload.patch_font", function(tfmdata)
+    local characters = tfmdata.characters
+    if not characters or not characters[0x1D44E] then return end
+    for code, letter in pairs(base) do
+      local character = characters[code]
+      if character then character.tounicode = hex4(letter) end
+    end
+  end, "accessilia.math_letter_tounicode")
+}
+
 \usepackage{fontspec}
 \defaultfontfeatures{Ligatures=TeX}
 \setmainfont{DejaVu Sans}
 \setsansfont{DejaVu Sans}
 \setmonofont{DejaVu Sans Mono}
 
+% unicode-math sets formulas in TeX Gyre DejaVu Math, the OpenType math font
+% matching the DejaVu Sans text (the default, Latin Modern, is serif), and gives
+% each symbol its own code point: without it \neq is \not overlaid on =, and
+% the text layer reads "=" plus an orphan U+0338 instead of U+2260. It conflicts
+% with amssymb, so amssymb is not loaded.
+\usepackage{unicode-math}
+\setmathfont{texgyredejavu-math.otf}
+% Symbols amssymb draws that TeX Gyre DejaVu Math has no glyph for (\bigstar,
+% \subseteqq, \pitchfork, ...): without a fallback they render as nothing.
+\setmathfont{STIXTwoMath-Regular.otf}[range={"03DD,"03F6,"2132,"2141,"22D4,
+  "25B4,"25B5,"25BE,"25BF,"2605,"27CB,"27CD,"2A5E,"2AB5-"2ABA,"2AC5,"2AC6,
+  "29EB,"2ACB,"2ACC}]
+% amssymb names unicode-math does not define. One undefined command fails the
+% render, and the core then degrades every formula of the document to text.
+\providecommand\square{\mdlgwhtsquare}
+\providecommand\blacksquare{\mdlgblksquare}
+\providecommand\lozenge{\mdlgwhtlozenge}
+\providecommand\blacklozenge{\mdlgblklozenge}
+\providecommand\centerdot{\cdot}
+\providecommand\circlearrowleft{\acwopencirclearrow}
+\providecommand\circlearrowright{\cwopencirclearrow}
+% Neither font has a math Ⓢ; STIX Two Math has it as a text glyph.
+\newfontfamily\AccessiliaCircledFont{STIXTwoMath-Regular.otf}
+\providecommand\circledS{\text{\AccessiliaCircledFont\char"24C8}}
+\providecommand\doteqdot{\Doteq}
+\providecommand\shortmid{\mid}
+\providecommand\nshortmid{\nmid}
+\providecommand\shortparallel{\parallel}
+\providecommand\nshortparallel{\nparallel}
+\providecommand\smallfrown{\frown}
+\providecommand\smallsmile{\smile}
+\providecommand\thickapprox{\approx}
+\providecommand\thicksim{\sim}
+\providecommand\varpropto{\propto}
+\providecommand\ntriangleleft{\nvartriangleleft}
+\providecommand\ntriangleright{\nvartriangleright}
+\providecommand\lvertneqq{\lneqq}
+\providecommand\gvertneqq{\gneqq}
+\providecommand\varsubsetneq{\subsetneq}
+\providecommand\varsupsetneq{\supsetneq}
+\providecommand\varsubsetneqq{\subsetneqq}
+\providecommand\varsupsetneqq{\supsetneqq}
+% Negations Unicode has no single character for take the closest one that it
+% has: \not\leqq would look \nleqq up again (a loop), and a negation slash
+% would reach the text layer as an orphan U+0338.
+\providecommand\nleqq{\nleq}
+\providecommand\ngeqq{\ngeq}
+\providecommand\nleqslant{\nleq}
+\providecommand\ngeqslant{\ngeq}
+\providecommand\npreceq{\nprec}
+\providecommand\nsucceq{\nsucc}
+\providecommand\nsubseteqq{\nsubseteq}
+\providecommand\nsupseteqq{\nsupseteq}
+% unicode-math draws \smallsetminus by rotating a glyph, which needs graphicx.
+\AtBeginDocument{\let\smallsetminus\setminus}
+
 \usepackage{tagpdf}
 \tagpdfsetup{activate-all,uncompress}
 \usepackage{latex-lab-testphase-table}
+% latex-lab tags lists with the PDF 2.0 ListNumbering values (Ordered,
+% Unordered, Description; latex-lab-testphase-block.sty). PDF/UA-1 is PDF 1.7,
+% whose values are None, Disc, Circle, Square, Decimal and the Roman and Alpha
+% styles (ISO 32000-1, 14.8.5.5), and veraPDF's PDF/UA-1 profile does not check
+% them. A lettered or Roman enumerate still reads Decimal here: the attribute
+% is per environment, not per numbering style.
+\tagpdfsetup{
+  role/new-attribute = {itemize}{/O /List /ListNumbering/Disc},
+  role/new-attribute = {enumerate}{/O /List /ListNumbering/Decimal},
+  role/new-attribute = {description}{/O /List /ListNumbering/None},
+  role/new-attribute = {list}{/O /List /ListNumbering/None},
+}
 
 \usepackage{geometry}
 \geometry{margin=2.2cm}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.5em}
+% No hyphenation: a word broken at a line end reaches the text layer as two
+% (in- / stante), which screen readers, search and copy and paste read as
+% such. Ragged right keeps the unbroken lines from stretching instead.
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\raggedright
+% A single token wider than the line (a long URL or chemical name) has no
+% break point and overflows the margin; the text layer still extracts it as
+% one word. Hyphenating only those words would put the hyphen back in the
+% text layer, so this stays a visual limitation of the no-hyphenation rule.
 
 \usepackage{hyperref}
 \usepackage{bookmark}
@@ -48,6 +212,15 @@ $endif$
 \setlength{\extrarowheight}{2pt}
 \usepackage{caption}
 \captionsetup[table]{position=above}
+
+% The article class numbers every \section, but the documents we rebuild carry
+% their own heading text, so an extra "1", "1.1" would be read before each
+% heading. Pandoc's default template does the same unless --number-sections.
+$if(numbersections)$
+\setcounter{secnumdepth}{$if(secnumdepth)$$secnumdepth$$else$5$endif$}
+$else$
+\setcounter{secnumdepth}{-\maxdimen}
+$endif$
 
 $if(title)$
 \title{$title$}

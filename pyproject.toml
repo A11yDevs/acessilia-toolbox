@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "acessilia-toolbox"
-version = "0.1.0"
+version = "0.2.0"
 description = "Deterministic, stateless capability layer exposing tools and providers to agentic systems over REST and MCP."
 readme = "README.md"
 license = { file = "LICENSE" }

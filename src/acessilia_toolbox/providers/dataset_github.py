@@ -11,6 +11,7 @@ import io
 import os
 from collections.abc import Sequence
 from typing import Any
+from urllib.parse import quote, unquote
 
 import httpx
 
@@ -24,6 +25,7 @@ from acessilia_toolbox.core.dataset import (
 from acessilia_toolbox.core.errors import (
     DatasetNotFoundError,
     DatasetProviderError,
+    InvalidInputError,
     ItemNotFoundError,
     SplitNotFoundError,
 )
@@ -70,6 +72,27 @@ DATASET_DEFS: dict[str, dict[str, Any]] = {
         },
     },
 }
+
+
+def _validate_repo_path(value: str, name: str) -> str:
+    """Reject path traversal before a URL can carry the GitHub token elsewhere."""
+    decoded = value
+    while True:
+        if (
+            not decoded
+            or decoded.startswith("/")
+            or "\\" in decoded
+            or "\x00" in decoded
+            or any(segment in {"", ".", ".."} for segment in decoded.split("/"))
+        ):
+            raise InvalidInputError(
+                f"{name} must be a relative repository path without empty or dot segments",
+                parameter=name,
+            )
+        normalized = unquote(decoded)
+        if normalized == decoded:
+            return value
+        decoded = normalized
 
 
 class GitHubDatasetProvider:
@@ -183,9 +206,12 @@ class GitHubDatasetProvider:
         ddef = self._resolve_def(dataset_id)
         owner = ddef["owner"]
         repo = ddef["repo"]
-        ref = revision or ddef["default_revision"]
+        artifact_path = _validate_repo_path(artifact_path, "artifact_path")
+        ref = _validate_repo_path(revision or ddef["default_revision"], "revision")
 
-        url = f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{artifact_path}"
+        encoded_path = quote(artifact_path, safe="/")
+        encoded_ref = quote(ref, safe="/")
+        url = f"https://raw.githubusercontent.com/{owner}/{repo}/{encoded_ref}/{encoded_path}"
         headers: dict[str, str] = {}
         if self._github_token:
             headers["Authorization"] = f"Bearer {self._github_token}"

@@ -8,6 +8,7 @@ input:
   schema: artifact/document@1
   media_types:
     - application/pdf
+    - text/html
     - application/vnd.openxmlformats-officedocument.wordprocessingml.document
     - image/png
     - image/jpeg

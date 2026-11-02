@@ -35,6 +35,8 @@ VERSION_PATH = "/version"
 class PandocSidecarProvider:
     """Calls one render route of the Pandoc sidecar."""
 
+    supports_streaming_input = True
+
     #: Human name of the output, used in error messages.
     LABEL: ClassVar[str]
     RENDER_PATH: ClassVar[str]

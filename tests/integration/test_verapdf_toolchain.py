@@ -62,17 +62,27 @@ def test_untagged_pdf_fails_pdf_ua_1(validator: TestClient) -> None:
     shutil.which("pandoc") is None or shutil.which("lualatex") is None,
     reason="needs pandoc and lualatex",
 )
-def test_pdf_from_the_pdf_ua_template_is_compliant(validator: TestClient) -> None:
+@pytest.mark.parametrize(
+    "ast",
+    [
+        {
+            "pandoc-api-version": [1, 23, 1],
+            "meta": {"title": {"t": "MetaInlines", "c": [{"t": "Str", "c": "Relatório"}]}},
+            "blocks": [
+                {"t": "Header", "c": [1, ["", [], []], [{"t": "Str", "c": "Título"}]]},
+                {"t": "Para", "c": [{"t": "Str", "c": "Olá"}]},
+            ],
+        },
+        # Formulas in table cells, where the filter turns math collection back on.
+        json.loads((DOCKER / "pdf-ua-render" / "table-smoke.json").read_text(encoding="utf-8")),
+    ],
+    ids=["prose", "table-formulas"],
+)
+def test_pdf_from_the_pdf_ua_template_is_compliant(
+    validator: TestClient, ast: dict[str, Any]
+) -> None:
     """End to end: what document.export.pdf_ua renders must pass PDF/UA-1."""
     renderer = load("pdf_ua_render_server_for_verapdf", DOCKER / "pdf-ua-render" / "server.py")
-    ast = {
-        "pandoc-api-version": [1, 23, 1],
-        "meta": {"title": {"t": "MetaInlines", "c": [{"t": "Str", "c": "Relatório"}]}},
-        "blocks": [
-            {"t": "Header", "c": [1, ["", [], []], [{"t": "Str", "c": "Título"}]]},
-            {"t": "Para", "c": [{"t": "Str", "c": "Olá"}]},
-        ],
-    }
     rendered = TestClient(renderer.app).post(
         "/render", files={"file": ("ast.json", json.dumps(ast).encode(), "application/json")}
     )

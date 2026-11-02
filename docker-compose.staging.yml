@@ -4,6 +4,8 @@
 # one image per sidecar (Sidecars workflow), all tagged with the tracked branch.
 # scripts/staging-update.sh, triggered by a systemd user timer, updates the
 # toolbox and its sidecars together once the images of a new commit exist.
+# Sidecars, MinIO and Valkey bind to loopback for local diagnostics only.
+# The authenticated Toolbox API remains reachable by the core on this host.
 # Set a *_IMAGE variable only to run a locally built sidecar instead.
 #
 # Usage:
@@ -31,10 +33,12 @@ services:
       MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      TOOLBOX_ARTIFACT_FALLBACK_MODE: ${TOOLBOX_ARTIFACT_FALLBACK_MODE:-disabled}
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
       TOOLBOX_API_KEY: ${TOOLBOX_API_KEY}
       AUDIVERIS_SERVE_URL: ${AUDIVERIS_SERVE_URL:-http://audiveris-serve:5003}
       RAPID_LATEX_OCR_URL: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
+      PP_FORMULANET_URL: ${PP_FORMULANET_URL:-http://pp-formulanet:5010}
       RAPIDOCR_ORIENT_URL: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
       PDF_UA_RENDER_URL: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
       VERAPDF_VALIDATE_URL: ${VERAPDF_VALIDATE_URL:-http://verapdf-validate:5008}
@@ -45,6 +49,9 @@ services:
       - .env
     volumes:
       - ${ARTIFACT_FALLBACK_SOURCE:-artifact-fallback}:/tmp/acessilia-toolbox-artifacts
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8002/v1/health"]
@@ -55,10 +62,11 @@ services:
 
   # ── Providers ────────────────────────────────────────────────────
   docling-serve:
+    restart: unless-stopped
     image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.32.0}
     container_name: docling-serve-staging
     ports:
-      - "${DOCLING_SERVE_PORT:-5001}:5001"
+      - "127.0.0.1:${DOCLING_SERVE_PORT:-5001}:5001"
     environment:
       DOCLING_SERVE_ENABLE_UI: "${DOCLING_SERVE_ENABLE_UI:-false}"
       # The image caches models under /opt/app-root/src/.cache/docling/models
@@ -80,15 +88,20 @@ services:
   # GPU host, build with scripts/build-mineru-image.sh (vllm variant), set
   # MINERU_SERVE_IMAGE and add `deploy.resources.reservations.devices`.
   mineru-serve:
+    restart: unless-stopped
+    # Size from measured peak use; 0 keeps the existing uncapped behavior.
+    mem_limit: ${MINERU_MEMORY_LIMIT:-0}
     image: ${MINERU_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-mineru:${TRACK_TAG:-develop}}
     container_name: mineru-serve-staging
     entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "${MINERU_SERVE_PORT:-5002}:8000"
+      - "127.0.0.1:${MINERU_SERVE_PORT:-5002}:8000"
     environment:
       MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+      HF_HOME: /home/mineru/.cache/huggingface
     volumes:
       - mineru-models:/home/mineru/.cache/modelscope
+      - mineru-huggingface:/home/mineru/.cache/huggingface
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')"]
       interval: 15s
@@ -104,7 +117,7 @@ services:
     image: ${AUDIVERIS_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-audiveris-serve:${TRACK_TAG:-develop}}
     container_name: audiveris-serve-staging
     ports:
-      - "${AUDIVERIS_SERVE_PORT:-5003}:5003"
+      - "127.0.0.1:${AUDIVERIS_SERVE_PORT:-5003}:5003"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5003/health || exit 1"]
       interval: 30s
@@ -119,7 +132,7 @@ services:
     image: ${NOUGAT_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-nougat:${TRACK_TAG:-develop}}
     container_name: nougat-serve-staging
     ports:
-      - "${NOUGAT_SERVE_PORT:-5004}:5004"
+      - "127.0.0.1:${NOUGAT_SERVE_PORT:-5004}:5004"
     volumes:
       - nougat-torch-models:/root/.cache/torch/hub
       - nougat-models:/root/.cache/nougat
@@ -138,7 +151,7 @@ services:
     image: ${RAPID_LATEX_OCR_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-rapid-latex-ocr:${TRACK_TAG:-develop}}
     container_name: rapid-latex-ocr-staging
     ports:
-      - "${RAPID_LATEX_OCR_PORT:-5005}:5004"
+      - "127.0.0.1:${RAPID_LATEX_OCR_PORT:-5005}:5004"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5004/health || exit 1"]
       interval: 15s
@@ -147,13 +160,30 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # PP-FormulaNet_plus-M formula OCR sidecar (optional). Built by CI from
+  # docker/pp-formulanet.Dockerfile; the Toolbox reaches it through
+  # PP_FORMULANET_URL. Paddle loads the model on start, hence the longer
+  # health-check grace period.
+  pp-formulanet:
+    image: ${PP_FORMULANET_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-pp-formulanet:${TRACK_TAG:-develop}}
+    container_name: pp-formulanet-staging
+    ports:
+      - "127.0.0.1:${PP_FORMULANET_PORT:-5010}:5010"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5010/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    restart: unless-stopped
+
   # RapidOCR page orientation sidecar (optional). Built by CI from
   # docker/rapidocr-orient.Dockerfile; reports 503 until the engine is ready.
   rapidocr-orient:
     image: ${RAPIDOCR_ORIENT_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-rapidocr-orient:${TRACK_TAG:-develop}}
     container_name: rapidocr-orient-staging
     ports:
-      - "${RAPIDOCR_ORIENT_PORT:-5006}:5006"
+      - "127.0.0.1:${RAPIDOCR_ORIENT_PORT:-5006}:5006"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5006/health || exit 1"]
       interval: 15s
@@ -169,7 +199,7 @@ services:
     image: ${PDF_UA_RENDER_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-pdf-ua-render:${TRACK_TAG:-develop}}
     container_name: pdf-ua-render-staging
     ports:
-      - "${PDF_UA_RENDER_PORT:-5007}:5007"
+      - "127.0.0.1:${PDF_UA_RENDER_PORT:-5007}:5007"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5007/health || exit 1"]
       interval: 15s
@@ -184,7 +214,7 @@ services:
     image: ${VERAPDF_VALIDATE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-verapdf-validate:${TRACK_TAG:-develop}}
     container_name: verapdf-validate-staging
     ports:
-      - "${VERAPDF_VALIDATE_PORT:-5008}:5008"
+      - "127.0.0.1:${VERAPDF_VALIDATE_PORT:-5008}:5008"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5008/health || exit 1"]
       interval: 15s
@@ -200,7 +230,7 @@ services:
     image: ${MATH_SPEECH_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-math-speech:${TRACK_TAG:-develop}}
     container_name: math-speech-staging
     ports:
-      - "${MATH_SPEECH_PORT:-5009}:5009"
+      - "127.0.0.1:${MATH_SPEECH_PORT:-5009}:5009"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5009/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 15s
@@ -214,8 +244,8 @@ services:
     container_name: acessilia-minio-staging
     command: server /data --console-address ":9001"
     ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
@@ -232,7 +262,7 @@ services:
     image: ${VALKEY_IMAGE:-valkey/valkey:8-alpine}
     container_name: acessilia-valkey-staging
     ports:
-      - "${VALKEY_PORT:-6379}:6379"
+      - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
     volumes:
       - valkey-data:/data
     healthcheck:
@@ -264,6 +294,7 @@ volumes:
   artifact-fallback:
   docling-models:
   mineru-models:
+  mineru-huggingface:
   minio-data:
   nougat-models:
   nougat-torch-models:

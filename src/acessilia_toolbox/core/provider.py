@@ -221,7 +221,9 @@ def _is_secret(key: str) -> bool:
 def expand_env(value: Any) -> Any:
     """Resolve `${VAR}` and `${VAR:-default}` placeholders.
 
-    An unset variable falls back to its inline default when one is given.
+    An unset or empty variable falls back to its inline default when one is
+    given, as in the shell: a `KEY=` line left in an env file must not replace
+    a default with an empty value.
     Without a default it is kept as-is so the registry stays loadable even
     when optional providers are not configured; the placeholder then fails
     naturally when the provider is actually used.
@@ -231,10 +233,10 @@ def expand_env(value: Any) -> Any:
         def _replace(match: re.Match[str]) -> str:
             name, default = match.group(1), match.group(2)
             resolved = os.environ.get(name)
+            if default is not None and not resolved:
+                return default
             if resolved is not None:
                 return resolved
-            if default is not None:
-                return default
             return match.group(0)
 
         return ENV_PLACEHOLDER.sub(_replace, value)

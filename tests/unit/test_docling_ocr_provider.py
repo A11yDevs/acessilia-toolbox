@@ -1,6 +1,7 @@
 """docling-ocr adapter behavior, exercised over a simulated transport."""
 # mypy: disable-error-code="index"
 
+import copy
 from collections.abc import Callable
 
 import httpx
@@ -87,6 +88,15 @@ def convert_handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json=SAMPLE_RESPONSE)
 
 
+def json_handler(body: dict[str, object]) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return convert_handler(request)
+        return httpx.Response(200, json=body)
+
+    return handler
+
+
 def extract(adapter: DoclingOcrProvider) -> ExtractionResult:
     return adapter.execute(
         "document.ocr",
@@ -118,6 +128,43 @@ class TestDoclingOcrProvider:
 
         assert items[0]["page"] == 1
         assert len(items[0]["bbox"]) == 4
+
+    def test_docling_dict_bbox_becomes_top_left_list(self) -> None:
+        """#116: docling-serve's {l,t,r,b,coord_origin} box, flipped by page height."""
+        response = copy.deepcopy(SAMPLE_RESPONSE)
+        texts = response["document"]["json_content"]["texts"]
+        texts[0]["prov"] = [{
+            "page_no": 1,
+            "page": 9,
+            "bbox": {"l": 285.3, "t": 522.0, "r": 650.0, "b": 471.0, "coord_origin": "BOTTOMLEFT"},
+        }]
+        texts[1]["prov"] = [{
+            "page_no": 1,
+            "bbox": {"l": 10, "t": 20, "r": 30, "b": 40, "coord_origin": "TOPLEFT"},
+        }]
+
+        items = extract(provider_with(json_handler(response))).document["items"]
+
+        # page_no wins over page; ocr-result@1 wants [left, top, right, bottom].
+        assert items[0]["page"] == 1
+        assert items[0]["bbox"] == [285.3, 320.0, 650.0, 371.0]
+        assert items[1]["bbox"] == [10.0, 20.0, 30.0, 40.0]
+
+    def test_an_unplaceable_box_keeps_its_text(self) -> None:
+        response = copy.deepcopy(SAMPLE_RESPONSE)
+        content = response["document"]["json_content"]
+        content["pages"] = {}
+        content["texts"][0]["prov"] = [{
+            "page_no": 1,
+            "bbox": {"l": 1, "t": 9, "r": 5, "b": 2, "coord_origin": "BOTTOMLEFT"},
+        }]
+        content["texts"][1]["prov"] = []
+
+        items = extract(provider_with(json_handler(response))).document["items"]
+
+        assert [item["bbox"] for item in items] == [[], []]
+        assert [item["page"] for item in items] == [1, 1]
+        assert items[0]["text"] == "Este é um texto de teste em português."
 
     def test_full_text_concatenates_items(self) -> None:
         extraction = extract(provider_with(convert_handler))

@@ -229,3 +229,6 @@ __marimo__/
 # math-speech sidecar build outputs (rebuilt inside the image).
 docker/math-speech/node_modules/
 docker/math-speech/mathcat-wasm/target/
+
+# Production deployment secrets and registry settings
+.deploy.env

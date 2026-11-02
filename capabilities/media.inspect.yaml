@@ -13,6 +13,7 @@ input:
     - image/tiff
     - image/bmp
     - application/pdf
+    - text/html
 
 output:
   schema: artifact/media-inspection@1

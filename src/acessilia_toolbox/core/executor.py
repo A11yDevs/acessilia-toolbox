@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import tempfile
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -27,10 +28,16 @@ from acessilia_toolbox.core.capability import CapabilityManifest, CapabilityRegi
 from acessilia_toolbox.core.errors import (
     ConfigurationError,
     InvalidInputError,
+    ProviderUnavailableError,
     ToolboxError,
     UnsupportedMediaTypeError,
 )
-from acessilia_toolbox.core.fingerprint import fingerprint_bytes, fingerprint_parameters
+from acessilia_toolbox.core.fingerprint import (
+    fingerprint_bytes,
+    fingerprint_parameters,
+    fingerprint_stream,
+)
+from acessilia_toolbox.core.input_memory import check_in_memory_size, read_in_memory
 from acessilia_toolbox.core.normalization import build_processing_manifest
 from acessilia_toolbox.core.preprocessing import (
     OrientationResult,
@@ -81,7 +88,7 @@ class CapabilityExecutor:
     def execute(
         self,
         capability_id: str,
-        payload: bytes,
+        payload: bytes | BinaryIO,
         *,
         filename: str,
         media_type: str,
@@ -101,41 +108,46 @@ class CapabilityExecutor:
         descriptor = self._providers.resolve(manifest.id, provider_id)
         adapter = self._adapter_factory(descriptor)
 
-        input_fingerprint = fingerprint_bytes(payload)
+        needs_bytes = not getattr(adapter, "supports_streaming_input", False) or bool(
+            parameters and parameters.get("auto_rotate") and is_supported_image(media_type)
+        )
+        if isinstance(payload, bytes):
+            input_fingerprint = fingerprint_bytes(payload)
+        else:
+            payload.seek(0)
+            input_fingerprint = fingerprint_stream(payload)
+            payload.seek(0)
         versions = _versions_of(adapter)
         provider_version = versions.pop("provider", descriptor.version)
-        cache_key = compute_cache_key(
-            capability_id=manifest.id,
-            capability_version=manifest.version,
-            provider_id=descriptor.id,
-            provider_version=provider_version,
-            input_fingerprints=[input_fingerprint],
-            parameters=parameters,
-            model_versions=versions,
-            filename=filename,
-            media_type=media_type,
-            language=language,
-        )
-
-        if manifest.execution.cacheable and not no_cache:
-            cached = self._cache.get(cache_key)
-            if cached is not None:
-                try:
-                    restored = _restore(cached, cache_key)
-                except ValidationError:
-                    # Cached results from an older contract must not block execution.
-                    restored = None
-                if restored is not None and self._outputs_available(restored):
-                    return restored
+        if needs_bytes:
+            if isinstance(payload, bytes):
+                check_in_memory_size(len(payload))
+            else:
+                payload = read_in_memory(payload)
 
         execution_payload = payload
         orientation: OrientationResult | None = None
+        preprocessing: dict[str, Any] | None = None
         auto_rotate = bool(parameters and parameters.get("auto_rotate", False))
         if auto_rotate and is_supported_image(media_type):
+            preprocessing = {
+                "version": 1,
+                "provider": None,
+                "original_input_fingerprint": input_fingerprint,
+            }
             orient_adapter = None
             try:
                 orient_desc = self._providers.resolve("image.page.orient")
                 orient_adapter = self._adapter_factory(orient_desc)
+                preprocessing.update(
+                    provider=orient_desc.id,
+                    provider_version=orient_desc.version,
+                    model_versions=_versions_of(orient_adapter),
+                    configuration_hash=fingerprint_parameters(
+                        {"endpoint": orient_desc.endpoint, "config": orient_desc.config}
+                    ),
+                    parameters={"return_image": True},
+                )
             except ToolboxError as exc:
                 # Orientation is an optional preprocessing step: a deployment
                 # without the provider still extracts, just without rotating.
@@ -149,19 +161,54 @@ class CapabilityExecutor:
                     exc_info=True,
                 )
             execution_payload, orientation = detect_and_orient_image(
-                payload, media_type=media_type, orient_provider=orient_adapter
+                cast(bytes, payload), media_type=media_type, orient_provider=orient_adapter
             )
             if orientation.auto_rotated:
                 # The rotated bytes are the real input, so they replace the
                 # fingerprint; otherwise the cache could serve a stale result.
                 input_fingerprint = fingerprint_bytes(execution_payload)
+            # Confidence is audit metadata, not a change to extraction input.
+            preprocessing["orientation"] = _orientation_payload(
+                orientation, include_confidence=False
+            )
+
+        # Cache the effective input and preprocessing context. Running orientation
+        # first also lets a recovered provider replace a degraded cached result.
+        cache_key = compute_cache_key(
+            capability_id=manifest.id,
+            capability_version=manifest.version,
+            provider_id=descriptor.id,
+            provider_version=provider_version,
+            input_fingerprints=[input_fingerprint],
+            parameters=parameters,
+            model_versions=versions,
+            filename=filename,
+            media_type=media_type,
+            language=language,
+            preprocessing=preprocessing,
+        )
+
+        if manifest.execution.cacheable and not no_cache:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                try:
+                    restored = _restore(cached, cache_key)
+                except ValidationError:
+                    # Cached results from an older contract must not block execution.
+                    restored = None
+                if restored is not None:
+                    servable = self._servable_cached(
+                        restored, allow_inline_json=not manifest.output.by_reference
+                    )
+                    if servable is not None:
+                        return servable
 
         # Only adapters of capabilities with more than one version need to
         # know which contract they serve; version 1 keeps the original call.
         version_kwargs = (
             {"capability_version": manifest.version} if manifest.version > 1 else {}
         )
-        extraction = adapter.execute(
+        extraction = cast(Any, adapter).execute(
             manifest.id,
             execution_payload,
             filename=filename,
@@ -183,7 +230,12 @@ class CapabilityExecutor:
                 source = Path(staging) / filename
                 # Stage the bytes the provider actually saw, so `source.sha256`
                 # matches the rotated input when auto-rotate applied.
-                source.write_bytes(execution_payload)
+                if isinstance(execution_payload, bytes):
+                    source.write_bytes(execution_payload)
+                else:
+                    execution_payload.seek(0)
+                    with source.open("wb") as staged:
+                        shutil.copyfileobj(execution_payload, staged, length=1024 * 1024)
                 document = build_processing_manifest(source, extraction, language=language)
             document_payload = document.model_dump(mode="json", by_alias=True)
             artifact_suffix = f"{Path(filename).stem}.structured-document.json"
@@ -192,13 +244,23 @@ class CapabilityExecutor:
 
         artifacts: list[ArtifactRef] = []
         if self._store is not None:
-            artifacts.append(
-                self._store.put(
+            try:
+                document_ref = self._store.put(
                     serialized,
                     media_type="application/json",
                     filename=artifact_suffix,
                 )
-            )
+            except ProviderUnavailableError:
+                if manifest.output.by_reference or extraction.outputs:
+                    raise
+                # Inline results remain usable during a storage outage. The
+                # reference never claims a persisted download, but the result is
+                # still cached: while storage stays down the cache hit is served
+                # inline, and once it recovers the missing object invalidates the
+                # entry, so the next execution publishes and replaces it.
+                LOG.warning("JSON artifact storage unavailable; returning inline result")
+                document_ref = ArtifactRef.of(serialized, media_type="application/json")
+            artifacts.append(document_ref)
         else:
             artifacts.append(ArtifactRef.of(serialized, media_type="application/json"))
         if extraction.outputs:
@@ -241,6 +303,19 @@ class CapabilityExecutor:
     ) -> ArtifactRef:
         return self._require_store().put(payload, media_type=media_type, filename=filename)
 
+    def store_artifact_stream(
+        self, stream: BinaryIO, *, media_type: str, filename: str | None = None
+    ) -> ArtifactRef:
+        store = self._require_store()
+        put_stream = getattr(store, "put_stream", None)
+        if callable(put_stream):
+            return cast(ArtifactRef, put_stream(stream, media_type=media_type, filename=filename))
+        return store.put(read_in_memory(stream), media_type=media_type, filename=filename)
+
+    def stat_artifact(self, artifact_id: str) -> ArtifactRef:
+        shards(artifact_id)
+        return self._require_store().stat(artifact_id)
+
     def retrieve_artifact(
         self, artifact_id: str, *, max_bytes: int | None = None
     ) -> tuple[bytes, ArtifactRef]:
@@ -251,28 +326,63 @@ class CapabilityExecutor:
             raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
         return store.get(artifact_id), ref
 
-    def _outputs_available(self, result: CapabilityResult) -> bool:
-        """Whether every stored binary output of a cached result still exists.
+    def retrieve_artifact_to(
+        self, artifact_id: str, destination: BinaryIO, *, max_bytes: int
+    ) -> ArtifactRef:
+        shards(artifact_id)
+        store = self._require_store()
+        ref = store.stat(artifact_id)
+        if ref.size > max_bytes:
+            raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+        copy_to = getattr(store, "copy_to", None)
+        if callable(copy_to):
+            copy_to(artifact_id, destination, max_bytes=max_bytes)
+        else:
+            check_in_memory_size(ref.size)
+            payload = store.get(artifact_id)
+            check_in_memory_size(len(payload))
+            if len(payload) > max_bytes:
+                raise InvalidInputError(f"artifact exceeds {max_bytes} bytes")
+            destination.write(payload)
+        destination.seek(0)
+        return ref
 
-        The JSON document travels inline, but a binary output is reachable only
-        through the store; serving a cached reference to a deleted object would
-        hand the consumer an id it cannot download.
+    def _servable_cached(
+        self, result: CapabilityResult, *, allow_inline_json: bool = False
+    ) -> CapabilityResult | None:
+        """Return the cached result to serve, or ``None`` to execute again.
 
-        `execute` always records the inline document first, so every later
-        artifact is a binary output. This costs one `exists` per binary on each
-        cache hit, which is cheap for the local store; a slow or failing-over
-        backend would call for a short-lived cache of these checks.
+        Every stored reference is checked, including the inline document's JSON,
+        so each cache hit costs at least one ``exists`` call (potentially an S3
+        round trip). Verified missing objects invalidate the cache. Temporary
+        unavailability is different: an inline-only contract can still serve its
+        cached JSON, as a copy without the unverified storage location. Required
+        binary/by-reference outputs must still be verified. Without a store,
+        only an inline JSON reference without storage metadata is allowed.
         """
-        binaries = result.artifacts[1:]
-        if not binaries:
-            return True
         if self._store is None:
-            return False
+            inline_only = len(result.artifacts) <= 1 and all(
+                artifact.storage_backend is None and artifact.uri is None
+                for artifact in result.artifacts
+            )
+            return result if inline_only else None
         try:
-            return all(self._store.exists(artifact.artifact_id) for artifact in binaries)
+            if all(self._store.exists(artifact.artifact_id) for artifact in result.artifacts):
+                return result
+            return None
+        except ProviderUnavailableError as exc:
+            if (
+                allow_inline_json
+                and len(result.artifacts) == 1
+                and result.artifacts[0].media_type == "application/json"
+            ):
+                LOG.info("cached JSON storage unavailable; serving inline: %s", exc.message)
+                return _without_storage_location(result)
+            LOG.info("required cached outputs could not be verified: %s", exc.message)
+            return None
         except ToolboxError as exc:
             LOG.info("cached outputs could not be verified; executing again: %s", exc.message)
-            return False
+            return None
 
     def _require_store(self) -> ArtifactStore:
         if self._store is None:
@@ -280,18 +390,38 @@ class CapabilityExecutor:
         return self._store
 
 
-def _orientation_payload(result: OrientationResult | None) -> dict[str, Any] | None:
-    """Record the preprocessing decision so a rotated result stays auditable."""
+def _orientation_payload(
+    result: OrientationResult | None, *, include_confidence: bool = True
+) -> dict[str, Any] | None:
+    """Record the preprocessing decision so a rotated result stays auditable.
+
+    Provenance keeps the confidence; the cache identity leaves it out, since a
+    non-deterministic score would otherwise prevent every cache hit.
+    """
     if result is None:
         return None
-    return {
+    payload: dict[str, Any] = {
         "angle": result.angle,
-        "confidence": result.confidence,
         "stage": result.stage,
         "auto_rotated": result.auto_rotated,
         "original_dimensions": list(result.original_dimensions),
         "oriented_dimensions": list(result.oriented_dimensions),
     }
+    if include_confidence:
+        payload["confidence"] = result.confidence
+    return payload
+
+
+def _without_storage_location(result: CapabilityResult) -> CapabilityResult:
+    """Copy a result whose artifacts no longer claim a persisted download."""
+    return result.model_copy(
+        update={
+            "artifacts": [
+                artifact.model_copy(update={"storage_backend": None, "uri": None})
+                for artifact in result.artifacts
+            ]
+        }
+    )
 
 
 def _versions_of(adapter: ProviderAdapter) -> dict[str, str]:
@@ -311,11 +441,17 @@ def _restore(cached: dict[str, Any], cache_key: str) -> CapabilityResult:
 
 def _validate_input(
     manifest: CapabilityManifest,
-    payload: bytes,
+    payload: bytes | BinaryIO,
     filename: str,
     media_type: str,
 ) -> None:
-    if not payload:
+    if not isinstance(payload, bytes):
+        payload.seek(0)
+        first = payload.read(1)
+        payload.seek(0)
+        if not first:
+            raise InvalidInputError("empty payload", capability=manifest.id)
+    elif not payload:
         raise InvalidInputError("empty payload", capability=manifest.id)
 
     # Uploads are untrusted: reject path traversal before the name reaches disk.

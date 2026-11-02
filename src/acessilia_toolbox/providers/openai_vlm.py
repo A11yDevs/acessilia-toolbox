@@ -29,6 +29,7 @@ given server understands (``repeat_penalty`` for llama-server,
 from __future__ import annotations
 
 import base64
+import logging
 import re
 import threading
 from collections.abc import Mapping
@@ -48,6 +49,8 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+
+LOG = logging.getLogger(__name__)
 
 CHAT_PATH = "/v1/chat/completions"
 
@@ -70,6 +73,9 @@ DEFAULTS: dict[str, Any] = {
     "table_max_tokens": 6000,
     "table_hint_chars": 6000,
     "table_max_samples": 8,
+    # How long a chat of the VLM gateway waits for a slot; None means
+    # timeout_seconds, 0 means no wait.
+    "slot_wait_seconds": None,
 }
 
 # vlm_page_ocr.py, prompt v1. Prompt v2 ("do not transcribe text inside
@@ -202,17 +208,33 @@ class OpenAiCompatibleVlmProvider:
                 f"provider {descriptor.id} needs config.model (the id the server serves)",
                 provider=descriptor.id,
             )
+        self.slot_wait_seconds = _slot_wait_seconds(descriptor, self.config["slot_wait_seconds"])
         self._slots = _semaphore(descriptor.id, int(self.config["max_concurrency"]))
 
-    def _client(self, timeout: float | None = None) -> httpx.Client:
-        headers = {}
+    @property
+    def slots(self) -> threading.BoundedSemaphore:
+        """The server's parallel slots, shared with the chat gateway."""
+        return self._slots
+
+    def _headers(self) -> dict[str, str]:
         api_key = str(self.config.get("api_key") or "")
         if api_key and "${" not in api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+            return {"Authorization": f"Bearer {api_key}"}
+        return {}
+
+    def _client(self, timeout: float | None = None) -> httpx.Client:
         return httpx.Client(
             base_url=self.base_url,
             timeout=timeout or self.descriptor.timeout_seconds,
-            headers=headers,
+            headers=self._headers(),
+        )
+
+    def async_client(self) -> httpx.AsyncClient:
+        """Client for the chat gateway, which relays requests without blocking."""
+        return httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=self.descriptor.timeout_seconds,
+            headers=self._headers(),
         )
 
     def execute(
@@ -275,6 +297,14 @@ class OpenAiCompatibleVlmProvider:
         )
         choice = _first_choice(response, self.descriptor.id)
         text = _PAGE_FENCE.sub("", _message_text(choice).strip()).strip()
+        if choice.get("finish_reason") == "length":
+            # The core drops a page cut here for the extractors' text; the log is
+            # how the share of pages lost to page_max_tokens can be measured.
+            LOG.warning(
+                "%s: page transcription cut at page_max_tokens=%s",
+                self.descriptor.id,
+                self.config["page_max_tokens"],
+            )
         return {
             "markdown": text,
             "finish": choice.get("finish_reason"),
@@ -511,6 +541,23 @@ class OpenAiCompatibleVlmProvider:
                 detail=f"{type(exc).__name__}: {exc}",
                 checked_at=checked_at,
             )
+
+
+def _slot_wait_seconds(descriptor: ProviderDescriptor, value: Any) -> float:
+    """The gateway's wait for a slot, checked when the adapter is built."""
+    if value is None:
+        return descriptor.timeout_seconds
+    try:
+        wait = float(value)
+    except (TypeError, ValueError):
+        wait = -1.0
+    if wait < 0 or isinstance(value, bool):
+        raise ConfigurationError(
+            f"provider {descriptor.id} config.slot_wait_seconds must be a non-negative "
+            f"number of seconds, not {value!r}",
+            provider=descriptor.id,
+        )
+    return wait
 
 
 def _first_choice(response: dict[str, Any], provider: str) -> dict[str, Any]:

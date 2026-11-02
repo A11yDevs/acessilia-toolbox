@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
+import logging
 import os
-from typing import Annotated, Any
+import tempfile
+from typing import Annotated, Any, BinaryIO
 from urllib.parse import quote
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from acessilia_toolbox import __version__
@@ -19,6 +23,8 @@ from acessilia_toolbox.api.schemas import (
     ErrorResponse,
     ExecutionResponse,
     HealthResponse,
+    ReadinessResponse,
+    UploadLimitResponse,
 )
 from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityRegistry
@@ -26,6 +32,7 @@ from acessilia_toolbox.core.errors import (
     DatasetNotFoundError,
     InvalidInputError,
     ProviderUnavailableError,
+    UploadTooLargeError,
 )
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.pddl import (
@@ -59,7 +66,13 @@ ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     504: {"model": ErrorResponse},
 }
 
+UPLOAD_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    **ERROR_RESPONSES,
+    413: {"model": ErrorResponse | UploadLimitResponse},
+}
+
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+LOG = logging.getLogger(__name__)
 
 
 def capabilities(request: Request) -> CapabilityRegistry:
@@ -84,6 +97,71 @@ def health() -> HealthResponse:
         version=__version__,
         git_commit=os.getenv("GIT_COMMIT", ""),
         image_tag=os.getenv("IMAGE_TAG", ""),
+    )
+
+
+@public_router.get(
+    "/ready",
+    response_model=ReadinessResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid provider"},
+        503: {"model": ReadinessResponse, "description": "Service unavailable"},
+    },
+    tags=["health"],
+)
+def ready(request: Request, provider: str | None = None) -> JSONResponse:
+    from acessilia_toolbox.providers.storage import storage_ready
+
+    checks = {"catalog": False, "structure": False, "storage": False}
+    ready_provider = (os.getenv("TOOLBOX_READY_PROVIDER") or "docling").strip() or "docling"
+    if provider is not None and provider != ready_provider:
+        raise InvalidInputError(
+            "the public readiness route only checks TOOLBOX_READY_PROVIDER",
+            provider=ready_provider,
+        )
+    try:
+        request.app.state.capabilities.get("document.structure.extract")
+        checks["catalog"] = True
+    except Exception:
+        LOG.warning("readiness capability catalog check failed", exc_info=True)
+    try:
+        descriptor = request.app.state.providers.resolve(
+            "document.structure.extract",
+            ready_provider,
+        )
+        if descriptor.transport == "http" and descriptor.endpoint:
+            with httpx.Client(base_url=descriptor.endpoint, timeout=2.0) as client:
+                response = client.get(descriptor.health_path)
+                checks["structure"] = response.status_code == 200
+                if not checks["structure"]:
+                    LOG.warning(
+                        "readiness structural provider %s returned HTTP %s",
+                        ready_provider,
+                        response.status_code,
+                    )
+        else:
+            health = create_adapter(descriptor).health()
+            checks["structure"] = health.healthy
+            if not checks["structure"]:
+                LOG.warning(
+                    "readiness structural provider %s is unhealthy: %s",
+                    ready_provider,
+                    health.detail or "provider reported unhealthy",
+                )
+    except Exception:
+        LOG.warning(
+            "readiness structural provider check failed for %s",
+            ready_provider,
+            exc_info=True,
+        )
+    try:
+        checks["storage"] = storage_ready(request.app.state.store)
+    except Exception:
+        LOG.warning("readiness storage check failed", exc_info=True)
+    healthy = all(checks.values())
+    return JSONResponse(
+        {"status": "ready" if healthy else "unavailable", "checks": checks},
+        status_code=200 if healthy else 503,
     )
 
 
@@ -131,7 +209,7 @@ def _registered(registry: ProviderRegistry, capability_id: str) -> list[str]:
 @router.post(
     "/capabilities/{capability_id}:execute",
     response_model=ExecutionResponse,
-    responses=ERROR_RESPONSES,
+    responses=UPLOAD_ERROR_RESPONSES,
     tags=["capabilities"],
 )
 async def execute_capability(
@@ -150,27 +228,53 @@ async def execute_capability(
     if not slots.acquire(blocking=False):
         raise ProviderUnavailableError("execution capacity exhausted; retry later")
     try:
-        payload, filename, media_type = await _resolve_input(runner, file, artifact_id)
-        if len(payload) > MAX_UPLOAD_BYTES:
-            raise InvalidInputError(
-                f"upload exceeds {MAX_UPLOAD_BYTES} bytes", capability=capability_id
+        with contextlib.ExitStack() as stack:
+            return await _execute_with_input(
+                runner, stack, capability_id, file, artifact_id, provider, parameters,
+                language, version, no_cache,
             )
-
-        result = await run_in_threadpool(
-            runner.execute,
-            capability_id,
-            payload,
-            filename=filename,
-            media_type=media_type,
-            provider_id=provider,
-            capability_version=version,
-            parameters=_parse_parameters(parameters),
-            language=language,
-            no_cache=no_cache,
-        )
     finally:
         slots.release()
 
+
+async def _execute_with_input(
+    runner: CapabilityExecutor, stack: contextlib.ExitStack, capability_id: str,
+    file: UploadFile | None, artifact_id: str | None, provider: str | None,
+    parameters: str | None, language: str, version: int | None, no_cache: bool,
+) -> ExecutionResponse:
+    payload: bytes | BinaryIO
+    if file is not None and not artifact_id:
+        await _check_upload_stream(file)
+        payload, filename, media_type = (
+            file.file,
+            file.filename or "upload",
+            file.content_type or "application/octet-stream",
+        )
+    elif artifact_id and file is None:
+        payload = stack.enter_context(tempfile.TemporaryFile())  # noqa: SIM115
+        ref = await run_in_threadpool(
+            runner.retrieve_artifact_to, artifact_id, payload, max_bytes=MAX_UPLOAD_BYTES
+        )
+        filename, media_type = ref.filename or "artifact", ref.media_type
+    else:
+        payload, filename, media_type = await _resolve_input(runner, file, artifact_id)
+    if isinstance(payload, bytes) and len(payload) > MAX_UPLOAD_BYTES:
+        raise InvalidInputError(
+            f"upload exceeds {MAX_UPLOAD_BYTES} bytes", capability=capability_id
+        )
+
+    result = await run_in_threadpool(
+        runner.execute,
+        capability_id,
+        payload,
+        filename=filename,
+        media_type=media_type,
+        provider_id=provider,
+        capability_version=version,
+        parameters=_parse_parameters(parameters),
+        language=language,
+        no_cache=no_cache,
+    )
     return ExecutionResponse(
         status=result.status,
         capability=result.capability,
@@ -184,24 +288,27 @@ async def execute_capability(
 @router.post(
     "/artifacts",
     response_model=ArtifactRef,
-    responses=ERROR_RESPONSES,
+    responses=UPLOAD_ERROR_RESPONSES,
     tags=["artifacts"],
 )
 async def store_artifact(
     runner: Annotated[CapabilityExecutor, Depends(executor)],
     file: Annotated[UploadFile, File(description="Content to store")],
+    request: Request,
 ) -> ArtifactRef:
-    payload = await _read_upload(file)
-    if not payload:
-        raise InvalidInputError("empty payload")
-    if len(payload) > MAX_UPLOAD_BYTES:
-        raise InvalidInputError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
-    return await run_in_threadpool(
-        runner.store_artifact,
-        payload,
-        media_type=file.content_type or "application/octet-stream",
-        filename=file.filename,
-    )
+    slots = request.app.state.execution_slots
+    if not slots.acquire(blocking=False):
+        raise ProviderUnavailableError("execution capacity exhausted")
+    try:
+        await _check_upload_stream(file)
+        return await run_in_threadpool(
+            runner.store_artifact_stream,
+            file.file,
+            media_type=file.content_type or "application/octet-stream",
+            filename=file.filename,
+        )
+    finally:
+        slots.release()
 
 
 @router.get("/artifacts/{artifact_id}", responses=ERROR_RESPONSES, tags=["artifacts"])
@@ -233,7 +340,7 @@ def artifact_metadata(
     artifact_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
 ) -> ArtifactRef:
-    return runner.retrieve_artifact(artifact_id)[1]
+    return runner.stat_artifact(artifact_id)
 
 
 @router.get("/providers", tags=["providers"])
@@ -276,15 +383,31 @@ def _parse_parameters(raw: str | None) -> dict[str, Any]:
     return parsed
 
 
+async def _check_upload_stream(file: UploadFile) -> None:
+    if file.size is not None:
+        if file.size > MAX_UPLOAD_BYTES:
+            raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+        if not file.size:
+            raise InvalidInputError("empty payload")
+        await file.seek(0)
+        return
+    size = 0
+    while chunk := await file.read(1024 * 1024):
+        size += len(chunk)
+        if size > MAX_UPLOAD_BYTES:
+            raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    if not size:
+        raise InvalidInputError("empty payload")
+    await file.seek(0)
+
+
 async def _read_upload(file: UploadFile) -> bytes:
-    chunks: list[bytes] = []
-    total = 0
-    while chunk := await file.read(min(1024 * 1024, MAX_UPLOAD_BYTES + 1 - total)):
-        total += len(chunk)
-        if total > MAX_UPLOAD_BYTES:
-            raise InvalidInputError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
-        chunks.append(chunk)
-    return b"".join(chunks)
+    if file.size is not None and file.size > MAX_UPLOAD_BYTES:
+        raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    payload = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
+    return payload
 
 
 async def _resolve_input(

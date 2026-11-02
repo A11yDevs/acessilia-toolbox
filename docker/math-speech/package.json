@@ -1,6 +1,6 @@
 {
   "name": "math-speech",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "LaTeX to MathML (MathJax) and MathML to speech and braille (MathCAT) for the Acessilia Toolbox",
   "type": "module",
