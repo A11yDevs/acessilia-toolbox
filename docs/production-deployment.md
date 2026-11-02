@@ -105,8 +105,11 @@ ports now bind to `127.0.0.1` for local diagnostics only. Containers still use
 Compose DNS to reach sidecars, MinIO and Valkey. For remote diagnostics, use an
 SSH tunnel rather than publishing unauthenticated services on every interface.
 
-Merge the Toolbox release into `main` with a merge commit and synchronize its
-fixes into `develop` before closing the core release. Switch staging to
+Merge both the Toolbox release into `main` and its sync PR into `develop` with
+**Create a merge commit**, never squash/rebase. Cleanup checks that the current
+release head is in both branches and in the recorded main merge before tagging
+or deleting anything; older merged PRs do not prove that later fixes arrived.
+Synchronize these fixes before closing the core release. Switch staging to
 `develop` **before** `bhs finish --cleanup` deletes the release/sync branches.
 The resulting tag and image publications do not promote production: retain its
 approved digests until a separate acceptance and manual promotion. Resolve

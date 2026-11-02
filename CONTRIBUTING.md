@@ -178,13 +178,24 @@ The Toolbox and [Acessilia](https://github.com/A11yDevs/acessilia) run BHS toget
 
    ```bash
    ./scripts/ops.sh bhs finish 0.2.0            # opens release/0.2.0 → main and chore/sync-release-0.2.0 → develop
-   # review and merge both PRs (release → main with "Create a merge commit")
+   # review and merge BOTH PRs with "Create a merge commit" (no squash/rebase)
+   # on staging, after the sync is merged: ./scripts/ops.sh track develop
    ./scripts/ops.sh bhs finish 0.2.0 --cleanup  # tags v0.2.0 on the merge into main, deletes the branches
    ```
 
    Fixes reach `develop` through `chore/sync-release-0.2.0`, forked from the release: resolve conflicts with `develop` there, never on `release/0.2.0`, which goes to `main`. Running the script again carries fixes merged afterwards over to the sync branch.
 
-   Then, on the staging server, `./scripts/ops.sh track develop` goes back to tracking `develop` (only once the sync PR is merged: `track` refuses a branch without `scripts/ops.sh`).
+   Both PRs must use **Create a merge commit**, not squash or rebase: `main`
+   and `develop` must share the release commits and their ancestry. Merge final
+   release fixes before the sync PR, or rerun `bhs finish` and review/merge its
+   updated sync PR. Cleanup refuses to tag or delete branches until the current
+   release head is contained in `develop`, `main`, and the recorded main merge;
+   merely having two previously merged PRs is insufficient.
+
+   Before cleanup, on the staging server, `./scripts/ops.sh track develop` goes
+   back to tracking `develop` (only once the sync PR is merged: `track` refuses
+   a branch without `scripts/ops.sh`). Production remains pinned; see
+   [Production deployment](docs/production-deployment.md).
 
 ### 6. Release (`release/*` → `main`)
 

@@ -107,8 +107,12 @@ agora escutam em `127.0.0.1` para diagnóstico local. Containers usam o DNS do
 Compose para acessar sidecars, MinIO e Valkey. Para diagnóstico remoto, use
 túnel SSH, em vez de publicar serviços sem autenticação em todas as interfaces.
 
-Mescle a release da Toolbox em `main` com merge commit e sincronize as correções
-em `develop` antes de encerrar a release do core. Mude a homologação para
+Mescle tanto a release da Toolbox em `main` quanto o PR de sincronização em
+`develop` com **Create a merge commit**, nunca squash/rebase. Antes de criar a
+tag ou excluir branches, a limpeza confere se o head atual da release está nas
+duas branches e no merge registrado de `main`; PRs antigos mesclados não provam
+que correções posteriores chegaram. Sincronize as correções antes de encerrar a
+release do core. Mude a homologação para
 `develop` **antes** de `bhs finish --cleanup` excluir as branches release/sync.
 A criação de tags e publicação de imagens não promove produção: mantenha os
 digests aprovados até uma aceitação e promoção manual separada. Resolva conflitos
