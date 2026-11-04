@@ -333,6 +333,13 @@ The following references are published to `ghcr.io/a11ydevs/acessilia-toolbox`:
 | `vX.Y.Z` | Git tag `v*` | Official release |
 | `release-x.y.z` | `release/*` | BHS |
 
+## Issue triage
+
+Every open issue carries exactly one **category** label and one **urgency** label. The Toolbox uses the same scheme as the core; the criteria for each label are in the core's [issue triage guide](https://github.com/A11yDevs/acessilia/blob/develop/CONTRIBUTING.md#issue-triage).
+
+- **Category:** `architecture`, `performance`, `security`, `reliability`, `code-quality`, `documentation`, `process`, `ci-cd` or `product`.
+- **Urgency:** `urgency:critical`, `urgency:high`, `urgency:medium` or `urgency:low`.
+
 ## Pull Requests
 
 1. Make sure your branch is up to date with `develop` (`git rebase origin/develop`).
