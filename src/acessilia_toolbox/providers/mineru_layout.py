@@ -16,13 +16,13 @@ from acessilia_toolbox.providers.mineru_document import FORMULA_TYPES, MineruDoc
 
 # Canonical region categories (same vocabulary as DoclingLayoutProvider).
 _REGION_TYPES = {
-    "text": {"text", "index", "paragraph", "code"},
+    "text": {"text", "index", "paragraph", "code", "caption", "footnote"},
     "title": {"title", "chapter", "heading"},
-    "list_block": {"list"},
+    "list_block": {"list", "list_item"},
     "table": {"table"},
-    "embedded_image": {"image"},
+    "embedded_image": {"image", "picture"},
     "formula": {*FORMULA_TYPES, "formula"},
-    "ignore": {"discarded"},
+    "ignore": {"discarded", "page_header", "page_footer"},
 }
 
 
@@ -73,6 +73,7 @@ def _classify(document: MineruDocument) -> list[dict[str, Any]]:
             {
                 "type": region,
                 "source_label": label,
+                "raw_label": item.raw_label,
                 "page": item.page_no,
                 "bbox": {"left": l_, "top": t_, "right": r_, "bottom": b_},
                 "text_preview": item.text[:120] if item.text else None,

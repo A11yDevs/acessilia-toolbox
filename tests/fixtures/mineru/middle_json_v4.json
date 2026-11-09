@@ -1,0 +1,227 @@
+{
+  "schema": "docvortex.middle",
+  "schema_version": "2.0",
+  "metadata": {
+    "file_suffix": "pdf",
+    "producer": {
+      "name": "mineru",
+      "version": "4.0.12"
+    }
+  },
+  "extensions": {
+    "mineru": {
+      "tier": "basic",
+      "parse_mode": "ocr"
+    },
+    "docvortex_layout": {
+      "version": 1,
+      "pages": [
+        {
+          "page_idx": 0,
+          "width_pt": 595,
+          "height_pt": 842
+        },
+        {
+          "page_idx": 1,
+          "width_pt": 595,
+          "height_pt": 842
+        }
+      ]
+    }
+  },
+  "is_full_document": true,
+  "pages": [
+    {
+      "page_idx": 0,
+      "blocks": [
+        {
+          "type": "doc_title",
+          "index": 0,
+          "bbox": [0.1, 0.02, 0.9, 0.06],
+          "level": 1,
+          "content": [
+            {
+              "type": "text",
+              "content": "Relatório Anual"
+            }
+          ]
+        },
+        {
+          "type": "paragraph_title",
+          "index": 1,
+          "bbox": [0.1, 0.08, 0.9, 0.12],
+          "level": 2,
+          "content": [
+            {
+              "type": "text",
+              "content": "Resultados"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "index": 2,
+          "bbox": [0.1, 0.15, 0.9, 0.25],
+          "content": [
+            {
+              "type": "text",
+              "content": "Use "
+            },
+            {
+              "type": "equation_inline",
+              "content": "x^2"
+            },
+            {
+              "type": "text",
+              "content": " and "
+            },
+            {
+              "type": "code_inline",
+              "content": "print(x)"
+            },
+            {
+              "type": "text",
+              "content": " "
+            },
+            {
+              "type": "hyperlink",
+              "url": "https://example.com/report",
+              "content": [
+                {
+                  "type": "text",
+                  "content": "linked text"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "index": 3,
+          "bbox": [0.1, 0.27, 0.9, 0.35],
+          "content": [
+            {
+              "type": "text",
+              "index": 0,
+              "bbox": [0.12, 0.27, 0.9, 0.3],
+              "content": [
+                {
+                  "type": "text",
+                  "content": "Primeiro item"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "index": 1,
+              "bbox": [0.12, 0.31, 0.9, 0.34],
+              "content": [
+                {
+                  "type": "text",
+                  "content": "Segundo item"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "index": 4,
+          "bbox": [0.1, 0.37, 0.9, 0.55],
+          "content": [
+            {
+              "type": "table_body",
+              "index": 4,
+              "bbox": [0.1, 0.37, 0.9, 0.55],
+              "content": "<table><tr><td>2025</td></tr></table>"
+            },
+            {
+              "type": "table_caption",
+              "index": 4,
+              "bbox": [0.1, 0.56, 0.9, 0.58],
+              "content": [
+                {
+                  "type": "text",
+                  "content": "Tabela 1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "equation",
+          "index": 5,
+          "bbox": [0.2, 0.6, 0.8, 0.65],
+          "content": "E = mc^2"
+        },
+        {
+          "type": "image",
+          "index": 6,
+          "bbox": [0.1, 0.67, 0.5, 0.82],
+          "content": [
+            {
+              "type": "image_body",
+              "index": 6,
+              "bbox": [0.1, 0.67, 0.5, 0.82],
+              "content": "",
+              "image_path": "images/page_0_image_6.png"
+            },
+            {
+              "type": "image_caption",
+              "index": 6,
+              "bbox": [0.1, 0.83, 0.5, 0.85],
+              "content": [
+                {
+                  "type": "text",
+                  "content": "Figura 1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "code",
+          "index": 7,
+          "bbox": [0.1, 0.87, 0.9, 0.95],
+          "sub_type": "code",
+          "guess_lang": "python",
+          "content": [
+            {
+              "type": "code_body",
+              "index": 7,
+              "bbox": [0.1, 0.87, 0.9, 0.95],
+              "content": "print(1)"
+            }
+          ]
+        },
+        {
+          "type": "page_footnote",
+          "index": 8,
+          "bbox": [0.1, 0.96, 0.9, 0.99],
+          "content": [
+            {
+              "type": "text",
+              "content": "Nota de rodapé"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "page_idx": 1,
+      "blocks": [
+        {
+          "type": "text",
+          "index": 0,
+          "bbox": [0.1, 0.1, 0.9, 0.15],
+          "content": [
+            {
+              "type": "text",
+              "content": "Segunda página"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

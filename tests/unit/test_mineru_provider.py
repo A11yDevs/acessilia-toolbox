@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import json
+from pathlib import Path
 
 import httpx
+import jsonschema
 import pytest
+from docstruct.tables.ast import rows_from_table_ast
 
 from acessilia_toolbox.core.errors import (
     ProviderExecutionError,
@@ -94,33 +98,16 @@ MIDDLE_JSON = {
     ],
 }
 
-# MinerU 4 protocol: ordered blocks and source-page geometry.
-MIDDLE_JSON_V4 = {
-    "schema": "docvortex.middle",
-    "schema_version": "2.0",
-    "metadata": {"producer": {"name": "mineru", "version": "4.0.12"}},
-    "extensions": {
-        "mineru": {"tier": "basic", "parse_mode": "ocr"},
-        "docvortex_layout": {"pages": [
-            {"page_idx": 0, "width_pt": 595, "height_pt": 842},
-            {"page_idx": 1, "width_pt": 595, "height_pt": 842},
-        ]},
-    },
-    "pages": [
-        {"page_idx": 0, "blocks": [
-            {"type": "title", "bbox": [50, 20, 545, 80],
-             "content": [{"type": "text", "content": "Relatório Anual"}]},
-            {"type": "text", "bbox": [50, 90, 545, 200],
-             "content": [{"type": "text", "content": "Resultados do exercício"}]},
-            {"type": "table", "bbox": [50, 210, 545, 400],
-             "content": [{"type": "table", "content": "<table><tr><td>2025</td></tr></table>"}]},
-            {"type": "equation", "bbox": [100, 410, 500, 460],
-             "content": [{"type": "equation", "content": r"E = mc^2"}]},
-            {"type": "image", "bbox": [50, 470, 300, 600]},
-        ]},
-        {"page_idx": 1, "blocks": []},
-    ],
-}
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "mineru"
+
+# MinerU 4 protocol: ordered blocks, normalized bboxes and source-page geometry.
+# The fixture is validated against the DocVortex 2.0 schema below.
+MIDDLE_JSON_V4 = json.loads(
+    (FIXTURES / "middle_json_v4.json").read_text(encoding="utf-8")
+)
+MIDDLE_JSON_V4_SCHEMA = json.loads(
+    (FIXTURES / "middle-2.0.schema.json").read_text(encoding="utf-8")
+)
 
 PARSE_RESPONSE = {
     "status": "completed",
@@ -182,6 +169,22 @@ def _facade():
     return MineruDocument(MIDDLE_JSON)
 
 
+def _v4_facade(payload=None):
+    from acessilia_toolbox.providers.mineru_document import MineruDocument
+
+    return MineruDocument(MIDDLE_JSON_V4 if payload is None else payload)
+
+
+def _walk_blocks(blocks):
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        yield block
+        content = block.get("content")
+        if isinstance(content, list):
+            yield from _walk_blocks(content)
+
+
 def test_document_facade_exposes_pages() -> None:
     document = _facade()
     assert document.page_count == 2
@@ -223,6 +226,98 @@ def test_document_facade_full_text_preserves_reading_order() -> None:
     assert text.index("Relatório Anual") < text.index("Resultados do exercício")
 
 
+# ── MinerU 4 protocol ────────────────────────────────────────────────
+
+
+def test_v4_fixture_matches_docvortex_schema() -> None:
+    jsonschema.validate(instance=MIDDLE_JSON_V4, schema=MIDDLE_JSON_V4_SCHEMA)
+    for block in _walk_blocks(
+        block for page in MIDDLE_JSON_V4["pages"] for block in page.get("blocks") or []
+    ):
+        bbox = block.get("bbox")
+        if bbox is None:
+            continue
+        assert all(0.0 <= value <= 1.0 for value in bbox)
+        assert bbox[0] < bbox[2]
+        assert bbox[1] < bbox[3]
+
+
+def test_v4_normalized_bbox_is_converted_with_source_page_geometry() -> None:
+    document = _v4_facade()
+    paragraph = next(
+        item for item in document.texts if item.text.startswith("Use ")
+    )
+    assert paragraph.bbox.as_tuple() == pytest.approx((59.5, 126.3, 535.5, 210.5))
+    assert paragraph.bbox.coord_origin.value == "TOPLEFT"
+    provenance = paragraph.prov[0]
+    assert provenance.page_no == 1
+    assert provenance.bbox.as_tuple() == pytest.approx((59.5, 126.3, 535.5, 210.5))
+
+
+def test_v4_partial_page_selection_keeps_source_page_numbers_and_sizes() -> None:
+    payload = copy.deepcopy(MIDDLE_JSON_V4)
+    payload["pages"][0]["page_idx"] = 3
+    payload["pages"][1]["page_idx"] = 6
+    payload["extensions"]["docvortex_layout"]["pages"] = [
+        {"page_idx": 3, "width_pt": 612, "height_pt": 792},
+        {"page_idx": 6, "width_pt": 595, "height_pt": 842},
+    ]
+
+    document = _v4_facade(payload)
+
+    assert sorted(document.pages) == [4, 7]
+    assert document.pages[4].size.width == 612
+    assert document.pages[7].size.height == 842
+    title = document.texts[0]
+    assert title.prov[0].page_no == 4
+    assert title.bbox.as_tuple() == pytest.approx((61.2, 15.84, 550.8, 47.52))
+    second_page = next(item for item in document.texts if item.text == "Segunda página")
+    assert second_page.prov[0].page_no == 7
+    assert second_page.bbox.as_tuple() == pytest.approx((59.5, 84.2, 535.5, 126.3))
+
+
+def test_v4_inline_spans_preserve_equation_code_and_hyperlink_text() -> None:
+    document = _v4_facade()
+    paragraph = next(
+        item for item in document.texts if item.text.startswith("Use ")
+    )
+    assert paragraph.text == "Use x^2 and print(x) linked text"
+
+
+def test_v4_table_equation_and_visual_annotations_are_read() -> None:
+    document = _v4_facade()
+
+    table = document.tables[0]
+    assert table.html == "<table><tr><td>2025</td></tr></table>"
+    assert table.table_ast is not None
+    assert rows_from_table_ast(table.table_ast) == [["2025"]]
+
+    formula = document.formulas[0]
+    assert formula.latex == "E = mc^2"
+    assert formula.text == "E = mc^2"
+
+    texts = [item.text for item in document.texts]
+    assert "Tabela 1" in texts
+    assert "Figura 1" in texts
+    assert "Nota de rodapé" in texts
+    assert "print(1)" in texts
+
+
+def test_v4_titles_lists_and_headings_map_to_document_types() -> None:
+    document = _v4_facade()
+    title = document.texts[0]
+    assert (title.raw_label, title.label, title.level) == ("doc_title", "title", 1)
+    heading = document.texts[1]
+    assert (heading.raw_label, heading.label, heading.level) == (
+        "paragraph_title",
+        "heading",
+        2,
+    )
+    list_items = [item for item in document.texts if item.label == "list_item"]
+    assert [item.text for item in list_items] == ["Primeiro item", "Segundo item"]
+    assert document.full_text.startswith("Relatório Anual\n\nResultados")
+
+
 # ── provider adapter ─────────────────────────────────────────────────
 
 
@@ -233,7 +328,7 @@ def test_extraction_wraps_the_middle_json() -> None:
     assert extraction.version == "4.0.12"
     document = extraction.document
     assert document.page_count == 2
-    assert len(document.texts) == 2
+    assert len(document.texts) == 10
 
 
 def test_parse_request_carries_defaults_and_parameters() -> None:
@@ -284,7 +379,7 @@ def test_middle_json_as_serialized_string_is_accepted() -> None:
 
     extraction = extract(provider_with(handler))
     assert extraction.document.page_count == 2
-    assert len(extraction.document.texts) == 2
+    assert len(extraction.document.texts) == 10
 
 
 def test_http_error_maps_to_provider_execution_error() -> None:
@@ -342,8 +437,18 @@ def test_layout_provider_classifies_regions() -> None:
 
     regions = extraction.configuration["layout_regions"]
     types = {region["type"] for region in regions}
-    assert {"title", "text", "table", "formula", "embedded_image"} <= types
+    assert {
+        "title",
+        "text",
+        "list_block",
+        "table",
+        "formula",
+        "embedded_image",
+    } <= types
     assert regions[0]["page"] == 0
+    title = next(region for region in regions if region["source_label"] == "title")
+    assert title["raw_label"] == "doc_title"
+    assert title["bbox"]["right"] == pytest.approx(535.5)
     assert extraction.configuration["region_count"] == len(regions)
     assert extraction.configuration["backend"] == "mineru-layout"
 
@@ -355,7 +460,7 @@ def test_ocr_provider_flattens_text_items() -> None:
     extraction = extract(provider_with(parse_handler, "mineru-ocr"), lang="ch")
 
     items = extraction.configuration["ocr_items"]
-    assert len(items) == 2
+    assert len(items) == 10
     assert items[0]["text"] == "Relatório Anual"
     assert items[0]["page"] == 0
     assert "Relatório Anual" in extraction.configuration["full_text"]
@@ -370,10 +475,20 @@ def test_v4_document_preserves_geometry_reading_order_and_components() -> None:
     assert document.pages[1].size.width == 595
     assert document.pages[1].size.height == 842
     assert [item.text for item in document.texts] == [
-        "Relatório Anual", "Resultados do exercício"
+        "Relatório Anual",
+        "Resultados",
+        "Use x^2 and print(x) linked text",
+        "Primeiro item",
+        "Segundo item",
+        "Tabela 1",
+        "Figura 1",
+        "print(1)",
+        "Nota de rodapé",
+        "Segunda página",
     ]
     assert document.tables[0].html == "<table><tr><td>2025</td></tr></table>"
     assert document.formulas[0].latex == r"E = mc^2"
+    assert document.pictures[0].label == "image"
     assert document.version_name == "4.0.12"
 
 
@@ -417,3 +532,43 @@ def test_v4_rejects_unrecognized_schema() -> None:
 
     with pytest.raises(ProviderExecutionError):
         extract(provider_with(handler))
+
+
+def test_v4_manifest_uses_converted_geometry_and_full_content(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from acessilia_toolbox.core.normalization.builder import build_processing_manifest
+    from acessilia_toolbox.core.normalization.extraction import ExtractionResult
+    from acessilia_toolbox.providers.mineru_document import MineruDocument
+
+    now = datetime.now(UTC)
+    source = tmp_path / "doc.pdf"
+    source.write_bytes(b"%PDF-test")
+    extraction = ExtractionResult(
+        document=MineruDocument(MIDDLE_JSON_V4),
+        backend="mineru",
+        started_at=now,
+        completed_at=now,
+        duration_ms=0,
+        version="4.0.12",
+        configuration={"extractor": "mineru-v1"},
+    )
+
+    manifest = build_processing_manifest(source, extraction)
+
+    assert manifest.title == "Relatório Anual"
+    by_text = {element.text: element for element in manifest.elements if element.text}
+    assert by_text["Relatório Anual"].type == "title"
+    assert by_text["Resultados"].type == "heading"
+    assert by_text["Resultados"].hierarchy_level == 2
+    paragraph = by_text["Use x^2 and print(x) linked text"]
+    assert paragraph.type == "paragraph"
+    assert paragraph.provenance[0].bbox is not None
+    assert paragraph.provenance[0].bbox.left == pytest.approx(59.5)
+    assert paragraph.provenance[0].bbox.top == pytest.approx(126.3)
+    assert paragraph.provenance[0].bbox.coord_origin == "TOPLEFT"
+    table = next(element for element in manifest.elements if element.type == "table")
+    assert rows_from_table_ast(table.metadata["table_ast"]) == [["2025"]]
+    formula = next(element for element in manifest.elements if element.type == "formula")
+    assert formula.text == "E = mc^2"
+    assert all(element.type != "unknown" for element in manifest.elements)

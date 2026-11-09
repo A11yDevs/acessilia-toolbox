@@ -48,9 +48,10 @@ class MineruProvider:
         clock = perf_counter()
         with self._client() as client:
             document = self._parse(client, payload, filename, media_type, parameters)
-            producer = document.get("metadata", {}).get("producer", {})
+            metadata = document.get("metadata")
+            producer = metadata.get("producer") if isinstance(metadata, Mapping) else None
             version = (
-                producer.get("version") if isinstance(producer, dict) else None
+                producer.get("version") if isinstance(producer, Mapping) else None
             ) or self.descriptor.version
 
         return ExtractionResult(
