@@ -2280,6 +2280,24 @@
                         "type": "boolean",
                         "title": "Cacheable"
                     },
+                    "input": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Input",
+                        "description": "Input binding: schema reference, accepted media types, by_reference."
+                    },
+                    "output": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Output",
+                        "description": "Output binding: schema reference, media types and by_reference. For a by-reference output, media_types describe the referenced binary."
+                    },
+                    "execution": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Execution",
+                        "description": "deterministic, idempotent (repeating the same operation has no effect beyond the first execution), cacheable, and timeout_hint_seconds (a hint about the expected duration, not a timeout the client must use)."
+                    },
                     "providers": {
                         "items": {
                             "type": "string"
@@ -2328,6 +2346,9 @@
                     "media_types",
                     "deterministic",
                     "cacheable",
+                    "input",
+                    "output",
+                    "execution",
                     "providers",
                     "declared_providers",
                     "requires",
@@ -2373,6 +2394,24 @@
                         "type": "boolean",
                         "title": "Cacheable"
                     },
+                    "input": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Input",
+                        "description": "Input binding: schema reference, accepted media types, by_reference."
+                    },
+                    "output": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Output",
+                        "description": "Output binding: schema reference, media types and by_reference. For a by-reference output, media_types describe the referenced binary."
+                    },
+                    "execution": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Execution",
+                        "description": "deterministic, idempotent (repeating the same operation has no effect beyond the first execution), cacheable, and timeout_hint_seconds (a hint about the expected duration, not a timeout the client must use)."
+                    },
                     "providers": {
                         "items": {
                             "type": "string"
@@ -2403,6 +2442,9 @@
                     "media_types",
                     "deterministic",
                     "cacheable",
+                    "input",
+                    "output",
+                    "execution",
                     "providers",
                     "declared_providers"
                 ],

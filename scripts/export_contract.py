@@ -3,9 +3,11 @@
 The capability catalogue served on ``/v1/capabilities`` and ``/v1/providers``
 comes from two files in this repository: the manifests in ``capabilities/``
 and ``providers-config.yaml``. This script builds the same catalogue from them,
-with the same registries the API uses, and keeps only the identifiers a client
-depends on: each capability id and version with the providers registered for
-it, and each provider with its capabilities.
+with the same registries the API uses, and keeps what a client binds to:
+each capability id and version with the providers registered for it and its
+``input``, ``output`` and ``execution`` blocks, each provider with its
+capabilities, and what every schema reference the manifests use points at
+(a published file, or why there is none).
 
 The result is committed as ``contract/toolbox-contract.json`` (a unit test
 fails when it is stale) and attached to every release. The Acessilia core's CI
@@ -27,10 +29,12 @@ from typing import Any
 
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.provider import ProviderRegistry
+from acessilia_toolbox.core.schema_refs import classify
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CAPABILITIES_DIR = REPO_ROOT / "capabilities"
 PROVIDERS_CONFIG = REPO_ROOT / "providers-config.yaml"
+SCHEMAS_DIR = REPO_ROOT / "schemas"
 CONTRACT_PATH = REPO_ROOT / "contract" / "toolbox-contract.json"
 
 COMMENT = (
@@ -38,15 +42,25 @@ COMMENT = (
     "capabilities/ and providers-config.yaml; do not edit by hand. Consumers "
     "(the Acessilia core's CI) check their capability and provider ids against it. "
     "A capability entry lists the providers registered for the capability id, "
-    "not for a specific version."
+    "not for a specific version, and the version's input, output and execution "
+    "blocks as the manifest declares them, defaults included. schema_refs says "
+    "what each schema reference points at: a published file in schemas/, or a "
+    "descriptor, external or unpublished reference with no file."
 )
 
 
 def build(
-    capabilities_dir: Path = CAPABILITIES_DIR, providers_config: Path = PROVIDERS_CONFIG
+    capabilities_dir: Path = CAPABILITIES_DIR,
+    providers_config: Path = PROVIDERS_CONFIG,
+    schemas_dir: Path = SCHEMAS_DIR,
 ) -> dict[str, Any]:
     capabilities = CapabilityRegistry.from_directory(capabilities_dir)
     providers = ProviderRegistry.from_file(providers_config)
+    manifests = sorted(capabilities.manifests(), key=lambda m: (m.id, m.version))
+    refs = sorted(
+        {manifest.input.schema_ref for manifest in manifests}
+        | {manifest.output.schema_ref for manifest in manifests}
+    )
     return {
         "_comment": COMMENT,
         # One entry per published version, as /v1/capabilities lists them.
@@ -55,13 +69,15 @@ def build(
                 "id": manifest.id,
                 "version": manifest.version,
                 "providers": sorted(d.id for d in providers.for_capability(manifest.id)),
+                **manifest.binding_data(),
             }
-            for manifest in sorted(capabilities.manifests(), key=lambda m: (m.id, m.version))
+            for manifest in manifests
         ],
         "providers": [
             {"id": descriptor.id, "capabilities": sorted(descriptor.capabilities)}
             for descriptor in providers.descriptors()
         ],
+        "schema_refs": [classify(ref, schemas_dir) for ref in refs],
     }
 
 

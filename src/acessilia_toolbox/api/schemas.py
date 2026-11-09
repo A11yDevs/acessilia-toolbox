@@ -44,9 +44,30 @@ class CapabilitySummary(BaseModel):
     description: str
     input_schema: str
     output_schema: str
+    #: The **input** media types, kept with its original meaning; the output
+    #: media types are in ``output.media_types``.
     media_types: list[str]
     deterministic: bool
     cacheable: bool
+    #: The manifest's binding blocks, as ``CapabilityManifest.binding_data``
+    #: projects them for the static contract and the MCP resource too. The
+    #: flat fields above stay for existing clients.
+    input: dict[str, Any] = Field(
+        description="Input binding: schema reference, accepted media types, by_reference."
+    )
+    output: dict[str, Any] = Field(
+        description=(
+            "Output binding: schema reference, media types and by_reference. For a "
+            "by-reference output, media_types describe the referenced binary."
+        )
+    )
+    execution: dict[str, Any] = Field(
+        description=(
+            "deterministic, idempotent (repeating the same operation has no effect "
+            "beyond the first execution), cacheable, and timeout_hint_seconds (a hint "
+            "about the expected duration, not a timeout the client must use)."
+        )
+    )
     #: Providers registered in this deployment that implement the capability:
     #: what a client can execute. The executor resolves any registered provider
     #: that implements the capability, so this may include providers the
@@ -77,6 +98,7 @@ class CapabilitySummary(BaseModel):
             media_types=manifest.input.media_types,
             deterministic=manifest.execution.deterministic,
             cacheable=manifest.execution.cacheable,
+            **manifest.binding_data(),
             providers=sorted(registered) if registered is not None else declared,
             declared_providers=declared,
         )

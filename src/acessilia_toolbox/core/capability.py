@@ -84,6 +84,22 @@ class CapabilityManifest(StrictModel):
     def key(self) -> str:
         return f"{self.id}@{self.version}"
 
+    def binding_data(self) -> dict[str, Any]:
+        """The ``input``, ``output`` and ``execution`` blocks clients bind to.
+
+        One projection for every place that publishes them: the static
+        contract (``scripts/export_contract.py``), ``GET /v1/capabilities`` and
+        the MCP capabilities resource. It uses the public field names
+        (``schema``, not ``schema_ref``), and keeps effective defaults and
+        falsy values (``by_reference: false``, empty lists), so a manifest that
+        omits a field publishes its default.
+        """
+        return {
+            "input": self.input.model_dump(mode="json", by_alias=True),
+            "output": self.output.model_dump(mode="json", by_alias=True),
+            "execution": self.execution.model_dump(mode="json"),
+        }
+
 
 class CapabilityRegistry:
     """In-memory index of the capabilities this deployment exposes."""

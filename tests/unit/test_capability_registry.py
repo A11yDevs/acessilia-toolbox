@@ -6,12 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from acessilia_toolbox.core import schema_refs
 from acessilia_toolbox.core.capability import (
     CapabilityManifest,
     CapabilityRegistry,
     load_manifest,
 )
 from acessilia_toolbox.core.errors import CapabilityNotFoundError, ConfigurationError
+from acessilia_toolbox.core.schema_refs import classify, schema_filename
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CAPABILITIES_DIR = PROJECT_ROOT / "capabilities"
@@ -150,37 +152,46 @@ def test_shipped_manifests_never_name_a_provider_in_the_capability_id() -> None:
         assert not (segments & provider_names), capability_id
 
 
-def test_every_declared_output_schema_ships_with_the_capability() -> None:
-    """A local `artifact/...@N` reference must resolve to a shipped schema file.
+def test_every_schema_reference_is_published_or_classified() -> None:
+    """Every input and output reference resolves to a file or a stated reason.
 
-    Transport- and artifact-level schemas owned by the Agentic Core
-    (`artifact/binary@1`, `artifact/query@1`, ...) are deliberately absent, so
-    they are enumerated here rather than inferred.
+    The references without a file are classified in
+    ``acessilia_toolbox.core.schema_refs`` (descriptor, external or
+    unpublished), and that classification is published in the contract, so a
+    client generating bindings never infers it from this test. Inputs are
+    covered as well as outputs: before #142 only outputs were, and the inputs
+    ``artifact/pandoc-ast@1`` and ``artifact/document@1`` went unchecked.
     """
-    external = {
-        "artifact/binary@1",
-        "artifact/document@1",
-        "artifact/layout-analysis@1",
-        "artifact/query@1",
-        "artifact/reference@1",
-        "artifact/dataset-item-list@1",
-        "artifact/dataset-list@1",
-        "artifact/dataset-splits@1",
-        "artifact/dataset-sync-report@1",
-    }
     schemas_dir = PROJECT_ROOT / "schemas"
+    manifests = CapabilityRegistry.from_directory(CAPABILITIES_DIR).manifests()
+    used = {m.input.schema_ref for m in manifests} | {m.output.schema_ref for m in manifests}
 
     unresolved = []
-    for manifest in CapabilityRegistry.from_directory(CAPABILITIES_DIR).manifests():
-        ref = manifest.output.schema_ref
-        if ref in external:
-            continue
-        name, _, version = ref.partition("@")
-        filename = f"{name.split('/')[-1]}@{version}.json"
-        if not (schemas_dir / filename).is_file():
-            unresolved.append((manifest.id, ref))
+    for ref in sorted(used):
+        try:
+            classify(ref, schemas_dir)
+        except ValueError:
+            unresolved.append(ref)
+    assert not unresolved, (
+        f"schema references with neither a file nor a classification: {unresolved}"
+    )
 
-    assert not unresolved, f"output schemas without a file: {unresolved}"
+    listed = schema_refs.listed()
+    with_a_file = sorted(ref for ref in listed if (schemas_dir / schema_filename(ref)).is_file())
+    assert not with_a_file, f"published now; remove them from core/schema_refs.py: {with_a_file}"
+    unused = sorted(set(listed) - used)
+    assert not unused, f"no manifest uses them; remove them from core/schema_refs.py: {unused}"
+
+
+def test_a_reference_is_listed_under_one_status_only() -> None:
+    groups = [schema_refs.DESCRIPTORS, schema_refs.EXTERNAL, schema_refs.UNPUBLISHED]
+    names = [ref for group in groups for ref in group]
+    assert len(names) == len(set(names))
+
+
+def test_an_unclassified_reference_without_a_file_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="not classified"):
+        classify("artifact/never-heard-of@1", tmp_path)
 
 
 def test_media_inspect_manifest_is_wired_to_the_pure_provider() -> None:
