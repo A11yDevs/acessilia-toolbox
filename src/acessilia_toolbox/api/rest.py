@@ -26,7 +26,7 @@ from acessilia_toolbox.api.schemas import (
     ReadinessResponse,
     UploadLimitResponse,
 )
-from acessilia_toolbox.core.artifact import ArtifactRef
+from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactReference, reference_of
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import (
     DatasetNotFoundError,
@@ -287,7 +287,7 @@ async def _execute_with_input(
 
 @router.post(
     "/artifacts",
-    response_model=ArtifactRef,
+    response_model=ArtifactReference,
     responses=UPLOAD_ERROR_RESPONSES,
     tags=["artifacts"],
 )
@@ -295,18 +295,24 @@ async def store_artifact(
     runner: Annotated[CapabilityExecutor, Depends(executor)],
     file: Annotated[UploadFile, File(description="Content to store")],
     request: Request,
-) -> ArtifactRef:
+) -> ArtifactReference:
+    """Store the upload; return ``artifact/reference@1``, as ``artifact.store`` declares.
+
+    The stored record (with ``uri`` and ``filename``) stays readable on
+    ``GET /v1/artifacts/{id}/metadata``.
+    """
     slots = request.app.state.execution_slots
     if not slots.acquire(blocking=False):
         raise ProviderUnavailableError("execution capacity exhausted")
     try:
         await _check_upload_stream(file)
-        return await run_in_threadpool(
+        stored = await run_in_threadpool(
             runner.store_artifact_stream,
             file.file,
             media_type=file.content_type or "application/octet-stream",
             filename=file.filename,
         )
+        return reference_of(stored)
     finally:
         slots.release()
 

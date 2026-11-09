@@ -105,9 +105,14 @@ def test_stored_artifact_returns_a_content_addressable_reference(
 
     assert response.status_code == 200
     body = response.json()
+    # artifact/reference@1 (#145): the contract, not the stored record.
+    assert set(body) == {"artifact_id", "digest", "media_type", "size", "store"}
     assert body["artifact_id"].startswith("sha256:")
+    assert body["digest"] == body["artifact_id"]
     assert body["size"] == len(PAYLOAD)
-    assert body["filename"] == "sample.pdf"
+    # The filename stays in the record, on the metadata route.
+    metadata = client.get(f"/v1/artifacts/{body['artifact_id']}/metadata").json()
+    assert metadata["filename"] == "sample.pdf"
 
 
 def test_storing_the_same_content_twice_returns_the_same_id(client: TestClient) -> None:

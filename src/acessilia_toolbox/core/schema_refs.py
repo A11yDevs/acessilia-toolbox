@@ -41,7 +41,6 @@ UNPUBLISHED: dict[str, str] = {
     "artifact/dataset-splits@1": "JSON returned by the dataset capabilities; no schema yet",
     "artifact/dataset-sync-report@1": "JSON returned by the dataset capabilities; no schema yet",
     "artifact/layout-analysis@1": "JSON returned by document.layout.analyze; no schema yet",
-    "artifact/reference@1": "artifact reference; published by A11yDevs/acessilia-toolbox#145",
 }
 
 _LISTED: dict[str, tuple[SchemaStatus, str]] = {

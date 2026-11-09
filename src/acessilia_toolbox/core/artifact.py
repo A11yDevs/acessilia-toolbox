@@ -48,6 +48,54 @@ class ArtifactRef(BaseModel):
         )
 
 
+
+_CANONICAL_ID = re.compile(r"(?:sha256:)?([0-9a-f]{64})")
+
+
+class ArtifactReference(BaseModel):
+    """``artifact/reference@1`` (``schemas/reference@1.json``), the published contract.
+
+    A projection of :class:`ArtifactRef`, the record the stores and the cache
+    keep. Build it with :func:`reference_of`, the only producer, which
+    guarantees what the schema cannot express: ``digest`` equals
+    ``artifact_id``, both in canonical form, and ``store`` is never
+    ``failover``. ``uri`` and ``filename`` stay in the record (A11yDevs/acessilia-toolbox#145).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    media_type: str = Field(min_length=1)
+    size: int = Field(ge=0)
+    store: str | None = Field(min_length=1)
+
+
+def reference_of(ref: ArtifactRef) -> ArtifactReference:
+    """The published reference for a stored record.
+
+    The id is normalized to ``sha256:<hex>`` (a store's ``stat`` may echo an id
+    given without the prefix), ``digest`` is that same value, and
+    ``storage_backend`` becomes ``store``. ``None`` stays ``None``: the record
+    claims no verified storage location.
+    """
+    match = _CANONICAL_ID.fullmatch(ref.artifact_id)
+    if match is None:
+        raise InvalidInputError("invalid SHA-256 artifact identifier")
+    if ref.storage_backend == "failover":
+        raise ValueError(
+            "a reference names the backend that served it, never the failover wrapper"
+        )
+    canonical = f"sha256:{match.group(1)}"
+    return ArtifactReference(
+        artifact_id=canonical,
+        digest=canonical,
+        media_type=ref.media_type,
+        size=ref.size,
+        store=ref.storage_backend,
+    )
+
+
 @runtime_checkable
 class ArtifactStore(Protocol):
     """Port for object storage: MinIO, S3 or the local filesystem."""
