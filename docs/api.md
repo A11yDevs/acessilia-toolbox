@@ -95,6 +95,23 @@ A capability can be published in more than one version (for example
 - **CLI:** `acessilia-toolbox execute` takes `--capability-version N`. Binary
   outputs of by-reference capabilities are written next to the JSON document.
 
+### Listing capabilities with provider versions
+
+The catalogue publishes capability versions and registered provider ids;
+provider versions live in the provider registry. To see both together, run:
+
+```bash
+TOOLBOX_BASE_URL=https://toolbox.example \
+TOOLBOX_API_KEY=... \
+  ./scripts/list-capabilities.sh
+```
+
+The script joins `GET /v1/capabilities` and `GET /v1/providers` and prints one
+row per capability/provider pair with the capability version, provider version,
+transport and endpoint. It lists the latest version of each capability by
+default and prompts for a missing base URL or API key when stdin is a terminal.
+It requires `curl` and `jq`.
+
 Long-running operations may require an external job/queue abstraction.
 If asynchronous job state is exposed through the Toolbox, its
 authoritative state must live in an external state service rather than
