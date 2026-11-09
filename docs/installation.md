@@ -370,12 +370,19 @@ while its sidecar is not running:
 | `verapdf-validate` | `verapdf-validate` | `docker/verapdf-validate.Dockerfile` | `pdf.validate.pdf_ua` |
 | `math-speech` | `math-speech` | `docker/math-speech.Dockerfile` | `math.convert`, `math.verbalize` (provider pending, see #64) |
 
-The MinerU Compose service persists ModelScope and Hugging Face caches in separate
-volumes. Its first extraction can download model weights, including layoutreader;
-keep both volumes across restarts and provision network access and disk space for
-the initial download. The `/openapi.json` health check verifies that the API is
-running, not that models are loaded. Verify readiness with an extraction after
+The MinerU 4 Compose service runs `mineru-kit api-server --tier basic` and
+persists the MinerU model directory (`.mineru`) and the Hugging Face cache in
+separate volumes. The CPU image uses `MINERU_MODEL_SMALL_BACKEND=onnx`; the GPU
+Basic image uses `torch`. Its first extraction downloads model weights; keep
+both volumes across restarts and provision network access and disk space for
+the initial download. The `/v1/health` check verifies that the API is running,
+not that models are loaded. Verify readiness with an extraction after
 provisioning the cache; cold starts may exceed request timeouts.
+
+MinerU 4.0.12's seal-detection warp can receive OpenCV interpolation values
+(`area`, `lanczos4`) that the DocVortex `warp_image` API does not accept on
+large pages. `docker/patch-mineru-warp.py` rewrites that mapping at image build
+time and refuses to apply when the upstream source no longer matches.
 
 ### Recovering an extraction provider
 
@@ -395,7 +402,7 @@ docker compose -f docker-compose.staging.yml logs --tail 100 mineru-serve
 
 Use `docker-compose.yml` for the local stack. Docker restart policies act on
 process exit, **not** an `unhealthy` status: a live but hung API still needs
-operator diagnosis. MinerU's `/openapi.json` check only proves that its API
+operator diagnosis. MinerU's `/v1/health` check only proves that its API
 answers; it does not run an extraction or load every model.
 
 If the process exits repeatedly, inspect its restart count, OOM status and
@@ -581,6 +588,21 @@ echo "PDF_UA_RENDER_IMAGE=pdf-ua-render:local" >> .env
 `scripts/build-mineru-image.sh`, `build-nougat-image.sh`,
 `build-math-ocr-image.sh` and `build-pp-formulanet-image.sh` still build those
 images locally.
+
+For MinerU, the script builds the CPU Basic image (`mineru:4.0.12`) by default
+and supports two GPU variants. On a Linux host with an NVIDIA GPU and the
+container toolkit:
+
+```bash
+MINERU_VARIANT=gpu-basic ./scripts/build-mineru-image.sh   # Torch small models
+MINERU_VARIANT=gpu ./scripts/build-mineru-image.sh         # official VLM/vLLM stack
+```
+
+Set `MINERU_SERVE_IMAGE=mineru:4.0.12-gpu-basic` (or the default tag built by
+the `gpu` variant) and grant the container GPU access. The GPU Basic image
+contains the MinerU small models on CUDA only, without the VLM/vLLM stack.
+`MINERU_REPAIR=1 ./scripts/build-mineru-image.sh` reapplies the interpolation
+patch to an existing CPU image without rebuilding its layers.
 
 The Toolbox starts regardless: a provider whose endpoint does not resolve is
 reported as unhealthy and its capability answers `503`, while every other
