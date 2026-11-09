@@ -117,8 +117,10 @@ traffic. Never reopen direct model access as a rollback shortcut.
 
 The Toolbox adapter now calls MinerU 4's `/v1/file_parse` and `/v1/health`
 routes and expects `mineru-kit api-server --tier basic`. A MinerU 2.1 sidecar
-cannot serve those routes, and a MinerU 4 sidecar does not accept the old
-`/openapi.json` probe. Promote the Toolbox image,
+cannot serve those routes. The registry probes `/v1/health` instead of
+`/openapi.json`: MinerU 4 can still expose the OpenAPI document when
+`MINERU_API_ENABLE_FASTAPI_DOCS` is enabled, but optional documentation is not
+a protocol or readiness signal. Promote the Toolbox image,
 `deploy/providers-config.default.yaml` and `docker-compose.production.yml`
 together.
 

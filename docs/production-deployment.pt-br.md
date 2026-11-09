@@ -119,9 +119,11 @@ liberar tráfego. Nunca reabra acesso direto ao modelo como atalho de rollback.
 
 O adaptador da Toolbox agora chama `/v1/file_parse` e `/v1/health` do MinerU 4
 e espera `mineru-kit api-server --tier basic`. Um sidecar MinerU 2.1 não atende
-essas rotas, e um sidecar MinerU 4 não aceita a sonda antiga `/openapi.json`.
-Promova juntos a imagem da Toolbox, `deploy/providers-config.default.yaml` e
-`docker-compose.production.yml`.
+essas rotas. O registro usa `/v1/health` em vez de `/openapi.json`: o MinerU 4
+ainda pode expor o documento OpenAPI quando `MINERU_API_ENABLE_FASTAPI_DOCS`
+está habilitado, mas documentação opcional não é sinal de protocolo ou de
+prontidão. Promova juntos a imagem da Toolbox,
+`deploy/providers-config.default.yaml` e `docker-compose.production.yml`.
 
 - Re-pin `PRODUCTION_MINERU_IMAGE` para o digest da imagem CPU MinerU 4.0.12
   aprovada para produção. Não reutilize o digest baseline da 0.2.0: ele é
