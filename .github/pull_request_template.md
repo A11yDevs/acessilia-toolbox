@@ -11,7 +11,8 @@ Part of #
 
 <!--
 "Closes #N" only closes the issue when the PR merges into the default branch
-(main). For a PR into develop, close the issue by hand after the merge.
+(main). For a PR into develop, release/* or any other non-default target,
+close the issue by hand after the merge, linking the merged fix.
 -->
 
 ## What changes

@@ -1,0 +1,7 @@
+# The issue-template chooser is read from the default branch (main).
+#
+# Discussions are disabled and no other supported contact destination is
+# currently enabled, so blank issues remain available for questions and
+# non-bug reports. Revisit this policy if Discussions or another contact
+# channel is enabled.
+blank_issues_enabled: true
