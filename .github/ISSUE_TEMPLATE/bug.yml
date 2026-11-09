@@ -1,0 +1,116 @@
+name: Bug report
+description: Report a reproducible problem in the Toolbox.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Search the existing issues first, then
+        provide enough detail for someone to reproduce the problem.
+
+        Do not paste credentials, API keys or a complete `.env` file. Use
+        environment variables or placeholders in commands and outputs.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One sentence describing what is wrong.
+      placeholder: The Toolbox returns an empty table for a valid document.
+    validations:
+      required: true
+
+  - type: input
+    id: component
+    attributes:
+      label: Component
+      description: |
+        The API route, MCP tool, CLI, storage layer, deployment script,
+        capability, provider or sidecar affected. Use "not applicable" with
+        context when no single component fits.
+      placeholder: "API /v1/capabilities/document.structure.extract:execute, MCP tool, CLI, storage, deployment script, capability math.convert, sidecar math-speech, or not applicable"
+    validations:
+      required: true
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Version, deployment and observation date
+      description: |
+        Include a commit SHA or image digest when available, plus the branch
+        or tag, where it was observed (local, staging, BHS, production) and
+        the date. A mutable branch or image tag alone does not identify the
+        state being reproduced.
+      placeholder: |
+        Toolbox: sha-abc1234 or ghcr.io/a11ydevs/acessilia-toolbox@sha256:...
+        Sidecar/provider: image digest or version
+        Branch/tag: develop / release-x.y.z
+        Deployment: staging / BHS / local
+        Observed: 2026-11-09
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Supporting environment (optional)
+      description: |
+        Add viewer or assistive-technology version, OS, CPU/GPU or other
+        details only when they matter for this bug.
+      placeholder: NVDA 2026.1, Windows 11, CPU-only host
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Provide a self-contained input or fixture in this repository, the
+        exact request or command, and the relevant options. A dataset id is
+        useful context but does not replace a runnable case. Use environment
+        variables or placeholders for credentials.
+      placeholder: |
+        1. Start the local stack with ...
+        2. Run:
+           curl -X POST "$TOOLBOX_URL/v1/capabilities/...:execute" \
+             -H "Authorization: Bearer $TOOLBOX_API_KEY" \
+             -F "file=@tests/fixtures/..."
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What should have happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Output, error message, stack trace or extracted text.
+    validations:
+      required: true
+
+  - type: textarea
+    id: cause
+    attributes:
+      label: Cause or evidence (optional)
+      description: |
+        Code locations, logs or a hypothesis about the cause. Say whether the
+        cause was verified or is only suspected.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance (optional)
+      description: How the fix can be checked (test, smoke test, veraPDF, etc.).
+    validations:
+      required: false

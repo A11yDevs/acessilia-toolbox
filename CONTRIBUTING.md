@@ -123,7 +123,7 @@ git push origin develop
 git branch -d feat/my-feature
 ```
 
-When opening the PR, fill in the [pull request template](.github/pull_request_template.md), including its conformance checklist. It covers the principles in [docs/constitution.md](docs/constitution.md) and the ecosystem principles and ADRs it links to. `Closes #N` closes the issue only when the PR merges into `main`; for a PR into `develop`, close the issue by hand after the merge.
+When opening the PR, fill in the [pull request template](.github/pull_request_template.md), including its conformance checklist. It covers the principles in [docs/constitution.md](docs/constitution.md) and the ecosystem principles and ADRs it links to. `Closes #N` closes the issue only when the PR merges into `main`; for a PR into `develop`, `release/*` or any other non-default target, close the issue by hand after the merge, linking the merged fix and the verification.
 
 ### 5. Staging (QA)
 
@@ -340,14 +340,22 @@ Every open issue carries exactly one **category** label and one **urgency** labe
 - **Category:** `architecture`, `performance`, `security`, `reliability`, `code-quality`, `documentation`, `process`, `ci-cd` or `product`.
 - **Urgency:** `urgency:critical`, `urgency:high`, `urgency:medium` or `urgency:low`.
 
+## Reporting bugs
+
+Use the [bug report form](.github/ISSUE_TEMPLATE/bug.yml). It asks for the
+version and deployment, a self-contained reproduction, and the expected and
+actual results. GitHub builds the "New issue" chooser from the default branch
+(`main`), so merging the form into `develop` does not publish it to reporters
+until the normal promotion to `main`.
+
 ## Pull Requests
 
 1. Make sure your branch is up to date with `develop` (`git rebase origin/develop`).
 2. Run `pytest tests/ -v` and verify all tests pass.
 3. Clearly describe what the PR does and what problem it solves.
-4. Reference related issues (e.g.: `Closes #42`).
+4. Reference related issues. Use `Closes #42` only when the PR targets `main`; for any other target use `Part of #42` or `Refs #42` and close the issue by hand after the merge.
 5. Wait for review and adjust if needed.
 
 ## Questions?
 
-Open an [issue](https://github.com/A11yDevs/acessilia-toolbox/issues) or start a [discussion](https://github.com/A11yDevs/acessilia-toolbox/discussions).
+Open an [issue](https://github.com/A11yDevs/acessilia-toolbox/issues). For a reproducible defect, use the [bug report form](.github/ISSUE_TEMPLATE/bug.yml).
