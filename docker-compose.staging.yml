@@ -68,7 +68,7 @@ services:
   # ── Providers ────────────────────────────────────────────────────
   docling-serve:
     restart: unless-stopped
-    image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.32.0}
+    image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.37.0}
     container_name: docling-serve-staging
     ports:
       - "127.0.0.1:${DOCLING_SERVE_PORT:-5001}:5001"
@@ -88,9 +88,9 @@ services:
       retries: 30
       start_period: 60s
 
-  # MinerU document parsing (CPU pipeline backend), built by CI from
+  # MinerU document parsing (CPU Basic tier), built by CI from
   # docker/mineru-cpu.Dockerfile (MinerU publishes no pre-built images). On a
-  # GPU host, build with scripts/build-mineru-image.sh (vllm variant), set
+  # GPU host, build with scripts/build-mineru-image.sh (gpu-basic variant), set
   # MINERU_SERVE_IMAGE and add `deploy.resources.reservations.devices`.
   mineru-serve:
     restart: unless-stopped
@@ -98,17 +98,17 @@ services:
     mem_limit: ${MINERU_MEMORY_LIMIT:-0}
     image: ${MINERU_SERVE_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-mineru:${TRACK_TAG:-develop}}
     container_name: mineru-serve-staging
-    entrypoint: ["mineru-api", "--host", "0.0.0.0", "--port", "8000"]
+    entrypoint: ["mineru-kit", "api-server", "--host", "0.0.0.0", "--port", "8000", "--tier", "basic"]
     ports:
       - "127.0.0.1:${MINERU_SERVE_PORT:-5002}:8000"
     environment:
-      MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+      MINERU_MODEL_SMALL_BACKEND: ${MINERU_MODEL_SMALL_BACKEND:-onnx}
       HF_HOME: /home/mineru/.cache/huggingface
     volumes:
-      - mineru-models:/home/mineru/.cache/modelscope
+      - mineru-models:/home/mineru/.mineru
       - mineru-huggingface:/home/mineru/.cache/huggingface
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')"]
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/v1/health')"]
       interval: 15s
       timeout: 5s
       retries: 20

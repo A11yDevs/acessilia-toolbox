@@ -4,7 +4,7 @@
 # Profiles enabled for this file: nougat.
 providers:
 - id: docling
-  version: '1.32'
+  version: 1.37.0
   transport: http
   endpoint: ${DOCLING_SERVE_URL}
   health_path: /health
@@ -21,7 +21,7 @@ providers:
   config:
     table_mode: accurate
 - id: docling-layout
-  version: '1.32'
+  version: 1.37.0
   transport: http
   endpoint: ${DOCLING_SERVE_URL}
   health_path: /health
@@ -56,7 +56,7 @@ providers:
   media_types:
   - application/pdf
 - id: docling-math
-  version: '1.32'
+  version: 1.37.0
   transport: http
   endpoint: ${DOCLING_SERVE_URL}
   health_path: /health
@@ -162,7 +162,7 @@ providers:
     table_max_tokens: 3072
     table_hint_chars: 3000
 - id: docling-ocr
-  version: '1.32'
+  version: 1.37.0
   transport: http
   endpoint: ${DOCLING_SERVE_URL}
   health_path: /health
@@ -175,11 +175,13 @@ providers:
   - image/tiff
   - application/pdf
 - id: mineru
-  version: '2.1'
+  version: 4.0.12
   transport: http
   endpoint: ${MINERU_SERVE_URL}
-  health_path: /openapi.json
+  health_path: /v1/health
   timeout_seconds: 600
+  config:
+    tier: basic
   capabilities:
   - document.structure.extract
   media_types:
@@ -188,11 +190,13 @@ providers:
   - image/jpeg
   - image/tiff
 - id: mineru-layout
-  version: '2.1'
+  version: 4.0.12
   transport: http
   endpoint: ${MINERU_SERVE_URL}
-  health_path: /openapi.json
+  health_path: /v1/health
   timeout_seconds: 600
+  config:
+    tier: basic
   capabilities:
   - document.layout.analyze
   media_types:
@@ -201,11 +205,13 @@ providers:
   - image/jpeg
   - image/tiff
 - id: mineru-ocr
-  version: '2.1'
+  version: 4.0.12
   transport: http
   endpoint: ${MINERU_SERVE_URL}
-  health_path: /openapi.json
+  health_path: /v1/health
   timeout_seconds: 600
+  config:
+    tier: basic
   capabilities:
   - document.ocr
   media_types:
@@ -268,7 +274,7 @@ providers:
   - application/json
   - text/plain
 - id: docling-chem
-  version: '1.32'
+  version: 1.37.0
   transport: http
   endpoint: ${DOCLING_SERVE_URL}
   health_path: /health

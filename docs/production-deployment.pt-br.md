@@ -115,6 +115,32 @@ restaure configuração e imagens aprovadas anteriormente e, se necessário, dad
 persistentes compatíveis do backup offline. Verifique as dependências antes de
 liberar tráfego. Nunca reabra acesso direto ao modelo como atalho de rollback.
 
+## Migração do sidecar para MinerU 4
+
+O adaptador da Toolbox agora chama `/v1/file_parse` e `/v1/health` do MinerU 4
+e espera `mineru-kit api-server --tier basic`. Um sidecar MinerU 2.1 não atende
+essas rotas. O registro usa `/v1/health` em vez de `/openapi.json`: o MinerU 4
+ainda pode expor o documento OpenAPI quando `MINERU_API_ENABLE_FASTAPI_DOCS`
+está habilitado, mas documentação opcional não é sinal de protocolo ou de
+prontidão. Promova juntos a imagem da Toolbox,
+`deploy/providers-config.default.yaml` e `docker-compose.production.yml`.
+
+- Re-pin `PRODUCTION_MINERU_IMAGE` para o digest da imagem CPU MinerU 4.0.12
+  aprovada para produção. Não reutilize o digest baseline da 0.2.0: ele é
+  MinerU 2.1.
+- O novo cache usa `mineru-models:/home/mineru/.mineru` e o cache do Hugging
+  Face. O conteúdo antigo do ModelScope não é usado; mantenha-o até o fim da
+  janela de rollback e provisione disco e rede, pois a primeira inicialização
+  baixa novamente os modelos do MinerU 4.
+- O serviço Compose executa `mineru-kit api-server --tier basic`, usa
+  `MINERU_MODEL_SMALL_BACKEND=onnx` em CPU e verifica `/v1/health`.
+- Faça a aceitação normal com tráfego suspenso para extração de estrutura,
+  layout e OCR, incluindo uma faixa parcial de páginas. Saúde sozinha não prova
+  que os modelos carregaram.
+- O rollback exige a imagem anterior da Toolbox, o sidecar MinerU anterior e o
+  registro de provedores anterior juntos. Restaurar apenas um lado deixa o
+  protocolo incompatível.
+
 ## Homologação e encerramento do BHS
 
 A API autenticada da Toolbox continua acessível pelo core; portas auxiliares

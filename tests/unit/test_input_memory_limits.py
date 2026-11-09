@@ -202,7 +202,7 @@ def test_http_returns_413_when_provider_requires_larger_in_memory_input(monkeypa
 
 
 @pytest.mark.parametrize("filename", ["docker-compose.yml", "docker-compose.staging.yml"])
-def test_mineru_persists_modelscope_and_huggingface_caches(filename):
+def test_mineru_persists_v4_models_and_huggingface_caches(filename):
     from pathlib import Path
 
     import yaml
@@ -210,6 +210,6 @@ def test_mineru_persists_modelscope_and_huggingface_caches(filename):
     config = yaml.safe_load(Path(filename).read_text())
     mineru = config["services"]["mineru-serve"]
     assert mineru["environment"]["HF_HOME"] == "/home/mineru/.cache/huggingface"
-    assert "mineru-models:/home/mineru/.cache/modelscope" in mineru["volumes"]
+    assert "mineru-models:/home/mineru/.mineru" in mineru["volumes"]
     assert "mineru-huggingface:/home/mineru/.cache/huggingface" in mineru["volumes"]
     assert "mineru-huggingface" in config["volumes"]

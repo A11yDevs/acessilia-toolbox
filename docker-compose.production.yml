@@ -91,23 +91,27 @@ services:
     image: ${PRODUCTION_MINERU_IMAGE:?set an approved digest in .deploy.env}
     container_name: mineru-serve-production
     entrypoint:
-    - mineru-api
+    - mineru-kit
+    - api-server
     - --host
     - 0.0.0.0
     - --port
     - '8000'
+    - --tier
+    - basic
     environment:
       MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+      MINERU_MODEL_SMALL_BACKEND: ${MINERU_MODEL_SMALL_BACKEND:-onnx}
       HF_HOME: /home/mineru/.cache/huggingface
     volumes:
-    - mineru-models:/home/mineru/.cache/modelscope
+    - mineru-models:/home/mineru/.mineru
     - mineru-huggingface:/home/mineru/.cache/huggingface
     healthcheck:
       test:
       - CMD
       - python3
       - -c
-      - import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')
+      - import urllib.request;urllib.request.urlopen('http://localhost:8000/v1/health')
       interval: 15s
       timeout: 5s
       retries: 20
