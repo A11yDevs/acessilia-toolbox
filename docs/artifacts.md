@@ -43,6 +43,7 @@ Where each shape is served:
 | `GET /v1/artifacts/{artifact_id}/metadata` | the stored record (`ArtifactRef`): it also has `uri`, `storage_backend` and `filename` |
 | the `artifacts` of an execution result | the stored record, as cached with the result |
 
+The upload route's change is listed in the [0.3.0 compatibility notes](release-notes-0.3.0.md).
 The record keeps `uri` and `filename`: the download's `Content-Disposition`
 and execution by artifact id use the filename. Records written before
 `reference@1` are read as they are; the reference is a projection of them.
