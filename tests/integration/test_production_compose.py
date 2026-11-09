@@ -27,7 +27,7 @@ SPEC.loader.exec_module(deploy)
 def production(tmp_path: Path) -> tuple[Path, dict]:
     for source, name in (
         ("docker-compose.production.yml", "docker-compose.production.yml"),
-        ("deploy/production/providers-config.yaml", "providers-config.yaml"),
+        ("deploy/providers-config.default.yaml", "providers-config.yaml"),
         ("deploy/production/deploy.env.example", ".deploy.env"),
     ):
         shutil.copyfile(ROOT / source, tmp_path / name)

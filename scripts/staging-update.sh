@@ -50,6 +50,9 @@ GITHUB_REPO="A11yDevs/acessilia-toolbox"
 # Sidecars published by the Sidecars workflow (compose service names). They
 # are updated with the toolbox so the API never runs against an older sidecar.
 SIDECAR_SERVICES=(mineru-serve audiveris-serve nougat-serve rapid-latex-ocr pp-formulanet rapidocr-orient pdf-ua-render verapdf-validate math-speech)
+# Sidecars that start only under a Compose profile (#108): audiveris-serve
+# with "music", nougat-serve with "nougat" (COMPOSE_PROFILES in .env).
+OPTIONAL_SIDECARS=(audiveris-serve nougat-serve)
 CI_IMAGE_PREFIX="ghcr.io/a11ydevs/acessilia-toolbox-"
 
 # Cache and status live in a local directory
@@ -133,6 +136,32 @@ _clear_interrupted_recreations() {
   done
 }
 
+# Removes the container of an optional sidecar whose Compose profile is off.
+# Compose leaves such a service out of its config, so it is neither pulled nor
+# restarted, but a container created before the profile existed (or while it
+# was on) keeps running an ever older image. Its volumes, such as downloaded
+# models, are kept, so turning the profile on again is quick.
+_retire_disabled_optional_sidecars() {
+  local project svc id
+  local -a ids
+  project=$(jq -r '.name // empty' <<<"$COMPOSE_CONFIG")
+  [ -n "$project" ] || return 0
+  for svc in "${OPTIONAL_SIDECARS[@]}"; do
+    if jq -e --arg s "$svc" '.services | has($s)' <<<"$COMPOSE_CONFIG" >/dev/null; then
+      continue
+    fi
+    ids=()
+    while read -r id; do
+      [ -n "$id" ] && ids+=("$id")
+    done < <(docker ps -a -q \
+      --filter "label=com.docker.compose.project=$project" \
+      --filter "label=com.docker.compose.service=$svc")
+    [ "${#ids[@]}" -gt 0 ] || continue
+    echo "[staging-update] 💤 $svc is off (its Compose profile is not enabled); removing its container"
+    docker rm -f "${ids[@]}" >/dev/null
+  done
+}
+
 # Pulls and restarts the toolbox together with the managed sidecars.
 _update_services() {
   docker compose -f "$COMPOSE_FILE" pull toolbox "${SIDECARS[@]}"
@@ -182,6 +211,7 @@ while read -r svc image; do
   SIDECAR_IMAGES+=("$image")
 done < <(_managed_sidecars)
 echo "[staging-update] Managed sidecars: ${SIDECARS[*]:-none}"
+_retire_disabled_optional_sidecars
 
 # ──────────────────────────────────────────────
 # 1. Check SHA of latest commit via GitHub API

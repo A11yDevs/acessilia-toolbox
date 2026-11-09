@@ -287,6 +287,63 @@ docling-serve        ghcr.io/docling-project/docling-serve-cpu:...   Up (healthy
 > volume, which is mounted at the image's own cache path
 > (`/opt/app-root/src/.cache/docling`).
 
+### Optional sidecars: Audiveris and Nougat
+
+`audiveris-serve` (optical music recognition) and `nougat-serve` (transcription
+of academic papers) have no client in the Acessilia core
+([#108](https://github.com/A11yDevs/acessilia-toolbox/issues/108)), so the
+local and staging Compose files start them only under a Compose profile.
+Production does not declare them at all.
+
+| Sidecar | Provider | Profile |
+|---|---|---|
+| `audiveris-serve` | `audiveris` (`music.omr`) | `music` |
+| `nougat-serve` | `nougat` (`document.structure.extract`) | `nougat` |
+
+**By default** the toolbox container loads `deploy/providers-config.default.yaml`, which
+`scripts/derive_providers_config.py` generates from `providers-config.yaml`
+without these two providers (a test fails while it is stale). So what clients
+see matches what runs:
+
+- `GET /v1/capabilities` and `GET /v1/providers` do not list `audiveris` or
+  `nougat`. `music.omr` stays available through `homr`, which runs in-process;
+- `/v1/ready` and the provider health routes do not report them;
+- a call that asks for `provider=nougat` or `provider=audiveris` fails with
+  `404 provider_not_found`.
+
+**To opt in**, set both in `.env`, then start the stack as usual:
+
+``` bash
+COMPOSE_PROFILES=music,nougat          # or just one of them
+TOOLBOX_COMPOSE_PROVIDERS_CONFIG=/app/providers-config.yaml
+```
+
+Compose combines `COMPOSE_PROFILES` with the local file's own `toolbox`
+profile only when no `--profile` is given on the command line: a
+`--profile` flag replaces `COMPOSE_PROFILES`, so list every profile there
+(`--profile toolbox --profile nougat`).
+
+`TOOLBOX_COMPOSE_PROVIDERS_CONFIG` is read by the Compose files only. The
+`TOOLBOX_PROVIDERS_CONFIG` in `.env` is for running the Toolbox outside
+Docker, and the containers ignore it. The two settings above go together. With the profile on but the default provider
+file, the sidecar runs but no provider uses it. With the full file but the
+profile off, the catalogue lists a provider whose sidecar is down: its health
+reports it, and a call to it fails as unavailable.
+
+**Existing installations** keep a container created before the profiles
+existed. On staging, the next run of the updater removes the container of an
+optional sidecar whose profile is off, and keeps its volumes (see
+[auto-update](auto-update.md)). By hand:
+
+``` bash
+docker compose -f docker-compose.staging.yml --profile music --profile nougat \
+  rm -sf audiveris-serve nougat-serve
+```
+
+`deploy/providers-config.default.yaml` is also the file production copies to
+`/opt/acessilia/toolbox/providers-config.yaml` (see
+[production deployment](production-deployment.md)).
+
 ### Enabling the VLM pipeline (`chem.recognize`)
 
 `chem.recognize` runs docling-serve's VLM pipeline, which needs the Granite

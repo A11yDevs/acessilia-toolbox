@@ -44,7 +44,7 @@ umask 077
 mkdir -p /opt/acessilia/toolbox
 # Somente instalação nova: não sobrescreva arquivos ou credenciais existentes.
 cp -n docker-compose.production.yml /opt/acessilia/toolbox/
-cp -n deploy/production/providers-config.yaml /opt/acessilia/toolbox/
+cp -n deploy/providers-config.default.yaml /opt/acessilia/toolbox/providers-config.yaml
 cp -n deploy/production/runtime.env.example /opt/acessilia/toolbox/.env
 cp -n deploy/production/deploy.env.example /opt/acessilia/toolbox/.deploy.env
 chmod 600 /opt/acessilia/toolbox/.env /opt/acessilia/toolbox/.deploy.env

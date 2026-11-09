@@ -20,6 +20,11 @@ case "$*" in
       printf '{"services":{}}'
     fi ;;
   compose*"ps -a --services"*) printf '%b' "${COMPOSE_SERVICES:-}" ;;
+  "ps -a -q "*"com.docker.compose.service="*)
+    args="$*"
+    svc="${args##*com.docker.compose.service=}"
+    var="SERVICE_IDS_${svc//-/_}"
+    printf '%b' "${!var:-}" ;;
   ps*-a*) printf '%b' "${DOCKER_PS:-}" ;;
 esac
 exit 0
@@ -159,3 +164,73 @@ def test_removes_container_left_by_interrupted_compose_recreate(tmp_path):
     )
     cache_file = staging_dir / "var" / "data" / ".last_sha"
     assert cache_file.read_text().strip() == f"release/0.2.0 {SHA}"
+
+
+def _config_with(*services: str) -> str:
+    """A staging compose config listing ``services`` (others have their profile off)."""
+    images = {
+        "mineru-serve": "ghcr.io/a11ydevs/acessilia-toolbox-mineru:develop",
+        "audiveris-serve": "ghcr.io/a11ydevs/acessilia-toolbox-audiveris-serve:develop",
+        "nougat-serve": "ghcr.io/a11ydevs/acessilia-toolbox-nougat:develop",
+    }
+    return json.dumps(
+        {
+            "name": "acessilia-toolbox-staging",
+            "services": {
+                service: {"image": images[service], "container_name": f"{service}-staging"}
+                for service in services
+            },
+        }
+    )
+
+
+def test_removes_the_container_of_an_optional_sidecar_whose_profile_is_off(tmp_path):
+    """#108: nougat-serve existed before its profile; the updater retires it."""
+    staging_dir, env = _staging(tmp_path, "", _CURL_OK)
+    env.update(
+        {
+            "DOCKER_CONFIG_JSON": _config_with("mineru-serve"),
+            "COMPOSE_SERVICES": "mineru-serve\nnougat-serve\n",
+            "SERVICE_IDS_nougat_serve": "abc123\n",
+        }
+    )
+
+    docker_calls = _run(staging_dir, env)
+
+    assert "rm -f abc123" in docker_calls
+    assert "nougat-serve" not in docker_calls.split("up -d --no-deps")[-1]
+
+
+def test_keeps_an_optional_sidecar_whose_profile_is_on(tmp_path):
+    staging_dir, env = _staging(tmp_path, "", _CURL_OK)
+    env.update(
+        {
+            "DOCKER_CONFIG_JSON": _config_with("mineru-serve", "nougat-serve"),
+            "COMPOSE_SERVICES": "mineru-serve\nnougat-serve\n",
+            "SERVICE_IDS_nougat_serve": "abc123\n",
+        }
+    )
+
+    docker_calls = _run(staging_dir, env)
+
+    assert "rm -f abc123" not in docker_calls
+    assert (
+        "compose -f docker-compose.staging.yml up -d --no-deps toolbox mineru-serve nougat-serve"
+        in docker_calls
+    )
+
+
+def test_never_removes_a_sidecar_that_is_not_optional(tmp_path):
+    """Only audiveris-serve and nougat-serve are optional; mineru-serve is left alone."""
+    staging_dir, env = _staging(tmp_path, "", _CURL_OK)
+    env.update(
+        {
+            "DOCKER_CONFIG_JSON": _config_with(),
+            "SERVICE_IDS_mineru_serve": "def456\n",
+        }
+    )
+
+    docker_calls = _run(staging_dir, env)
+
+    assert "def456" not in docker_calls.replace("com.docker.compose.service=mineru-serve", "")
+    assert "rm -f def456" not in docker_calls
