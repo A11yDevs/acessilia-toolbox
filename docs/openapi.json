@@ -2280,6 +2280,18 @@
                         "type": "boolean",
                         "title": "Cacheable"
                     },
+                    "input": {
+                        "$ref": "#/components/schemas/CapabilityIO",
+                        "description": "Input binding: schema reference, accepted media types, by_reference."
+                    },
+                    "output": {
+                        "$ref": "#/components/schemas/CapabilityIO",
+                        "description": "Output binding: schema reference, media types and by_reference. For a by-reference output, media_types describe the referenced binary."
+                    },
+                    "execution": {
+                        "$ref": "#/components/schemas/CapabilityExecution",
+                        "description": "deterministic, idempotent (repeating the same operation has no effect beyond the first execution), cacheable, and timeout_hint_seconds (a hint about the expected duration, not a timeout the client must use)."
+                    },
                     "providers": {
                         "items": {
                             "type": "string"
@@ -2328,6 +2340,9 @@
                     "media_types",
                     "deterministic",
                     "cacheable",
+                    "input",
+                    "output",
+                    "execution",
                     "providers",
                     "declared_providers",
                     "requires",
@@ -2335,6 +2350,61 @@
                     "timeout_hint_seconds"
                 ],
                 "title": "CapabilityDetail"
+            },
+            "CapabilityExecution": {
+                "properties": {
+                    "deterministic": {
+                        "type": "boolean",
+                        "title": "Deterministic",
+                        "default": true
+                    },
+                    "idempotent": {
+                        "type": "boolean",
+                        "title": "Idempotent",
+                        "default": true
+                    },
+                    "cacheable": {
+                        "type": "boolean",
+                        "title": "Cacheable",
+                        "default": true
+                    },
+                    "timeout_hint_seconds": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0.0,
+                        "title": "Timeout Hint Seconds",
+                        "default": 120
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "title": "CapabilityExecution"
+            },
+            "CapabilityIO": {
+                "properties": {
+                    "schema": {
+                        "type": "string",
+                        "minLength": 1,
+                        "title": "Schema"
+                    },
+                    "media_types": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array",
+                        "title": "Media Types"
+                    },
+                    "by_reference": {
+                        "type": "boolean",
+                        "title": "By Reference",
+                        "default": false
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                    "schema"
+                ],
+                "title": "CapabilityIO"
             },
             "CapabilitySummary": {
                 "properties": {
@@ -2373,6 +2443,18 @@
                         "type": "boolean",
                         "title": "Cacheable"
                     },
+                    "input": {
+                        "$ref": "#/components/schemas/CapabilityIO",
+                        "description": "Input binding: schema reference, accepted media types, by_reference."
+                    },
+                    "output": {
+                        "$ref": "#/components/schemas/CapabilityIO",
+                        "description": "Output binding: schema reference, media types and by_reference. For a by-reference output, media_types describe the referenced binary."
+                    },
+                    "execution": {
+                        "$ref": "#/components/schemas/CapabilityExecution",
+                        "description": "deterministic, idempotent (repeating the same operation has no effect beyond the first execution), cacheable, and timeout_hint_seconds (a hint about the expected duration, not a timeout the client must use)."
+                    },
                     "providers": {
                         "items": {
                             "type": "string"
@@ -2403,6 +2485,9 @@
                     "media_types",
                     "deterministic",
                     "cacheable",
+                    "input",
+                    "output",
+                    "execution",
                     "providers",
                     "declared_providers"
                 ],
