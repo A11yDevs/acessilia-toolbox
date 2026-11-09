@@ -20,8 +20,8 @@ services:
     environment:
       TOOLBOX_PORT: 8002
       # Every provider except the optional sidecars (scripts/derive_providers_config.py).
-      # Set TOOLBOX_COMPOSE_PROVIDERS_CONFIG=/app/providers-config.yaml when
-      # COMPOSE_PROFILES starts them. A Compose-only name on purpose: .env sets
+      # Set TOOLBOX_COMPOSE_PROVIDERS_CONFIG to the file matching the enabled
+      # profiles (docs/installation.md). A Compose-only name on purpose: .env sets
       # TOOLBOX_PROVIDERS_CONFIG for runs outside Docker, and interpolating it
       # here would load the full file whatever the profiles say.
       TOOLBOX_PROVIDERS_CONFIG: ${TOOLBOX_COMPOSE_PROVIDERS_CONFIG:-/app/deploy/providers-config.default.yaml}
@@ -145,8 +145,8 @@ services:
 
   # Optical music recognition sidecar (optional; Audiveris + Tesseract).
   audiveris-serve:
-    # Optional (#108): started only with COMPOSE_PROFILES=music, together
-    # with TOOLBOX_COMPOSE_PROVIDERS_CONFIG=/app/providers-config.yaml.
+    # Optional (#108): started only with the "music" profile, together with
+    # the matching TOOLBOX_COMPOSE_PROVIDERS_CONFIG (docs/installation.md).
     profiles: ["music"]
     image: ${AUDIVERIS_SERVE_IMAGE:-audiveris-serve:latest}
     container_name: audiveris-serve
@@ -163,8 +163,8 @@ services:
   # Nougat visual document transcription service (optional; LaTeX math/tables).
   # Build the image locally via scripts/build-nougat-image.sh if not pulling.
   nougat-serve:
-    # Optional (#108): started only with COMPOSE_PROFILES=nougat, together
-    # with TOOLBOX_COMPOSE_PROVIDERS_CONFIG=/app/providers-config.yaml.
+    # Optional (#108): started only with the "nougat" profile, together with
+    # the matching TOOLBOX_COMPOSE_PROVIDERS_CONFIG (docs/installation.md).
     profiles: ["nougat"]
     image: ${NOUGAT_SERVE_IMAGE:-nougat:latest}
     container_name: nougat-serve

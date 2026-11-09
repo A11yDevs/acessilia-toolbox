@@ -64,6 +64,33 @@ def test_the_default_provider_file_is_the_full_one_without_the_optional_provider
     assert default["providers"] == [p for p in full["providers"] if p["id"] not in optional]
 
 
+@pytest.mark.parametrize(
+    ("profiles", "file", "optional_kept"),
+    [
+        (frozenset(), "deploy/providers-config.default.yaml", set()),
+        (frozenset({"music"}), "deploy/providers-config.music.yaml", {"audiveris"}),
+        (frozenset({"nougat"}), "deploy/providers-config.nougat.yaml", {"nougat"}),
+        (frozenset({"music", "nougat"}), "providers-config.yaml", {"audiveris", "nougat"}),
+    ],
+)
+def test_each_set_of_profiles_has_a_file_with_exactly_its_providers(
+    profiles: frozenset[str], file: str, optional_kept: set[str]
+) -> None:
+    deriver = _deriver()
+    full = yaml.safe_load((ROOT / "providers-config.yaml").read_text(encoding="utf-8"))
+    selected = yaml.safe_load((ROOT / file).read_text(encoding="utf-8"))
+    disabled = set(deriver.OPTIONAL_PROVIDERS) - optional_kept
+
+    assert deriver.path_for(profiles) == ROOT / file
+    assert selected["providers"] == [p for p in full["providers"] if p["id"] not in disabled]
+
+
+def test_an_unknown_profile_is_an_error() -> None:
+    source = (ROOT / "providers-config.yaml").read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown optional profiles"):
+        _deriver().derive(source, frozenset({"chemistry"}))
+
+
 def test_an_optional_provider_missing_from_the_full_file_is_an_error() -> None:
     with pytest.raises(ValueError, match="optional providers not in"):
         _deriver().derive("providers:\n  - id: docling\n    capabilities: [x.y]\n")

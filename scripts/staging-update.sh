@@ -58,6 +58,10 @@ CI_IMAGE_PREFIX="ghcr.io/a11ydevs/acessilia-toolbox-"
 # Cache and status live in a local directory
 CACHE_DIR="$STAGING_DIR/var/data"
 CACHE_FILE="${STAGING_UPDATE_CACHE:-$CACHE_DIR/.last_sha}"
+# Fingerprint of the resolved Compose config last applied: a change of
+# profiles, provider file or other settings is a deployment change even when
+# the commit is the same (#108).
+CONFIG_FILE="${STAGING_CONFIG_CACHE:-$CACHE_DIR/.last_config}"
 STATUS_FILE="${STAGING_STATUS_FILE:-$CACHE_DIR/staging-status.json}"
 mkdir -p "$CACHE_DIR"
 
@@ -140,7 +144,9 @@ _clear_interrupted_recreations() {
 # Compose leaves such a service out of its config, so it is neither pulled nor
 # restarted, but a container created before the profile existed (or while it
 # was on) keeps running an ever older image. Its volumes, such as downloaded
-# models, are kept, so turning the profile on again is quick.
+# models, are kept, so turning the profile on again is quick. Called only
+# after a successful update: by then the toolbox runs with the provider file
+# of the same config, so it no longer announces the sidecar being removed.
 _retire_disabled_optional_sidecars() {
   local project svc id
   local -a ids
@@ -162,11 +168,23 @@ _retire_disabled_optional_sidecars() {
   done
 }
 
+# sha256 of the resolved Compose config, without writing the config anywhere.
+_config_fingerprint() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$COMPOSE_CONFIG" | sha256sum | cut -d' ' -f1
+  else
+    printf '%s' "$COMPOSE_CONFIG" | shasum -a 256 | cut -d' ' -f1
+  fi
+}
+
 # Pulls and restarts the toolbox together with the managed sidecars.
+# Each step returns explicitly: callers run it as `_update_services || ...`,
+# and bash ignores set -e inside a function called that way, so a failed pull
+# would otherwise fall through to `up` and count as a successful update.
 _update_services() {
-  docker compose -f "$COMPOSE_FILE" pull toolbox "${SIDECARS[@]}"
-  _clear_interrupted_recreations
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox "${SIDECARS[@]}"
+  docker compose -f "$COMPOSE_FILE" pull toolbox "${SIDECARS[@]}" || return 1
+  _clear_interrupted_recreations || return 1
+  docker compose -f "$COMPOSE_FILE" up -d --no-deps toolbox "${SIDECARS[@]}" || return 1
 }
 
 # ──────────────────────────────────────────────
@@ -211,7 +229,11 @@ while read -r svc image; do
   SIDECAR_IMAGES+=("$image")
 done < <(_managed_sidecars)
 echo "[staging-update] Managed sidecars: ${SIDECARS[*]:-none}"
-_retire_disabled_optional_sidecars
+CONFIG_FINGERPRINT=$(_config_fingerprint)
+CONFIG_CHANGED=1
+if [ -f "$CONFIG_FILE" ] && [ "$(cat "$CONFIG_FILE")" = "$CONFIG_FINGERPRINT" ]; then
+  CONFIG_CHANGED=0
+fi
 
 # ──────────────────────────────────────────────
 # 1. Check SHA of latest commit via GitHub API
@@ -237,6 +259,8 @@ if [ -z "$LATEST_SHA" ] || [ "$LATEST_SHA" = "null" ]; then
     echo "[staging-update] ❌ Failed to pull or restart $IMAGE_TAG and its sidecars"
     exit 1
   }
+  _retire_disabled_optional_sidecars
+  echo "$CONFIG_FINGERPRINT" > "$CONFIG_FILE"
   docker image prune -f
   _write_status "" "" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "[staging-update] Container updated (fallback)."
@@ -250,7 +274,7 @@ fi
 CACHE_KEY="$GITHUB_BRANCH $LATEST_SHA"
 if [ -f "$CACHE_FILE" ]; then
   CACHED_KEY=$(cat "$CACHE_FILE")
-  if [ "$CACHED_KEY" = "$CACHE_KEY" ]; then
+  if [ "$CACHED_KEY" = "$CACHE_KEY" ] && [ "$CONFIG_CHANGED" = 0 ]; then
     # Nothing to update means the cached commit is the one running.
     _write_status "$LATEST_SHA" "$LATEST_SHA" ""
     echo "[staging-update] ✅ No new commits on $GITHUB_REPO/$GITHUB_BRANCH. Skipping."
@@ -286,7 +310,11 @@ done
 # ──────────────────────────────────────────────
 # 3. SHA changed and image published → update
 # ──────────────────────────────────────────────
-echo "[staging-update] 🔄 New commit detected: $SHA7. Updating..."
+if [ -f "$CACHE_FILE" ] && [ "$(cat "$CACHE_FILE")" = "$CACHE_KEY" ]; then
+  echo "[staging-update] 🔄 Compose configuration changed at $SHA7. Updating..."
+else
+  echo "[staging-update] 🔄 New commit detected: $SHA7. Updating..."
+fi
 
 echo "[staging-update] 🚀 Pulling and restarting toolbox ${SIDECARS[*]}..."
 _update_services || {
@@ -294,8 +322,11 @@ _update_services || {
   exit 1
 }
 
-# only write cache after successful restart (set -e aborts before on failure)
+# Only after a successful restart (set -e aborts before on failure): the
+# toolbox now runs this config, so retiring disabled sidecars is safe.
+_retire_disabled_optional_sidecars
 echo "$CACHE_KEY" > "$CACHE_FILE"
+echo "$CONFIG_FINGERPRINT" > "$CONFIG_FILE"
 
 docker image prune -f
 
