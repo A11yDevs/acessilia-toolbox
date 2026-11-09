@@ -78,3 +78,34 @@ def test_local_build_uses_the_same_context_as_ci(
     build = builds[0]
     assert Path(build[-1]) == ROOT
     assert Path(build[build.index("-f") + 1]) == ROOT / "docker" / filename
+
+
+def test_production_registry_and_compose_match_the_mineru4_adapter() -> None:
+    config = yaml.safe_load(
+        (ROOT / "deploy/production/providers-config.yaml").read_text()
+    )
+    providers = {entry["id"]: entry for entry in config["providers"]}
+    for provider_id in ("mineru", "mineru-layout", "mineru-ocr"):
+        entry = providers[provider_id]
+        assert entry["version"] == "4.0.12"
+        assert entry["health_path"] == "/v1/health"
+        assert entry["config"]["tier"] == "basic"
+
+    compose = yaml.safe_load((ROOT / "docker-compose.production.yml").read_text())
+    service = compose["services"]["mineru-serve"]
+    assert service["entrypoint"] == [
+        "mineru-kit",
+        "api-server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--tier",
+        "basic",
+    ]
+    assert service["environment"]["MINERU_MODEL_SMALL_BACKEND"] == (
+        "${MINERU_MODEL_SMALL_BACKEND:-onnx}"
+    )
+    assert "mineru-models:/home/mineru/.mineru" in service["volumes"]
+    assert service["healthcheck"]["test"][-1].endswith("/v1/health')")
+    assert "/openapi.json" not in str(service)

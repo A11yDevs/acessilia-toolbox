@@ -162,11 +162,13 @@ providers:
   - image/tiff
   - application/pdf
 - id: mineru
-  version: '2.1'
+  version: '4.0.12'
   transport: http
   endpoint: ${MINERU_SERVE_URL}
-  health_path: /openapi.json
+  health_path: /v1/health
   timeout_seconds: 600
+  config:
+    tier: basic
   capabilities:
   - document.structure.extract
   media_types:
@@ -175,11 +177,13 @@ providers:
   - image/jpeg
   - image/tiff
 - id: mineru-layout
-  version: '2.1'
+  version: '4.0.12'
   transport: http
   endpoint: ${MINERU_SERVE_URL}
-  health_path: /openapi.json
+  health_path: /v1/health
   timeout_seconds: 600
+  config:
+    tier: basic
   capabilities:
   - document.layout.analyze
   media_types:
@@ -188,11 +192,13 @@ providers:
   - image/jpeg
   - image/tiff
 - id: mineru-ocr
-  version: '2.1'
+  version: '4.0.12'
   transport: http
   endpoint: ${MINERU_SERVE_URL}
-  health_path: /openapi.json
+  health_path: /v1/health
   timeout_seconds: 600
+  config:
+    tier: basic
   capabilities:
   - document.ocr
   media_types:
