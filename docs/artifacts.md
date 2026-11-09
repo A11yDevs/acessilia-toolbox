@@ -9,19 +9,46 @@ Toolbox only mediates explicitly requested operations.
 
 ## Artifact references
 
-Prefer references over repeatedly transferring large blobs:
+Prefer references over repeatedly transferring large blobs. The published
+reference is `artifact/reference@1` (`schemas/reference@1.json`, `$id`
+`urn:a11y-devs:schema:reference:1.0.0`; ADR-0015 in the Acessilia core):
 
 ``` json
 {
   "artifact_id": "sha256:8a3f...",
-  "uri": "s3://acessilia/objects/8a/3f/...",
+  "digest": "sha256:8a3f...",
   "media_type": "application/pdf",
-  "size": 2849321
+  "size": 2849321,
+  "store": "s3"
 }
 ```
 
-Public responses should avoid exposing storage credentials. Presigned
-URLs may be used when appropriate.
+- `artifact_id` is always canonical (`sha256:` and 64 hex digits). The routes
+  still accept an id without the prefix.
+- `digest` equals `artifact_id`. The schema cannot say so (Draft-07), so the
+  only producer, `reference_of` in `core/artifact.py`, guarantees it.
+- `store` names the backend that served the reference (`s3`, `filesystem`,
+  ...), never the `failover` wrapper. It does not identify a deployment and is
+  not used to route a download. `null` means the response claims no
+  available, verified storage location; it is not proof that the artifact
+  does not exist.
+- `scope` and provenance come in `artifact/reference@2`
+  ([#146](https://github.com/A11yDevs/acessilia-toolbox/issues/146)).
+
+Where each shape is served:
+
+| Route | Shape |
+|---|---|
+| `POST /v1/artifacts` | `artifact/reference@1`, the output `artifact.store` declares |
+| `GET /v1/artifacts/{artifact_id}/metadata` | the stored record (`ArtifactRef`): it also has `uri`, `storage_backend` and `filename` |
+| the `artifacts` of an execution result | the stored record, as cached with the result |
+
+The upload route's change is listed in the [0.3.0 compatibility notes](release-notes-0.3.0.md).
+The record keeps `uri` and `filename`: the download's `Content-Disposition`
+and execution by artifact id use the filename. Records written before
+`reference@1` are read as they are; the reference is a projection of them.
+Public responses should avoid exposing storage credentials. Presigned URLs
+may be used when appropriate.
 
 ## Content-addressable storage
 

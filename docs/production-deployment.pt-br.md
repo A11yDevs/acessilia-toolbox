@@ -44,7 +44,7 @@ umask 077
 mkdir -p /opt/acessilia/toolbox
 # Somente instalação nova: não sobrescreva arquivos ou credenciais existentes.
 cp -n docker-compose.production.yml /opt/acessilia/toolbox/
-cp -n deploy/production/providers-config.yaml /opt/acessilia/toolbox/
+cp -n deploy/providers-config.default.yaml /opt/acessilia/toolbox/providers-config.yaml
 cp -n deploy/production/runtime.env.example /opt/acessilia/toolbox/.env
 cp -n deploy/production/deploy.env.example /opt/acessilia/toolbox/.deploy.env
 chmod 600 /opt/acessilia/toolbox/.env /opt/acessilia/toolbox/.deploy.env
@@ -114,6 +114,30 @@ cache de sucesso, limpeza de imagens ou exclusão de volumes. Para rollback,
 restaure configuração e imagens aprovadas anteriormente e, se necessário, dados
 persistentes compatíveis do backup offline. Verifique as dependências antes de
 liberar tráfego. Nunca reabra acesso direto ao modelo como atalho de rollback.
+
+## Migração do sidecar para MinerU 4
+
+O adaptador da Toolbox agora chama `/v1/file_parse` e `/v1/health` do MinerU 4
+e espera `mineru-kit api-server --tier basic`. Um sidecar MinerU 2.1 não atende
+essas rotas, e um sidecar MinerU 4 não aceita a sonda antiga `/openapi.json`.
+Promova juntos a imagem da Toolbox, `deploy/providers-config.default.yaml` e
+`docker-compose.production.yml`.
+
+- Re-pin `PRODUCTION_MINERU_IMAGE` para o digest da imagem CPU MinerU 4.0.12
+  aprovada para produção. Não reutilize o digest baseline da 0.2.0: ele é
+  MinerU 2.1.
+- O novo cache usa `mineru-models:/home/mineru/.mineru` e o cache do Hugging
+  Face. O conteúdo antigo do ModelScope não é usado; mantenha-o até o fim da
+  janela de rollback e provisione disco e rede, pois a primeira inicialização
+  baixa novamente os modelos do MinerU 4.
+- O serviço Compose executa `mineru-kit api-server --tier basic`, usa
+  `MINERU_MODEL_SMALL_BACKEND=onnx` em CPU e verifica `/v1/health`.
+- Faça a aceitação normal com tráfego suspenso para extração de estrutura,
+  layout e OCR, incluindo uma faixa parcial de páginas. Saúde sozinha não prova
+  que os modelos carregaram.
+- O rollback exige a imagem anterior da Toolbox, o sidecar MinerU anterior e o
+  registro de provedores anterior juntos. Restaurar apenas um lado deixa o
+  protocolo incompatível.
 
 ## Homologação e encerramento do BHS
 

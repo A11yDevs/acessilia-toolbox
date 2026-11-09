@@ -22,8 +22,9 @@ GET  /v1/providers
 GET  /v1/providers/{provider_id}
 GET  /v1/providers/{provider_id}/health
 
-POST /v1/artifacts
+POST /v1/artifacts                       # returns artifact/reference@1
 GET  /v1/artifacts/{artifact_id}
+GET  /v1/artifacts/{artifact_id}/metadata  # the stored record
 
 GET  /v1/planning/domain
 GET  /v1/planning/capabilities/{capability_id}

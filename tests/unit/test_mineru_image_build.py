@@ -82,7 +82,7 @@ def test_local_build_uses_the_same_context_as_ci(
 
 def test_production_registry_and_compose_match_the_mineru4_adapter() -> None:
     config = yaml.safe_load(
-        (ROOT / "deploy/production/providers-config.yaml").read_text()
+        (ROOT / "deploy/providers-config.default.yaml").read_text()
     )
     providers = {entry["id"]: entry for entry in config["providers"]}
     for provider_id in ("mineru", "mineru-layout", "mineru-ocr"):

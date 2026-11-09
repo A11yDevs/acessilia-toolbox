@@ -42,7 +42,7 @@ umask 077
 mkdir -p /opt/acessilia/toolbox
 # New installation only: do not overwrite any existing file or credential.
 cp -n docker-compose.production.yml /opt/acessilia/toolbox/
-cp -n deploy/production/providers-config.yaml /opt/acessilia/toolbox/
+cp -n deploy/providers-config.default.yaml /opt/acessilia/toolbox/providers-config.yaml
 cp -n deploy/production/runtime.env.example /opt/acessilia/toolbox/.env
 cp -n deploy/production/deploy.env.example /opt/acessilia/toolbox/.deploy.env
 chmod 600 /opt/acessilia/toolbox/.env /opt/acessilia/toolbox/.deploy.env
@@ -119,7 +119,7 @@ The Toolbox adapter now calls MinerU 4's `/v1/file_parse` and `/v1/health`
 routes and expects `mineru-kit api-server --tier basic`. A MinerU 2.1 sidecar
 cannot serve those routes, and a MinerU 4 sidecar does not accept the old
 `/openapi.json` probe. Promote the Toolbox image,
-`deploy/production/providers-config.yaml` and `docker-compose.production.yml`
+`deploy/providers-config.default.yaml` and `docker-compose.production.yml`
 together.
 
 - Re-pin `PRODUCTION_MINERU_IMAGE` to the digest of the MinerU 4.0.12 CPU image

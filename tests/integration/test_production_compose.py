@@ -13,6 +13,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -27,7 +28,7 @@ SPEC.loader.exec_module(deploy)
 def production(tmp_path: Path) -> tuple[Path, dict]:
     for source, name in (
         ("docker-compose.production.yml", "docker-compose.production.yml"),
-        ("deploy/production/providers-config.yaml", "providers-config.yaml"),
+        ("deploy/providers-config.default.yaml", "providers-config.yaml"),
         ("deploy/production/deploy.env.example", ".deploy.env"),
     ):
         shutil.copyfile(ROOT / source, tmp_path / name)
@@ -255,3 +256,78 @@ def test_capture_keeps_service_context_without_leaking_compose_secrets(
     message = str(caught.value)
     assert label in message
     assert (detail in message) is not sensitive
+
+
+# ── Optional sidecars: what runs is what the catalogue announces (#108) ────
+
+_OPTIONAL_SERVICES = {"audiveris-serve": "audiveris", "nougat-serve": "nougat"}
+_PROFILE_PROVIDER = {"music": "audiveris", "nougat": "nougat"}
+_PROVIDER_FILES = {
+    "": None,  # the Compose default
+    "music": "/app/deploy/providers-config.music.yaml",
+    "nougat": "/app/deploy/providers-config.nougat.yaml",
+    "music,nougat": "/app/providers-config.yaml",
+}
+
+
+def _resolved(compose_file: str, tmp_path: Path, env: dict[str, str], *flags: str) -> dict:
+    shutil.copyfile(ROOT / compose_file, tmp_path / compose_file)
+    (tmp_path / ".env").write_text(
+        "TOOLBOX_API_KEY=compose-test-only\nMINIO_ACCESS_KEY=minio-test\n"
+        "MINIO_SECRET_KEY=minio-test-secret\n"
+        # As .env.example sets it, for runs outside Docker.
+        "TOOLBOX_PROVIDERS_CONFIG=providers-config.yaml\n"
+    )
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"COMPOSE_PROFILES", "TOOLBOX_COMPOSE_PROVIDERS_CONFIG"}
+    }
+    environment.update(env)
+    result = subprocess.run(
+        ["docker", "compose", "-p", "optional-test", *flags, "-f",
+         str(tmp_path / compose_file), "config", "--format", "json"],
+        cwd=tmp_path, env=environment, text=True, capture_output=True, check=True,
+    )
+    return json.loads(result.stdout)
+
+
+def _announced(config: dict) -> set[str]:
+    path = config["services"]["toolbox"]["environment"]["TOOLBOX_PROVIDERS_CONFIG"]
+    providers = yaml.safe_load((ROOT / path.removeprefix("/app/")).read_text())["providers"]
+    return {p["id"] for p in providers} & set(_OPTIONAL_SERVICES.values())
+
+
+def _running(config: dict) -> set[str]:
+    return {_OPTIONAL_SERVICES[s] for s in config["services"] if s in _OPTIONAL_SERVICES}
+
+
+@pytest.mark.parametrize("profiles", list(_PROVIDER_FILES))
+@pytest.mark.parametrize(
+    ("compose_file", "base_profile"),
+    [("docker-compose.staging.yml", ""), ("docker-compose.yml", "toolbox")],
+)
+def test_each_documented_opt_in_announces_exactly_the_running_sidecars(
+    tmp_path, compose_file, base_profile, profiles
+):
+    env = {"COMPOSE_PROFILES": ",".join(p for p in (base_profile, profiles) if p)}
+    if _PROVIDER_FILES[profiles]:
+        env["TOOLBOX_COMPOSE_PROVIDERS_CONFIG"] = _PROVIDER_FILES[profiles]
+
+    config = _resolved(compose_file, tmp_path, env)
+
+    assert "toolbox" in config["services"]
+    expected = {_PROFILE_PROVIDER[p] for p in profiles.split(",") if p}
+    assert _running(config) == _announced(config) == expected
+
+
+def test_the_documented_local_command_line_form_matches_too(tmp_path):
+    """`--profile` flags replace COMPOSE_PROFILES; every profile is listed there."""
+    config = _resolved(
+        "docker-compose.yml", tmp_path,
+        {"TOOLBOX_COMPOSE_PROVIDERS_CONFIG": _PROVIDER_FILES["nougat"]},
+        "--profile", "toolbox", "--profile", "nougat",
+    )
+
+    assert "toolbox" in config["services"]
+    assert _running(config) == _announced(config) == {"nougat"}

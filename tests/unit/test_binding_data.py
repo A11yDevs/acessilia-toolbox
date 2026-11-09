@@ -235,4 +235,9 @@ def test_the_contract_classifies_every_schema_reference(contract: dict[str, Any]
     )
     assert entries["artifact/binary@1"]["status"] == "descriptor"
     assert entries["artifact/pandoc-ast@1"]["status"] == "external"
-    assert entries["artifact/reference@1"]["status"] == "unpublished"
+    assert entries["artifact/reference@1"] == {
+        "ref": "artifact/reference@1",
+        "status": "published",
+        "file": "schemas/reference@1.json",
+        "note": None,
+    }

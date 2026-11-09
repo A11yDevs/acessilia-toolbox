@@ -31,6 +31,16 @@ The sidecars it manages are those with a container on the host whose image is
 the CI-published one. A sidecar whose `*_IMAGE` variable points at a local
 build is left alone (see [installation](installation.md#sidecar-images)).
 
+`audiveris-serve` and `nougat-serve` are optional: they start only under their
+Compose profiles (`music`, `nougat`). The updater stores a fingerprint of the
+resolved Compose configuration (`var/data/.last_config`) next to the commit,
+so a change of profiles or provider file is applied even at the same commit.
+After a successful pull and restart, and never before, it removes the
+container of an optional sidecar whose profile is off, if one is left from
+before, and keeps its volumes. It never removes any other sidecar. A missing
+image or a failed pull leaves the running stack as it was. See
+[optional sidecars](installation.md#optional-sidecars-audiveris-and-nougat).
+
 ### Moving a server from hand-built sidecars
 
 Sidecar images used to be built on each server. To switch a deployment to the
