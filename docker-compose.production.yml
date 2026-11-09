@@ -1,0 +1,315 @@
+# Production Toolbox: isolated services and manually approved image digests.
+# See docs/production-deployment.md; never use the staging updater here.
+services:
+  toolbox:
+    image: ${PRODUCTION_TOOLBOX_IMAGE:?set an approved digest in .deploy.env}
+    container_name: acessilia-toolbox-production
+    environment:
+      TOOLBOX_PORT: 8002
+      TOOLBOX_PROVIDERS_CONFIG: /app/providers-config.yaml
+      DOCLING_SERVE_URL: ${DOCLING_SERVE_URL:-http://docling-serve:5001}
+      MINERU_SERVE_URL: ${MINERU_SERVE_URL:-http://mineru-serve:8000}
+      MINIO_URL: ${MINIO_URL:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      TOOLBOX_ARTIFACT_FALLBACK_MODE: ${TOOLBOX_ARTIFACT_FALLBACK_MODE:-disabled}
+      VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
+      TOOLBOX_API_KEY: ${TOOLBOX_API_KEY:?set TOOLBOX_API_KEY}
+      RAPID_LATEX_OCR_URL: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
+      PP_FORMULANET_URL: ${PP_FORMULANET_URL:-http://pp-formulanet:5010}
+      RAPIDOCR_ORIENT_URL: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
+      PDF_UA_RENDER_URL: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
+      VERAPDF_VALIDATE_URL: ${VERAPDF_VALIDATE_URL:-http://verapdf-validate:5008}
+      MATH_SPEECH_URL: ${MATH_SPEECH_URL:-http://math-speech:5009}
+      VLM_SERVE_URL: ${VLM_SERVE_URL:?set the authenticated gateway URL in .env}
+      VLM_API_KEY: ${VLM_API_KEY:?set gateway key in VLM_API_KEY}
+      VLM_MAX_CONCURRENCY: ${VLM_MAX_CONCURRENCY:-4}
+      VLM_TIMEOUT_SECONDS: ${VLM_TIMEOUT_SECONDS:-2700}
+      VLM_SLOT_WAIT_SECONDS: ${VLM_SLOT_WAIT_SECONDS:-120}
+      TOOLBOX_ALLOW_UNAUTHENTICATED: '0'
+    env_file:
+    - .env
+    volumes:
+    - ${ARTIFACT_FALLBACK_SOURCE:-artifact-fallback}:/tmp/acessilia-toolbox-artifacts
+    - type: bind
+      source: ./providers-config.yaml
+      target: /app/providers-config.yaml
+      read_only: true
+      bind:
+        create_host_path: false
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsS http://localhost:8002/v1/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      default: null
+      core-toolbox:
+        aliases:
+        - toolbox-production
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  docling-serve:
+    restart: unless-stopped
+    image: ${PRODUCTION_DOCLING_IMAGE:?set an approved digest in .deploy.env}
+    container_name: docling-serve-production
+    environment:
+      DOCLING_SERVE_ENABLE_UI: ${DOCLING_SERVE_ENABLE_UI:-false}
+      DOCLING_SERVE_ARTIFACTS_PATH: /opt/app-root/src/.cache/docling/models
+    volumes:
+    - docling-models:/opt/app-root/src/.cache/docling
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - -c
+      - import urllib.request;urllib.request.urlopen('http://localhost:5001/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  mineru-serve:
+    restart: unless-stopped
+    mem_limit: ${MINERU_MEMORY_LIMIT:-0}
+    image: ${PRODUCTION_MINERU_IMAGE:?set an approved digest in .deploy.env}
+    container_name: mineru-serve-production
+    entrypoint:
+    - mineru-api
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8000'
+    environment:
+      MINERU_DEVICE_MODE: ${MINERU_DEVICE_MODE:-cpu}
+      HF_HOME: /home/mineru/.cache/huggingface
+    volumes:
+    - mineru-models:/home/mineru/.cache/modelscope
+    - mineru-huggingface:/home/mineru/.cache/huggingface
+    healthcheck:
+      test:
+      - CMD
+      - python3
+      - -c
+      - import urllib.request;urllib.request.urlopen('http://localhost:8000/openapi.json')
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  rapid-latex-ocr:
+    image: ${PRODUCTION_RAPID_LATEX_OCR_IMAGE:?set an approved digest in .deploy.env}
+    container_name: rapid-latex-ocr-production
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsS http://localhost:5004/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  pp-formulanet:
+    image: ${PRODUCTION_PP_FORMULANET_IMAGE:?set an approved digest in .deploy.env}
+    container_name: pp-formulanet-production
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsS http://localhost:5010/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  rapidocr-orient:
+    image: ${PRODUCTION_RAPIDOCR_ORIENT_IMAGE:?set an approved digest in .deploy.env}
+    container_name: rapidocr-orient-production
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsS http://localhost:5006/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  pdf-ua-render:
+    image: ${PRODUCTION_PDF_UA_RENDER_IMAGE:?set an approved digest in .deploy.env}
+    container_name: pdf-ua-render-production
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsS http://localhost:5007/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  verapdf-validate:
+    image: ${PRODUCTION_VERAPDF_VALIDATE_IMAGE:?set an approved digest in .deploy.env}
+    container_name: verapdf-validate-production
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsS http://localhost:5008/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  math-speech:
+    image: ${PRODUCTION_MATH_SPEECH_IMAGE:?set an approved digest in .deploy.env}
+    container_name: math-speech-production
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - 'fetch(''http://127.0.0.1:5009/health'').then(r => process.exit(r.ok ? 0 :
+        1), () => process.exit(1))'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  minio:
+    image: ${PRODUCTION_MINIO_IMAGE:?set an approved digest in .deploy.env}
+    container_name: acessilia-minio-production
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
+    volumes:
+    - minio-data:/data
+    healthcheck:
+      test:
+      - CMD
+      - mc
+      - ready
+      - local
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+  valkey:
+    image: ${PRODUCTION_VALKEY_IMAGE:?set an approved digest in .deploy.env}
+    container_name: acessilia-valkey-production
+    volumes:
+    - valkey-data:/data
+    healthcheck:
+      test:
+      - CMD
+      - valkey-cli
+      - ping
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+  minio-init:
+    image: ${PRODUCTION_MINIO_IMAGE:?set an approved digest in .deploy.env}
+    container_name: acessilia-minio-init-production
+    entrypoint:
+    - sh
+    - -ec
+    - 'mc alias set local http://minio:9000 "$${MINIO_ACCESS_KEY}" "$${MINIO_SECRET_KEY}"
+
+      mc mb local/acessilia --ignore-existing
+
+      echo "Bucket acessilia created/verified"
+
+      '
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: 'no'
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  artifact-fallback: null
+  docling-models: null
+  mineru-models: null
+  mineru-huggingface: null
+  minio-data: null
+  valkey-data: null
+name: acessilia-toolbox-production
+networks:
+  core-toolbox:
+    external: true
+    name: ${PRODUCTION_TOOLBOX_NETWORK:-acessilia-production-backplane}

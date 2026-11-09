@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile
       target: production
       args:
-        TOOLBOX_EXTRAS: api,storage,cache,pdf,media,math
+        TOOLBOX_EXTRAS: api,storage,cache,pdf,media
         # Surfaced by GET /v1/health so a local container reports the revision
         # it was built from. Override with GIT_COMMIT/IMAGE_TAG in the shell.
         GIT_COMMIT: ${GIT_COMMIT:-}
@@ -24,14 +24,17 @@ services:
       NOUGAT_SERVE_URL: ${NOUGAT_SERVE_URL:-http://nougat-serve:5004}
       AUDIVERIS_SERVE_URL: ${AUDIVERIS_SERVE_URL:-http://audiveris-serve:5003}
       RAPID_LATEX_OCR_URL: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
+      PP_FORMULANET_URL: ${PP_FORMULANET_URL:-http://pp-formulanet:5010}
       RAPIDOCR_ORIENT_URL: ${RAPIDOCR_ORIENT_URL:-http://rapidocr-orient:5006}
       PDF_UA_RENDER_URL: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
       VERAPDF_VALIDATE_URL: ${VERAPDF_VALIDATE_URL:-http://verapdf-validate:5008}
+      MATH_SPEECH_URL: ${MATH_SPEECH_URL:-http://math-speech:5009}
       VLM_SERVE_URL: ${VLM_SERVE_URL:-}
       VLM_API_KEY: ${VLM_API_KEY:-}
       MINIO_URL: ${MINIO_URL:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      TOOLBOX_ARTIFACT_FALLBACK_MODE: ${TOOLBOX_ARTIFACT_FALLBACK_MODE:-disabled}
       VALKEY_URL: ${VALKEY_URL:-redis://valkey:6379}
       TOOLBOX_API_KEY: ${TOOLBOX_API_KEY:-}
       # The toolbox refuses to start without TOOLBOX_API_KEY; 1 here starts it
@@ -46,6 +49,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
       valkey:
         condition: service_healthy
     restart: unless-stopped
@@ -58,6 +63,7 @@ services:
 
   # ── Providers ──────────────────────────────────────────────────
   docling-serve:
+    restart: unless-stopped
     image: ${DOCLING_SERVE_IMAGE:-ghcr.io/docling-project/docling-serve-cpu:v1.37.0}
     container_name: docling-serve
     ports:
@@ -172,6 +178,9 @@ services:
   # pre-built images). On a GPU host, build with the vllm base and add
   # `deploy.resources.reservations.devices` for GPU access.
   mineru-serve:
+    restart: unless-stopped
+    # Size from measured peak use; 0 keeps the existing uncapped behavior.
+    mem_limit: ${MINERU_MEMORY_LIMIT:-0}
     image: ${MINERU_SERVE_IMAGE:-mineru:4.0.12}
     container_name: mineru-serve
     entrypoint: ["mineru-kit", "api-server", "--host", "0.0.0.0", "--port", "8000", "--tier", "basic"]
@@ -179,8 +188,10 @@ services:
       - "${MINERU_SERVE_PORT:-5002}:8000"
     environment:
       MINERU_MODEL_SMALL_BACKEND: ${MINERU_MODEL_SMALL_BACKEND:-onnx}
+      HF_HOME: /home/mineru/.cache/huggingface
     volumes:
       - mineru-models:/home/mineru/.mineru
+      - mineru-huggingface:/home/mineru/.cache/huggingface
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/v1/health')"]
       interval: 15s
@@ -205,6 +216,23 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # PP-FormulaNet_plus-M formula OCR sidecar (PaddleOCR, CPU).
+  pp-formulanet:
+    build:
+      context: .
+      dockerfile: docker/pp-formulanet.Dockerfile
+    image: ${PP_FORMULANET_IMAGE:-pp-formulanet:latest}
+    container_name: pp-formulanet
+    ports:
+      - "${PP_FORMULANET_PORT:-5010}:5010"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5010/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    restart: unless-stopped
+
   # Lightweight page orientation detection sidecar (RapidOCR).
   rapidocr-orient:
     build:
@@ -222,8 +250,9 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # Pandoc + frozen TeX Live sidecar for document.export.pdf_ua. The image
-  # build renders a smoke-test PDF, so a broken toolchain fails at build time.
+  # Pandoc + frozen TeX Live sidecar for document.export.pdf_ua, and Pandoc alone
+  # for document.export.docx. The image build renders a smoke-test PDF and DOCX,
+  # so a broken toolchain fails at build time.
   pdf-ua-render:
     build:
       context: .
@@ -257,11 +286,27 @@ services:
       retries: 10
       start_period: 20s
     restart: unless-stopped
+  math-speech:
+    build:
+      context: .
+      dockerfile: docker/math-speech.Dockerfile
+    image: ${MATH_SPEECH_IMAGE:-math-speech:latest}
+    container_name: math-speech
+    ports:
+      - "${MATH_SPEECH_PORT:-5009}:5009"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5009/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   artifact-fallback:
   docling-models:
   mineru-models:
+  mineru-huggingface:
   minio-data:
   nougat-models:
   nougat-torch-models:

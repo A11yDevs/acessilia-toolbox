@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import base64
 import io
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from PIL import Image
 
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.executor import CapabilityExecutor
+from acessilia_toolbox.core.fingerprint import fingerprint_bytes
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.preprocessing.orient import (
     detect_and_orient_image,
@@ -279,3 +282,143 @@ def test_executor_ignores_auto_rotate_for_non_image_media() -> None:
     )
 
     assert passed_payloads == [pdf]
+
+
+@pytest.mark.parametrize(
+    "change", ["version", "model", "payload", "recovery", "config", "confidence"]
+)
+def test_orientation_changes_invalidate_execution_cache(change: str) -> None:
+    executor, passed_payloads = _executor_fixture()
+
+    class Cache:
+        def __init__(self):
+            self.data = {}
+
+        def get(self, key):
+            return self.data.get(key)
+
+        def put(self, key, value):
+            self.data[key] = value
+
+    executor._cache = Cache()
+    original_factory = executor._adapter_factory
+    state = {
+        "version": "1", "model": "1", "image": ROTATED_PNG,
+        "failed": change == "recovery", "confidence": 0.95,
+    }
+
+    class Orient:
+        def versions(self):
+            return {"provider": state["version"], "model": state["model"]}
+
+        def execute(self, *args, **kwargs):
+            if state["failed"]:
+                raise RuntimeError("temporarily unavailable")
+            return SimpleNamespace(
+                document={
+                    "angle": 90,
+                    "confidence": state["confidence"],
+                    "stage": "provider",
+                    "image_base64": state["image"],
+                }
+            )
+
+    executor._adapter_factory = lambda desc: (
+        Orient() if desc.id == "rapidocr-orient" else original_factory(desc)
+    )
+    image = make_test_image(200, 100)
+
+    def run():
+        return executor.execute(
+            "document.structure.extract",
+            image,
+            filename="test.png",
+            media_type="image/png",
+            parameters={"auto_rotate": True},
+        )
+
+    first = run()
+    assert run().provenance.cache_hit
+    assert len(passed_payloads) == 1
+    if change == "recovery":
+        state["failed"] = False
+    elif change == "payload":
+        state["image"] = UPRIGHT_PNG
+    elif change == "config":
+        executor._providers.get("rapidocr-orient").config["threshold"] = 0.9
+    elif change == "confidence":
+        state["confidence"] = 0.85
+    else:
+        state[change] = "2"
+    second = run()
+    if change == "confidence":
+        assert second.provenance.cache_hit
+        assert second.provenance.cache_key == first.provenance.cache_key
+        assert len(passed_payloads) == 1
+        assert first.provenance.orientation["confidence"] == 0.95
+        return
+    assert not second.provenance.cache_hit
+    assert first.provenance.cache_key != second.provenance.cache_key
+    assert len(passed_payloads) == 2
+    assert second.provenance.input_fingerprints == [fingerprint_bytes(passed_payloads[-1])]
+    assert run().provenance.cache_hit
+    assert len(passed_payloads) == 2
+
+
+def test_failed_rapidocr_version_refresh_keeps_the_execution_cache_usable(monkeypatch):
+    from acessilia_toolbox.providers import rapidocr_orient as module
+
+    monkeypatch.setattr(module, "_VERSION_CACHE", OrderedDict())
+    clock = [0.0]
+    monkeypatch.setattr(module, "monotonic", lambda: clock[0])
+    calls = {"version": 0, "orient": 0}
+    state = {"fail_probe": False, "version": "1"}
+
+    def handler(request):
+        if request.url.path == "/version":
+            calls["version"] += 1
+            if state["fail_probe"]:
+                raise httpx.ReadTimeout("version endpoint offline")
+            return httpx.Response(200, json={"engine_version": state["version"]})
+        calls["orient"] += 1
+        return httpx.Response(200, json={"angle": 0, "confidence": 0.9, "stage": "upright"})
+
+    executor, extracted = _executor_fixture()
+    entries = {}
+    cache = SimpleNamespace(get=entries.get, put=lambda key, value: entries.update({key: value}))
+    executor._cache = cache
+    factory = executor._adapter_factory
+    executor._providers.get("rapidocr-orient").endpoint = "http://orient.test"
+
+    def adapter_factory(desc):
+        if desc.id != "rapidocr-orient":
+            return factory(desc)
+        adapter = module.RapidOcrOrientProvider(desc)
+        adapter._client = lambda timeout=None: httpx.Client(
+            base_url=adapter.base_url, transport=httpx.MockTransport(handler)
+        )
+        return adapter
+
+    executor._adapter_factory = adapter_factory
+    image = make_test_image()
+
+    def run():
+        return executor.execute(
+            "document.structure.extract", image, filename="page.png", media_type="image/png",
+            parameters={"auto_rotate": True},
+        )
+
+    first = run()
+    assert run().provenance.cache_hit
+    assert calls == {"version": 1, "orient": 2}
+    clock[0] += module.VERSION_TTL_SECONDS + 1
+    state["fail_probe"] = True
+    during_outage = run()
+    assert during_outage.provenance.cache_hit
+    assert during_outage.provenance.cache_key == first.provenance.cache_key
+    assert len(extracted) == 1
+    assert calls == {"version": 2, "orient": 3}
+    clock[0] += module.VERSION_RETRY_SECONDS + 1
+    state.update(fail_probe=False, version="2")
+    assert not run().provenance.cache_hit
+    assert len(extracted) == 2

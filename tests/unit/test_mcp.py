@@ -197,3 +197,159 @@ def test_capabilities_resource_separates_registered_and_declared_providers() -> 
     [entry] = json.loads(content)
     assert entry["providers"] == ["docling", "mineru"]
     assert entry["declared_providers"] == ["docling", "teleocr"]
+
+
+def _mcp_with_two_versions(calls: list[dict[str, Any]]) -> ToolboxMCPServer:
+    """The capability is published as version 1 and version 2."""
+
+    class RecordingProvider(StubProvider):
+        def execute(self, capability_id: str, payload: bytes, **kwargs: Any) -> ExtractionResult:
+            calls.append(kwargs)
+            return super().execute(capability_id, payload)
+
+    version_2 = {**MANIFEST, "version": 2, "description": "Extract document structure, v2."}
+    caps = CapabilityRegistry(
+        [CapabilityManifest.model_validate(m) for m in (MANIFEST, version_2)]
+    )
+    providers = ProviderRegistry(
+        [ProviderDescriptor.model_validate({"id": "docling", "capabilities": [CAPABILITY]})]
+    )
+    executor = CapabilityExecutor(caps, providers, lambda d: RecordingProvider(d))
+    return create_mcp_app(caps, providers, executor)
+
+
+def test_a_capability_in_two_versions_is_one_tool_running_the_latest(tmp_path: Any) -> None:
+    calls: list[dict[str, Any]] = []
+    mcp = _mcp_with_two_versions(calls)
+
+    [tool] = mcp.list_tools()
+    assert tool["description"].strip() == "Extract document structure, v2."
+
+    document = tmp_path / "sample.pdf"
+    document.write_bytes(b"%PDF-test")
+    mcp.call_tool(tool["name"], {"file": str(document)})
+    assert [call.get("capability_version") for call in calls] == [2]
+
+
+def test_a_capability_in_two_versions_is_one_planning_action() -> None:
+    mcp = _mcp_with_two_versions([])
+
+    domain = mcp.read_resource("acessilia://planning/domain")
+    assert domain.count("(:action document-structure-extract") == 1
+    planning = [r["uri"] for r in mcp.list_resources() if "planning/capabilities/" in r["uri"]]
+    assert planning == [f"acessilia://planning/capabilities/{CAPABILITY}"]
+
+
+def test_the_catalogue_lists_every_version_and_flags_the_latest() -> None:
+    content = _mcp_with_two_versions([]).read_resource("acessilia://capabilities")
+
+    assert [(e["version"], e["latest"]) for e in json.loads(content)] == [(1, False), (2, True)]
+
+
+def _recording_server(capability_id):
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    manifests = CapabilityRegistry.from_directory(
+        Path(__file__).resolve().parents[2] / "capabilities"
+    )
+    caps = CapabilityRegistry([manifests.get(capability_id)])
+    providers = ProviderRegistry(
+        [
+            ProviderDescriptor(id=provider, capabilities=[capability_id])
+            for provider in ("provider-a", "provider-b")
+        ]
+    )
+    calls = []
+
+    def execute(capability, payload, **kwargs):
+        calls.append({"capability": capability, "payload": payload, **kwargs})
+        return SimpleNamespace(document={"executed": capability})
+
+    return ToolboxMCPServer(caps, providers, SimpleNamespace(execute=execute)), calls
+
+
+@pytest.mark.parametrize("capability", ["document.export.pdf_ua", "pdf.validate.pdf_ua"])
+def test_tool_names_preserve_underscores_in_capability_ids(tmp_path, capability):
+    server, calls = _recording_server(capability)
+    [tool] = server.list_tools()
+    file = tmp_path / "input.bin"
+    file.write_bytes(b"input")
+
+    response = server.call_tool(tool["name"], {"file": str(file)})
+
+    assert calls[0]["capability"] == capability
+    assert json.loads(response[0]["content"][0]["text"])["executed"] == capability
+
+
+def test_ambiguous_tool_names_fail_server_startup():
+    from types import SimpleNamespace
+
+    from acessilia_toolbox.core.errors import ConfigurationError
+
+    manifests = [
+        CapabilityManifest.model_validate({**MANIFEST, "id": identifier})
+        for identifier in ("document.export.pdf_ua", "document.export.pdf.ua")
+    ]
+    with pytest.raises(ConfigurationError, match="ambiguous"):
+        ToolboxMCPServer(CapabilityRegistry(manifests), ProviderRegistry(), SimpleNamespace())
+
+
+@pytest.mark.parametrize("capability", ["math.recognize", "document.ocr.page"])
+def test_nondeterministic_tools_advertise_and_forward_execution_controls(tmp_path, capability):
+    server, calls = _recording_server(capability)
+    [tool] = server.list_tools()
+    properties = tool["inputSchema"]["properties"]
+    assert {"provider", "parameters", "no_cache"} <= properties.keys()
+    assert properties["provider"]["description"] == "Provider ID: provider-a, provider-b"
+    file = tmp_path / "input.png"
+    file.write_bytes(b"input")
+
+    server.call_tool(
+        tool["name"],
+        {
+            "file": str(file),
+            "provider": "provider-b",
+            "parameters": {"page_number": 2},
+            "no_cache": True,
+        },
+    )
+
+    assert calls[0]["provider_id"] == "provider-b"
+    assert calls[0]["parameters"] == {"page_number": 2}
+    assert calls[0]["no_cache"] is True
+
+
+@pytest.mark.parametrize("parameters", ["{", "[]", "42", [], 1, True])
+def test_invalid_parameters_return_an_error_without_executing(tmp_path, parameters):
+    server, calls = _recording_server("document.export.docx")
+    file = tmp_path / "input.json"
+    file.write_text("{}")
+
+    response = server.call_tool(
+        "document_export_docx",
+        {
+            "file": str(file),
+            "parameters": parameters,
+        },
+    )
+
+    assert response[0]["content"][0]["text"].startswith("Error:")
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "parameters,expected",
+    [
+        (None, None),
+        ("", None),
+        ({"dpi": 150}, {"dpi": 150}),
+        ('{"dpi": 150}', {"dpi": 150}),
+    ],
+)
+def test_parameter_objects_and_legacy_json_strings_still_execute(tmp_path, parameters, expected):
+    server, calls = _recording_server("document.export.docx")
+    file = tmp_path / "input.json"
+    file.write_text("{}")
+    server.call_tool("document_export_docx", {"file": str(file), "parameters": parameters})
+    assert calls[0]["parameters"] == expected

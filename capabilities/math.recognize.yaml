@@ -32,3 +32,5 @@ providers:
     version: "0.1+"
   - id: docling-math
     version: "1.32+"
+  - id: pp-formulanet
+    version: "1.0+"

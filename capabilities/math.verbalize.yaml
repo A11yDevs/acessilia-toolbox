@@ -28,5 +28,5 @@ semantics:
     - math_verbalized
 
 providers:
-  - id: pure-math
+  - id: math-speech
     version: "1.0+"

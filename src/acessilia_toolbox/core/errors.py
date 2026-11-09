@@ -56,6 +56,11 @@ class InvalidInputError(ToolboxError):
     http_status = 400
 
 
+class UploadTooLargeError(InvalidInputError):
+    code = "upload_too_large"
+    http_status = 413
+
+
 class UnsupportedMediaTypeError(ToolboxError):
     code = "unsupported_media_type"
     http_status = 415

@@ -152,11 +152,12 @@ curl http://localhost:8002/v1/health
 
 ### Auto-update (staging)
 
-The staging environment auto-updates via a systemd timer that checks for new
-images every 5 minutes:
+The staging server runs from a clone of this repository and auto-updates via a
+systemd timer that checks for new images every 5 minutes:
 
 ```bash
-./scripts/setup-homologacao.sh
+cp .env.example .env    # fill in the credentials
+./scripts/ops.sh auto-update setup
 ```
 
 📄 See [`docs/auto-update.md`](docs/auto-update.md) for setup and management.
@@ -195,13 +196,14 @@ flowchart TB
 | `document.structure.extract` | docling, nougat, mineru (teleocr: opt-in) | ✅ |
 | `document.layout.analyze` | docling-layout, mineru-layout | ✅ |
 | `document.ocr` | docling-ocr, mineru-ocr | ✅ |
-| `pdf.split`, `pdf.render` | pymupdf-pdf (in-process) | ✅ |
-| `math.recognize` | docling-math, rapid-latex-ocr | ✅ |
-| `math.convert`, `math.verbalize` | pure-math (in-process) | ✅ |
+| `pdf.split`, `pdf.render` (v1, v2), `document.text.spans` | pymupdf-pdf (in-process) | ✅ |
+| `math.recognize` | docling-math, rapid-latex-ocr, pp-formulanet | ✅ |
+| `math.convert`, `math.verbalize` | math-speech (MathJax + MathCAT sidecar) | ✅ |
 | `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
 | `music.omr` | homr (in-process, local installs only), audiveris (sidecar) | ✅ |
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |
 | `document.export.pdf_ua` | pandoc-pdf-ua (sidecar, optional; PDF returned as an artifact) | ✅ |
+| `document.export.docx` | pandoc-docx (same sidecar, optional; DOCX returned as an artifact) | ✅ |
 | `pdf.validate.pdf_ua` | verapdf (sidecar, optional; PDF/UA-1 or PDF/UA-2 profile) | ✅ |
 | `document.ocr.page`, `document.adjudicate.page`, `document.adjudicate.region`, `table.recognize` | qwen3-vl-8b (OpenAI-compatible VLM server, `VLM_SERVE_URL`) | ✅ |
 | `chem.recognize` | docling-chem (Granite Vision VLM) | ✅ |
@@ -220,6 +222,7 @@ flowchart TB
 | `GET` | `/v1/health` | Service status |
 | `GET` | `/v1/capabilities` | List capabilities |
 | `POST` | `/v1/capabilities/{id}:execute` | Execute a capability |
+| `POST` | `/v1/vlm/chat/completions` | OpenAI-compatible chat relay to a VLM provider, under its concurrency limit |
 | `GET` | `/v1/providers` | List providers |
 | `POST` | `/v1/artifacts` | Store content |
 | `GET` | `/v1/artifacts/{id}` | Retrieve content |
@@ -297,8 +300,12 @@ pages: 1; elements: 7; obligations: 0
 | [Capability Model](docs/capability-model.md) | Contracts, manifests, interchangeability |
 | [PDDL Integration](docs/pddl.md) | Planning semantics |
 | [Testing](docs/testing.md) | Test layers, snapshot validation |
+| [Production Deployment](docs/production-deployment.md) | Isolated, digest-pinned Toolbox stack and manual promotion |
 | [Page Orientation](docs/rapidocr-orient.md) | Optional `image.page.orient` sidecar and auto-rotate preprocessing |
 | [PDF/UA Export](docs/pdf-ua-export.md) | `document.export.pdf_ua` sidecar with a pinned Pandoc and TeX Live |
+| [DOCX Export](docs/docx-export.md) | `document.export.docx` on the same sidecar, with Pandoc sandboxed |
+| [Page rendering](docs/pdf-render.md) | `pdf.render` v2: clip, size bound and raster inputs, PNG by reference |
+| [Text spans](docs/text-spans.md) | `document.text.spans`: the text layer with fonts, sizes and baselines |
 | [PDF/UA Validation](docs/pdf-ua-validation.md) | `pdf.validate.pdf_ua` sidecar with a pinned veraPDF |
 | [TeleOCR Adapter](docs/teleocr.md) | Optional image extraction, configuration and HTTP contract |
 | [TeleOCR Evaluation](docs/teleocr-evaluation.md) | Local gains, failure cases, coverage and remaining service validation |

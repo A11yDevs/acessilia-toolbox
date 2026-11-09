@@ -16,7 +16,7 @@ from typing import Annotated
 from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from acessilia_toolbox.core.errors import AuthorizationError
+from acessilia_toolbox.core.errors import AuthorizationError, ConfigurationError
 
 LOG = logging.getLogger(__name__)
 
@@ -31,6 +31,20 @@ ALLOW_UNAUTHENTICATED_ENV = "TOOLBOX_ALLOW_UNAUTHENTICATED"
 def unauthenticated_allowed() -> bool:
     """True only when running without a key was asked for explicitly."""
     return os.getenv(ALLOW_UNAUTHENTICATED_ENV, "").strip().lower() in {"1", "true", "yes"}
+
+
+def ensure_key_configured() -> None:
+    """Refuse to build an application without a key, unless explicitly allowed.
+
+    Fail closed: a missing key used to leave every endpoint open with only a
+    log line, which a forgotten .env turns into an exposed service.
+    """
+    if not TOOLBOX_API_KEY and not unauthenticated_allowed():
+        raise ConfigurationError(
+            "TOOLBOX_API_KEY is not set. Set it, or set "
+            f"{ALLOW_UNAUTHENTICATED_ENV}=1 to run without authentication "
+            "(local development only)."
+        )
 
 
 bearer_scheme = HTTPBearer(

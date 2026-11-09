@@ -39,8 +39,65 @@ curl -H "Authorization: Bearer $TOOLBOX_API_KEY" \
 Raw TeX nodes (`RawBlock`/`RawInline` in `latex`, `tex` or `context`) are
 rejected anywhere in the AST, metadata included: the sidecar answers `422`,
 which the API reports as `400`. Every string therefore reaches LaTeX escaped
-by Pandoc. Shell escape
+by Pandoc, except the formula alternate text below, which the sidecar's own
+filter writes after replacing every TeX special character with a space. Shell escape
 is off and TeX may only write below its working directory.
+
+### Formula alternate text
+
+Each formula becomes a `Formula` structure element whose `/Alt` is what a
+screen reader announces. By default `latex-lab` fills it with the LaTeX source
+(`LaTeX formula starts \begin {math} \frac {…} … LaTeX formula ends`). To give
+a formula its spoken form, wrap the `Math` in a span with the class
+`accessilia-formula` and the text in an `alt` attribute:
+
+``` json
+{"t": "Span", "c": [["", ["accessilia-formula"], [["alt", "a fração com numerador s de 4 menos s de 2 …"]]],
+                    [{"t": "Math", "c": [{"t": "DisplayMath"}, "\\frac{s(4)-s(2)}{4-2}"]}]]}
+```
+
+`filters/formula_alt.lua` turns the span into a TeX group that calls
+`\AccessiliaFormulaAlt{…}` (defined in `pdf_ua.tex`) before the formula, so
+only that formula's `/Alt` changes. The filter first replaces each of
+`\ { } $ & # ^ _ % ~` in the text with a space and collapses the spaces
+(`a}b` reads `a b`), so the text can neither inject commands nor unbalance the
+group. The group also calls `\AccessiliaFormulaCollect`, which turns
+`latex-lab`'s math collection back on: table alignment can switch it off while
+it builds a cell, and a formula in a table cell would otherwise get no
+`Formula` element. A span with an empty `alt` keeps that element with the
+default `/Alt`; a span without the class renders its content as before, and
+other writers (`document.export.docx`) ignore the span.
+
+### Math font
+
+Formulas are set with `unicode-math` in TeX Gyre DejaVu Math, the OpenType
+math font that matches the DejaVu Sans text. Each symbol is written with its
+own code point, so the text layer (copy and paste, search, a reader that falls
+back from `/Alt`) reads `≠` for `\neq`, not `=` followed by a detached U+0338.
+`amsmath` provides the environments (`aligned`); `amssymb` is not loaded,
+since it conflicts with `unicode-math`.
+
+Recognizers write the `amssymb` names, so the template keeps all of them
+working. `unicode-math` defines most, and `pdf_ua.tex` maps the rest
+(`\lozenge`, `\varpropto`, …) to their Unicode-named equivalents: one
+undefined command fails the render. The negations Unicode has no single
+character for (`\nleqq`, `\nleqslant`, `\nsubseteqq`, …) map to the closest
+one it has, so the text layer reads `≰` for `\nleqq`, not `≦` negated; the
+`/Alt` is unaffected. The symbols TeX Gyre DejaVu Math has no glyph for
+(`\bigstar`, `\subseteqq`, `\pitchfork`, …) fall back to STIX Two Math
+instead of rendering as nothing.
+
+### Heading numbers
+
+Headings render unnumbered: the rebuilt document already carries its own
+numbering in the heading text, so `pdf_ua.tex` sets `secnumdepth` to
+`-\maxdimen` as Pandoc's default template does. A document that wants LaTeX
+to number its sections can opt in through the AST metadata, with
+`numbersections` set to `true` and, optionally, `secnumdepth` (default `5`):
+
+``` json
+{"meta": {"numbersections": {"t": "MetaBool", "c": true}}, …}
+```
 
 ## Response
 
@@ -67,8 +124,8 @@ bytes, so a consumer that already holds that id can skip the download.
 ## Cache
 
 The capability is cacheable. The key covers the AST, `lang` and everything the
-sidecar reports on `/version`: Pandoc, engine, LaTeX kernel and the template
-digest. Rendering the same document again returns the stored PDF without running
+sidecar reports on `/version`: Pandoc, engine, LaTeX kernel, the template
+digest and the formula alt filter digest. Rendering the same document again returns the stored PDF without running
 LaTeX; upgrading any component produces a new key. Valkey holds only the small
 JSON result, never the PDF.
 
@@ -77,6 +134,9 @@ removed from MinIO, the Toolbox renders again instead of returning an id that
 cannot be downloaded. This capability therefore requires an artifact store.
 
 ## Build
+
+CI publishes the image as `ghcr.io/a11ydevs/acessilia-toolbox-pdf-ua-render`
+(see [installation](installation.md#sidecar-images)). To build it locally:
 
 ``` bash
 docker build -f docker/pdf-ua-render.Dockerfile -t pdf-ua-render:latest .

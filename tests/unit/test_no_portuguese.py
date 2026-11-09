@@ -46,18 +46,9 @@ EXEMPT_STRINGS: list[tuple[str, str]] = [
     ("src/acessilia_toolbox/core/normalization/builder.py", "atención"),
     ("src/acessilia_toolbox/core/normalization/builder.py", "información"),
     # Schema description — canonical name
-    ("src/acessilia_toolbox/core/normalization/models.py", "Acessilia structural extractor"),
-    ("schemas/structured-document@1.json", "Acessilia structural extractor"),
-    # LaTeX verbalizer — pt-BR output for math accessibility
-    ("src/acessilia_toolbox/providers/pure_math.py", "somatório"),
-    ("src/acessilia_toolbox/providers/pure_math.py", "produtório"),
-    ("src/acessilia_toolbox/providers/pure_math.py", "épsilon"),
-    ("src/acessilia_toolbox/providers/pure_math.py", "rô"),
-    ("src/acessilia_toolbox/providers/pure_math.py", "ômega"),
-    ("src/acessilia_toolbox/providers/pure_math.py", "união"),
-    ("src/acessilia_toolbox/providers/pure_math.py", "interseção"),
-    ("src/acessilia_toolbox/providers/pure_math.py", "não pertence a"),
-    ("src/acessilia_toolbox/providers/pure_math.py", "reticências"),
+    # The published processing-manifest 1.1.0 description is Portuguese, verbatim.
+    ("src/acessilia_toolbox/core/normalization/models.py", "extrator estrutural do Acessília"),
+    ("schemas/structured-document@1.json", "extrator estrutural do Acessília"),
     # mhchem verbalization — pt-BR output for chemistry accessibility
     ("src/acessilia_toolbox/providers/pure_chem.py", "equilíbrio"),
     ("src/acessilia_toolbox/providers/pure_chem.py", "condições"),
@@ -67,6 +58,9 @@ EXEMPT_STRINGS: list[tuple[str, str]] = [
     ("src/acessilia_toolbox/providers/pure_chem.py", "gasoso"),
     ("src/acessilia_toolbox/providers/pure_chem.py", "aquoso"),
     # Chemistry capability description (pt-BR is not used here; docs only)
+    # docs/pdf-ua-export.md shows a formula's spoken form in the alt attribute;
+    # the spoken form is pt-BR product output (math.verbalize), not prose.
+    ("docs/pdf-ua-export.md", "a fração com numerador"),
 ]
 
 # Files with known fixture or generated content that may contain Portuguese.

@@ -459,3 +459,54 @@ def test_catalogue_lists_a_registered_provider_the_manifest_does_not_bind(
     [summary] = client.get("/v1/capabilities").json()
     assert summary["providers"] == ["docling", "mineru"]
     assert summary["declared_providers"] == ["docling"]
+
+
+def test_catalogue_flags_the_latest_version_and_planning_lists_it_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every version is published; the one a request without a version runs is
+    flagged, and the PDDL domain holds a single action per capability."""
+    monkeypatch.setattr("acessilia_toolbox.api.auth.TOOLBOX_API_KEY", "")
+    capabilities = CapabilityRegistry(
+        [CapabilityManifest.model_validate(m) for m in (MANIFEST, {**MANIFEST, "version": 2})]
+    )
+    _, providers = _bare_registries()
+    client = TestClient(create_app(capabilities, providers))
+
+    summaries = client.get("/v1/capabilities").json()
+    assert [(s["version"], s["latest"]) for s in summaries] == [(1, False), (2, True)]
+    assert client.get(f"/v1/capabilities/{CAPABILITY}").json()["latest"] is True
+    assert client.get(f"/v1/capabilities/{CAPABILITY}?version=1").json()["latest"] is False
+    domain = client.get("/v1/planning/domain").text
+    assert domain.count("(:action document-structure-extract") == 1
+
+
+@pytest.mark.parametrize(
+    "path", ["/v1/artifacts", "/v1/capabilities/document.structure.extract:execute"]
+)
+def test_upload_413_documents_both_runtime_error_shapes(client, monkeypatch, path):
+    from pydantic import TypeAdapter
+
+    from acessilia_toolbox.api.schemas import ErrorResponse, UploadLimitResponse
+
+    adapter = TypeAdapter(ErrorResponse | UploadLimitResponse)
+    document = client.get("/v1/openapi.json").json()
+    documented_path = path.replace("document.structure.extract", "{capability_id}")
+    content = document["paths"][documented_path]["post"]["responses"]["413"]["content"]
+    schema = content["application/json"]["schema"]
+    assert {ref["$ref"] for ref in schema["anyOf"]} == {
+        "#/components/schemas/ErrorResponse", "#/components/schemas/UploadLimitResponse",
+    }
+    body_limit = client.post(path, content=b"x", headers={"content-length": str(202 * 1024 * 1024)})
+    assert body_limit.status_code == 413
+    assert isinstance(adapter.validate_python(body_limit.json()), UploadLimitResponse)
+    monkeypatch.setattr("acessilia_toolbox.api.rest.MAX_UPLOAD_BYTES", 3)
+    file_limit = client.post(path, files={"file": ("large.pdf", b"1234", "application/pdf")})
+    assert file_limit.status_code == 413
+    assert isinstance(adapter.validate_python(file_limit.json()), ErrorResponse)
+
+
+def test_get_operations_do_not_advertise_upload_size_errors(client):
+    for operations in client.get("/v1/openapi.json").json()["paths"].values():
+        if "get" in operations:
+            assert "413" not in operations["get"]["responses"]

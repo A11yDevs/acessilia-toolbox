@@ -61,10 +61,11 @@ def test_schema_version_is_unchanged_by_the_migration() -> None:
     assert SCHEMA_ID == "urn:a11y-devs:schema:processing-manifest:1.1.0"
 
 
-def test_obligations_are_flagged_deprecated_in_the_schema() -> None:
-    """Obligations are the core's planning policy; the field is kept empty."""
+def test_obligations_carry_no_deprecated_mark_in_the_1_1_0_schema() -> None:
+    """Obligations are the core's planning policy and the field is kept empty,
+    but the published 1.1.0 schema never marked it deprecated (acessilia#203)."""
     obligations = processing_manifest_schema()["properties"]["obligations"]
-    assert obligations["deprecated"] is True
+    assert "deprecated" not in obligations
 
 
 def test_generated_schema_matches_the_versioned_file() -> None:

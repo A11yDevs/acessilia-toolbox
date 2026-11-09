@@ -154,6 +154,22 @@ def test_malformed_backend_payload_rejected(page) -> None:
         )
 
 
+def test_http_error_preserves_the_sidecar_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/version":
+            return version_response()
+        return httpx.Response(500, json={"detail": "No module named 'ftfy'"})
+
+    with pytest.raises(ProviderExecutionError) as exc_info:
+        provider_with(handler).execute(
+            "document.structure.extract", b"image", filename="a.png", media_type="image/png"
+        )
+
+    assert exc_info.value.details["status_code"] == 500
+    assert "teleocr service rejected the request: HTTP 500" in str(exc_info.value)
+    assert "No module named 'ftfy'" in str(exc_info.value)
+
+
 @pytest.mark.parametrize(
     "exception,error",
     [

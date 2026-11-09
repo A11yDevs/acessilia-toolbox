@@ -15,8 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from acessilia_toolbox import __version__
+from acessilia_toolbox.core.artifact import ArtifactRef
 from acessilia_toolbox.core.capability import CapabilityRegistry
-from acessilia_toolbox.core.errors import InvalidInputError, ToolboxError
+from acessilia_toolbox.core.errors import ArtifactNotFoundError, InvalidInputError, ToolboxError
 from acessilia_toolbox.core.executor import CapabilityExecutor
 from acessilia_toolbox.core.provider import ProviderRegistry
 from acessilia_toolbox.providers import create_adapter
@@ -183,10 +184,12 @@ def _execute(args: argparse.Namespace) -> int:
     if not document.is_file():
         raise FileNotFoundError(document)
 
+    store = _OutputStore()
     executor = CapabilityExecutor(
         CapabilityRegistry.from_directory(args.capabilities_dir),
         ProviderRegistry.from_file(args.providers_config),
         create_adapter,
+        store=store,
     )
 
     result = executor.execute(
@@ -208,6 +211,12 @@ def _execute(args: argparse.Namespace) -> int:
 
     summary = result.document.get("summary", {})
     print(f"{result.capability} via {result.provider} -> {output}")
+    # Binary outputs (by-reference capabilities such as pdf.render@2) are saved
+    # next to the JSON document; the first artifact is the document itself.
+    for ref in result.artifacts[1:]:
+        target = output.parent / Path(ref.filename or ref.artifact_id.split(":")[-1]).name
+        target.write_bytes(store.get(ref.artifact_id))
+        print(f"artifact {ref.artifact_id} ({ref.media_type}) -> {target}")
     print(
         f"pages: {summary.get('page_count')}; "
         f"elements: {summary.get('element_count')}; "
@@ -216,6 +225,46 @@ def _execute(args: argparse.Namespace) -> int:
     if args.provenance:
         print(json.dumps(result.provenance.to_payload(), indent=2), file=sys.stderr)
     return EXIT_OK
+
+
+class _OutputStore:
+    """In-memory artifact store for one CLI execution.
+
+    By-reference capabilities need a store; the CLI keeps their outputs only
+    long enough to write them next to the JSON document.
+    """
+
+    backend = "memory"
+
+    def __init__(self) -> None:
+        self._objects: dict[str, tuple[bytes, ArtifactRef]] = {}
+
+    def put(
+        self,
+        payload: bytes,
+        *,
+        media_type: str = "application/octet-stream",
+        filename: str | None = None,
+    ) -> ArtifactRef:
+        ref = ArtifactRef.of(
+            payload, media_type=media_type, filename=filename, storage_backend=self.backend
+        )
+        self._objects[ref.artifact_id] = (payload, ref)
+        return ref
+
+    def get(self, artifact_id: str) -> bytes:
+        return self._entry(artifact_id)[0]
+
+    def exists(self, artifact_id: str) -> bool:
+        return artifact_id in self._objects
+
+    def stat(self, artifact_id: str) -> ArtifactRef:
+        return self._entry(artifact_id)[1]
+
+    def _entry(self, artifact_id: str) -> tuple[bytes, ArtifactRef]:
+        if artifact_id not in self._objects:
+            raise ArtifactNotFoundError(f"unknown artifact {artifact_id}", artifact_id=artifact_id)
+        return self._objects[artifact_id]
 
 
 def _dataset_command(args: argparse.Namespace) -> int:

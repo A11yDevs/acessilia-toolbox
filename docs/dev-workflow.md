@@ -21,7 +21,7 @@ The `docker-compose.yml` at the project root starts the Toolbox **with local bui
 
 ```bash
 # 1. Configure environment variables
-cp .env.example .env
+cp .env.example .env   # later, python scripts/sync_env.py adds new keys
 # Edit .env with credentials (MINIO_ACCESS_KEY, MINIO_SECRET_KEY...)
 # and set TOOLBOX_API_KEY (openssl rand -hex 32). Without it the toolbox
 # container refuses to start; for a throwaway local stack you can set
@@ -109,7 +109,7 @@ docker build -t acessilia-toolbox:local .
 
 # Build with extras (storage + cache + pdf + media + math)
 docker build \
-  --build-arg TOOLBOX_EXTRAS="api,storage,cache,pdf,media,math" \
+  --build-arg TOOLBOX_EXTRAS="api,storage,cache,pdf,media" \
   -t acessilia-toolbox:local .
 
 # Run

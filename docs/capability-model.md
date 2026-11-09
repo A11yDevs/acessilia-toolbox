@@ -27,7 +27,7 @@ and normalizes the result into a canonical format.
                                          │ audiveris-serve(opt.)│
                                          └──────────────────────┘
         ← external providers (docling, MinerU, Audiveris) and
-          in-process pure providers (pure-math, pure-chem, homr, …)
+          in-process pure providers (pure-chem, homr, …)
 ```
 
 ---
@@ -90,9 +90,9 @@ output:
 
 execution:
   deterministic: true    # same input → same output?
-  idempotent: true       # safe to repeat without side effects?
+  idempotent: true       # no effect beyond the first execution if repeated?
   cacheable: true        # may be stored in cache?
-  timeout_hint_seconds: 600
+  timeout_hint_seconds: 600  # expected duration; a hint, not the client's timeout
 
 semantics:
   requires:
@@ -170,6 +170,62 @@ providers:
 The toolbox now exposes the capability via REST (`GET /v1/capabilities/speech.synthesize`)
 and MCP. Trying to execute it without a provider returns a clear error:
 "no provider implements speech.synthesize".
+
+### Regenerate the published contract
+
+Adding, versioning or removing a capability or a provider changes the
+contract that consumers check against. Regenerate it in the same pull request:
+
+```bash
+python scripts/export_contract.py
+```
+
+It rewrites `contract/toolbox-contract.json` from `capabilities/` and
+`providers-config.yaml`. In each capability entry, `providers` lists the
+providers registered for the capability id, not for a specific version.
+
+#### Published binding data
+
+Each capability entry also carries the version's `input`, `output` and
+`execution` blocks, with the public field names (`schema`) and every default
+filled in. `GET /v1/capabilities`, `GET /v1/capabilities/{id}` and the MCP
+resource `acessilia://capabilities` publish the same blocks, from the same
+projection (`CapabilityManifest.binding_data`), and
+`tests/unit/test_binding_data.py` checks that the three agree for every
+version. In the REST catalogue, the older flat fields keep their meaning:
+`media_types` is the **input** media types, and `input_schema`,
+`output_schema`, `deterministic` and `cacheable` repeat the blocks.
+
+What each field promises:
+
+| Field | Promise |
+|---|---|
+| `execution.idempotent` | Repeating the same operation has no effect beyond the first execution. It is neither determinism nor cacheability: `dataset.sync` is idempotent, not deterministic and not cacheable. Publishing it implements no deduplication and no exactly-once execution. |
+| `execution.deterministic` | The same input gives the same output. |
+| `execution.cacheable` | The Toolbox may serve the result from its cache. |
+| `execution.timeout_hint_seconds` | The expected duration. A hint for clients, not a timeout they must use. |
+| `output.by_reference` | The result is a binary in the artifact store, returned by id. |
+| `output.media_types` | For a by-reference output, the media types of the referenced binary (`pdf.render@2`: `image/png`). |
+
+The contract's `schema_refs` lists every schema reference the manifests use,
+input and output, with what it points at:
+
+| `status` | Meaning |
+|---|---|
+| `published` | `file` names the JSON Schema in `schemas/`. |
+| `descriptor` | How the data travels, not a JSON document: raw bytes, an uploaded file, request parameters. |
+| `external` | A JSON format defined outside the Toolbox (Pandoc's AST). |
+| `unpublished` | A JSON document the Toolbox produces or reads whose schema is not written yet. |
+
+The non-published references are classified in
+`src/acessilia_toolbox/core/schema_refs.py`, each with its reason.
+`tests/unit/test_capability_registry.py` fails when a reference has neither a
+file nor a classification, and when a classified one gains a file or is no
+longer used, so the `unpublished` list only shrinks.
+`tests/unit/test_published_contract.py` fails while
+the file is stale. The file is attached to every release, and the Acessilia
+core's CI checks its SDK registry against it
+([A11yDevs/acessilia#186](https://github.com/A11yDevs/acessilia/issues/186)).
 
 ---
 
@@ -570,9 +626,8 @@ pip install .                        # core: pydantic, httpx, jsonschema, PyYAML
 pip install .[api]                   # + fastapi, uvicorn, python-multipart
 pip install .[storage]               # + boto3 (MinIO/S3)
 pip install .[cache]                 # + redis (Valkey)
-pip install .[pdf]                   # + pymupdf (pdf.split, pdf.render)
+pip install .[pdf]                   # + pymupdf (pdf.split, pdf.render, document.text.spans)
 pip install .[media]                 # + Pillow (media.inspect image payloads)
-pip install .[math]                  # + latex2mathml (math.convert LaTeX → MathML)
 pip install .[music]                 # + homr (music.omr in-process)
 pip install .[dev]                   # + pytest, ruff, mypy, all extras above
 ```

@@ -1,0 +1,33 @@
+# Provider topology of the Toolbox in VLM gateway mode (create_gateway_app).
+#
+# The gateway runs next to llama-server and is its only client: it serves
+# POST /v1/vlm/chat/completions and GET /v1/vlm/health, and its limiter holds
+# every environment's requests to the server's parallel slots.
+providers:
+  - id: qwen3-vl-8b
+    # Same served weights, same version as the environments' providers.
+    version: "qwen3-vl-8b-instruct-q4_k_m-f982a07"
+    transport: http
+    # llama-server listens on loopback only, so nothing else reaches it.
+    endpoint: ${LLAMA_SERVER_URL:-http://127.0.0.1:8080}
+    health_path: /health
+    # The gateway's own wait for llama-server's answer, not the environments'.
+    timeout_seconds: ${VLM_TIMEOUT_SECONDS:-600}
+    capabilities:
+      - document.ocr.page
+      - document.adjudicate.page
+      - document.adjudicate.region
+      - table.recognize
+    media_types:
+      - image/png
+      - image/jpeg
+    config:
+      model: qwen3-vl-8b
+      # llama-server's key (LLAMA_API_KEY in /etc/llama-server.env).
+      api_key: ${VLM_API_KEY:-}
+      # Equal to llama-server's --parallel. This is the limit that protects the
+      # server: the environments' Toolboxes only relay to it.
+      max_concurrency: ${VLM_MAX_CONCURRENCY:-2}
+      # Any request frees its slot within timeout_seconds, so 1800 s covers
+      # about three turns of both slots.
+      slot_wait_seconds: ${VLM_SLOT_WAIT_SECONDS:-1800}

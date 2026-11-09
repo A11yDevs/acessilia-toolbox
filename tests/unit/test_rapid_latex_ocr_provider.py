@@ -100,8 +100,35 @@ class TestRapidLatexOcrProvider:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(422)
 
-        with pytest.raises(ProviderExecutionError):
+        with pytest.raises(ProviderExecutionError) as exc_info:
             extract(provider_with(handler))
+        assert "HTTP 422" in str(exc_info.value)
+
+    def test_http_error_preserves_sidecar_error_body_detail(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                500,
+                json={"detail": "No module named 'ftfy'"},
+                headers={"content-type": "application/json"},
+            )
+
+        with pytest.raises(ProviderExecutionError) as exc_info:
+            extract(provider_with(handler))
+
+        msg = str(exc_info.value)
+        assert "HTTP 500" in msg
+        assert "No module named 'ftfy'" in msg
+
+    def test_http_error_preserves_plain_text_body(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(502, text="Bad Gateway upstream crash\nwith newline")
+
+        with pytest.raises(ProviderExecutionError) as exc_info:
+            extract(provider_with(handler))
+
+        msg = str(exc_info.value)
+        assert "HTTP 502" in msg
+        assert "Bad Gateway upstream crash with newline" in msg
 
     def test_connection_error_raises_unavailable(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:

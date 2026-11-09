@@ -9,7 +9,7 @@ RUN apt-get update && \
 ARG MINERU_VERSION=4.0.12
 RUN pip install --no-cache-dir "mineru[torch]==${MINERU_VERSION}"
 
-COPY patch-mineru-warp.py /tmp/patch-mineru-warp.py
+COPY docker/patch-mineru-warp.py /tmp/patch-mineru-warp.py
 RUN python3 /tmp/patch-mineru-warp.py && rm /tmp/patch-mineru-warp.py
 
 RUN useradd --create-home --shell /bin/bash mineru && \

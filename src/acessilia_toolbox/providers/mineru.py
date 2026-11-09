@@ -18,6 +18,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.http_support import format_http_error
 from acessilia_toolbox.providers.mineru_document import MineruDocument
 
 PARSE_PATH = "/v1/file_parse"
@@ -26,6 +27,8 @@ HEALTH_PATH = "/v1/health"
 
 class MineruProvider:
     """Call MinerU's isolated API; normalize its MiddleJson into the shared contract."""
+
+    supports_streaming_input = True
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -153,8 +156,13 @@ class MineruProvider:
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                f"MinerU rejected the document: HTTP {exc.response.status_code}",
+                format_http_error(
+                    "mineru-api",
+                    exc.response,
+                    action="rejected the document",
+                ),
                 provider=self.descriptor.id,
+                status_code=exc.response.status_code,
             ) from exc
         except httpx.HTTPError as exc:
             raise ProviderUnavailableError(

@@ -23,6 +23,7 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
+from acessilia_toolbox.providers.http_support import format_http_error
 from acessilia_toolbox.providers.pure_chem import normalize_mhchem
 
 CONVERT_PATH = "/v1/convert/file"
@@ -39,6 +40,8 @@ CHEM_PROMPT = (
 
 class DoclingChemProvider:
     """Chemistry recognition via docling-serve VLM pipeline."""
+
+    supports_streaming_input = True
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -83,7 +86,7 @@ class DoclingChemProvider:
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ProviderExecutionError(
-                f"docling-serve rejected: HTTP {exc.response.status_code}",
+                format_http_error("docling-serve", exc.response),
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc

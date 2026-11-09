@@ -9,6 +9,7 @@ providers:
       - document.structure.extract
     media_types:
       - application/pdf
+      - text/html
       - application/vnd.openxmlformats-officedocument.wordprocessingml.document
       - image/png
       - image/jpeg
@@ -39,8 +40,12 @@ providers:
     capabilities:
       - pdf.split
       - pdf.render
+      - document.text.spans
     media_types:
       - application/pdf
+      # pdf.render@2 also renders raster inputs.
+      - image/png
+      - image/jpeg
 
   - id: nougat
     version: "0.1.17"
@@ -65,12 +70,30 @@ providers:
       - image/png
       - image/jpeg
       - image/tiff
+    config:
+      vlm_pipeline_preset: granite_docling
   - id: rapid-latex-ocr
     version: "0.1"
     transport: http
     endpoint: ${RAPID_LATEX_OCR_URL:-http://rapid-latex-ocr:5004}
     health_path: /health
     timeout_seconds: 60
+    capabilities:
+      - math.recognize
+    media_types:
+      - image/png
+      - image/jpeg
+      - image/tiff
+
+  # PP-FormulaNet_plus-M: PaddleOCR's formula recognition model on CPU. More
+  # accurate than rapid-latex-ocr on matrices and vector notation; heavier to
+  # start (the Paddle runtime loads the weights into memory).
+  - id: pp-formulanet
+    version: "1.0"
+    transport: http
+    endpoint: ${PP_FORMULANET_URL:-http://pp-formulanet:5010}
+    health_path: /health
+    timeout_seconds: 300
     capabilities:
       - math.recognize
     media_types:
@@ -106,6 +129,19 @@ providers:
     media_types:
       - application/json
 
+  # DOCX export on the same sidecar: it reuses the pinned Pandoc, without TeX.
+  # Pandoc runs with --sandbox, so the AST cannot make it read local files.
+  - id: pandoc-docx
+    version: "1.0"
+    transport: http
+    endpoint: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
+    health_path: /health
+    timeout_seconds: 180
+    capabilities:
+      - document.export.docx
+    media_types:
+      - application/json
+
   # veraPDF sidecar for PDF/UA validation. The release is pinned in
   # docker/verapdf-validate.Dockerfile and reported by /version, so it is part
   # of the cache key.
@@ -127,12 +163,18 @@ providers:
   # the cache key: bump it whenever the server loads a different model.
   # Reach the server over the internal network; VLM_API_KEY is sent as a Bearer
   # token when set (llama-server --api-key).
+  #
+  # Behind the VLM gateway (deploy/vlm-gateway/), VLM_SERVE_URL is the gateway's
+  # http://<host>:8002/v1/vlm and VLM_API_KEY its TOOLBOX_API_KEY; the gateway
+  # holds the server's slots, so this Toolbox needs a longer timeout and a
+  # larger limit than the defaults below (VLM_TIMEOUT_SECONDS,
+  # VLM_MAX_CONCURRENCY; docs/tools.md, "VLM gateway").
   - id: qwen3-vl-8b
     version: "qwen3-vl-8b-instruct-q4_k_m-f982a07"
     transport: http
     endpoint: ${VLM_SERVE_URL}
     health_path: /health
-    timeout_seconds: 600
+    timeout_seconds: ${VLM_TIMEOUT_SECONDS:-600}
     capabilities:
       - document.ocr.page
       - document.adjudicate.page
@@ -144,9 +186,19 @@ providers:
     config:
       model: qwen3-vl-8b
       api_key: ${VLM_API_KEY:-}
-      # llama-server runs 4 parallel slots of 8192 tokens each.
-      max_concurrency: 4
-      page_max_tokens: 4096
+      # Equal to llama-server's --parallel 2 (docs/tools.md, "Production
+      # server"). --ctx-size 16384 is the total KV cache, divided among the
+      # slots: 8192 tokens each. More room per slot needs a larger --ctx-size
+      # and more RAM, not fewer slots.
+      max_concurrency: ${VLM_MAX_CONCURRENCY:-2}
+      # A gateway chat waits this long for a slot, then gets timeout_seconds at
+      # the server. Any request frees its slot within timeout_seconds (600 s),
+      # so this covers about three turns of both slots (docs/tools.md,
+      # "Production server"). Clients need a longer timeout than 1800 + 600.
+      slot_wait_seconds: ${VLM_SLOT_WAIT_SECONDS:-1800}
+      # At 3 tokens/s, 4096 tokens held a slot for over 20 minutes. A page cut
+      # here reports finish "length", and the core keeps the extractors' text.
+      page_max_tokens: 2048
       # Two candidates plus the page image must fit in one 8192-token slot.
       judge_max_chars: 6000
       # vlm_page_ocr.py used repetition_penalty 1.05 (vLLM); llama-server calls
@@ -231,7 +283,7 @@ providers:
       - application/json
 
   - id: pure-media-inspect
-    version: "1.0"
+    version: "1.1"
     transport: in_process
     capabilities:
       - media.inspect
@@ -242,6 +294,7 @@ providers:
       - image/tiff
       - image/bmp
       - application/pdf
+      - text/html
 
   - id: pure-accessibility
     version: "1.0"
@@ -251,9 +304,16 @@ providers:
     media_types:
       - application/json
 
-  - id: pure-math
+  # math-speech sidecar: MathJax converts LaTeX to MathML and MathCAT speaks it
+  # in pt-BR. MathJax and the MathCAT commit are pinned in
+  # docker/math-speech.Dockerfile and reported by /version, so they are part of
+  # the cache key. mathml-to-latex runs in-process in the adapter.
+  - id: math-speech
     version: "1.0"
-    transport: in_process
+    transport: http
+    endpoint: ${MATH_SPEECH_URL:-http://math-speech:5009}
+    health_path: /health
+    timeout_seconds: 30
     capabilities:
       - math.convert
       - math.verbalize

@@ -6,13 +6,18 @@ manifests so REST, MCP and PDDL keep describing the same contract.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from acessilia_toolbox.core.artifact import ArtifactRef
-from acessilia_toolbox.core.capability import CapabilityManifest
+from acessilia_toolbox.core.capability import (
+    CapabilityExecution,
+    CapabilityIO,
+    CapabilityManifest,
+)
 from acessilia_toolbox.core.provenance import ExecutionProvenance
+from acessilia_toolbox.core.provider import ProviderHealth
 
 
 class HealthResponse(BaseModel):
@@ -22,15 +27,54 @@ class HealthResponse(BaseModel):
     image_tag: str = ""
 
 
+class ReadinessChecks(BaseModel):
+    catalog: bool
+    structure: bool
+    storage: bool
+
+
+class ReadinessResponse(BaseModel):
+    status: Literal["ready", "unavailable"]
+    checks: ReadinessChecks
+
+
+class UploadLimitResponse(BaseModel):
+    detail: str
+
+
 class CapabilitySummary(BaseModel):
     id: str
     version: int
     description: str
     input_schema: str
     output_schema: str
+    #: The **input** media types, kept with its original meaning; the output
+    #: media types are in ``output.media_types``.
     media_types: list[str]
     deterministic: bool
     cacheable: bool
+    #: The manifest's binding blocks, typed with the manifest's own models so
+    #: the OpenAPI document describes them. Serialized by alias (``schema``)
+    #: with every default, they equal ``CapabilityManifest.binding_data``, the
+    #: projection the static contract and the MCP resource publish
+    #: (tests/unit/test_binding_data.py). The flat fields above stay for
+    #: existing clients.
+    input: CapabilityIO = Field(
+        description="Input binding: schema reference, accepted media types, by_reference."
+    )
+    output: CapabilityIO = Field(
+        description=(
+            "Output binding: schema reference, media types and by_reference. For a "
+            "by-reference output, media_types describe the referenced binary."
+        )
+    )
+    execution: CapabilityExecution = Field(
+        description=(
+            "deterministic, idempotent (repeating the same operation has no effect "
+            "beyond the first execution), cacheable, and timeout_hint_seconds (a hint "
+            "about the expected duration, not a timeout the client must use)."
+        )
+    )
     #: Providers registered in this deployment that implement the capability:
     #: what a client can execute. The executor resolves any registered provider
     #: that implements the capability, so this may include providers the
@@ -38,21 +82,32 @@ class CapabilitySummary(BaseModel):
     providers: list[str]
     #: Providers the manifest binds, including opt-in ones not registered here.
     declared_providers: list[str]
+    #: Whether this is the highest version of the capability: the one a request
+    #: without a version executes.
+    latest: bool = True
 
     @classmethod
     def of(
-        cls, manifest: CapabilityManifest, registered: list[str] | None = None
+        cls,
+        manifest: CapabilityManifest,
+        registered: list[str] | None = None,
+        *,
+        latest: bool = True,
     ) -> CapabilitySummary:
         declared = [binding.id for binding in manifest.providers]
         return cls(
             id=manifest.id,
             version=manifest.version,
+            latest=latest,
             description=manifest.description,
             input_schema=manifest.input.schema_ref,
             output_schema=manifest.output.schema_ref,
             media_types=manifest.input.media_types,
             deterministic=manifest.execution.deterministic,
             cacheable=manifest.execution.cacheable,
+            input=manifest.input,
+            output=manifest.output,
+            execution=manifest.execution,
             providers=sorted(registered) if registered is not None else declared,
             declared_providers=declared,
         )
@@ -65,9 +120,13 @@ class CapabilityDetail(CapabilitySummary):
 
     @classmethod
     def of(
-        cls, manifest: CapabilityManifest, registered: list[str] | None = None
+        cls,
+        manifest: CapabilityManifest,
+        registered: list[str] | None = None,
+        *,
+        latest: bool = True,
     ) -> CapabilityDetail:
-        summary = CapabilitySummary.of(manifest, registered)
+        summary = CapabilitySummary.of(manifest, registered, latest=latest)
         return cls(
             **summary.model_dump(),
             requires=manifest.semantics.requires,
@@ -93,3 +152,22 @@ class ErrorResponse(BaseModel):
     code: str
     message: str
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class OpenAiError(BaseModel):
+    message: str
+    type: str
+    code: str | None = None
+
+
+class OpenAiErrorResponse(BaseModel):
+    """Error of the VLM chat gateway, in the shape OpenAI-compatible clients read."""
+
+    error: OpenAiError
+
+
+class VlmHealthResponse(BaseModel):
+    """Health of the OpenAI-compatible VLM providers behind the chat gateway."""
+
+    status: Literal["healthy", "unhealthy"]
+    providers: list[ProviderHealth]

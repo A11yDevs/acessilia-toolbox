@@ -27,5 +27,5 @@ semantics:
     - math_converted
 
 providers:
-  - id: pure-math
+  - id: math-speech
     version: "1.0+"

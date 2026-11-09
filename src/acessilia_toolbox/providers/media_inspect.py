@@ -13,10 +13,16 @@ measured value from a missing one.
 from __future__ import annotations
 
 import io
-from collections.abc import Mapping
+import re
+import shutil
+import tempfile
+from collections import Counter
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, BinaryIO
 
 from acessilia_toolbox.core.errors import (
     InvalidInputError,
@@ -26,7 +32,7 @@ from acessilia_toolbox.core.errors import (
 from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # Pillow is an optional dependency: the core install must keep working without
 # it, so the import is guarded and the adapter reports itself unavailable.
@@ -52,6 +58,20 @@ MIN_SCANNED_PAGE_PX = 200
 
 # A4 and US Letter portrait pages fall between these width/height ratios.
 SCANNED_PAGE_ASPECT = (0.65, 0.78)
+
+# Producers and creators that only make slide decks, matched as whole words so
+# "Impressions" is not "Impress". Google Slides is absent: its PDFs carry the
+# same "Google" producer as Google Docs, so geometry decides.
+PRESENTATION_SOFTWARE = re.compile(r"\b(powerpoint|keynote|impress|beamer)\b", re.IGNORECASE)
+
+# Slide shapes: 4:3, 16:10 and 16:9. Only a narrow tolerance around each is
+# accepted, so landscape paper (Letter 1.29, A4 1.41, Legal 1.65) is not a deck.
+PRESENTATION_ASPECTS = (4 / 3, 16 / 10, 16 / 9)
+PRESENTATION_ASPECT_TOLERANCE = 0.02
+
+# Share of pages with the deck's own page size: a document with a couple of
+# landscape tables among portrait pages is not a presentation.
+PRESENTATION_UNIFORM_SHARE = 0.9
 
 # Container format -> MIME type. Pillow's own ``Image.MIME`` map omits formats
 # that are not built into the running binary, so the mapping is kept explicit.
@@ -118,17 +138,112 @@ def _dimensions(width: int, height: int) -> dict[str, Any]:
     }
 
 
-def _pdf_page_count_from_content(payload: bytes) -> int:
+def _payload_size(payload: bytes | BinaryIO) -> int:
+    if isinstance(payload, bytes):
+        return len(payload)
+    payload.seek(0, io.SEEK_END)
+    size = payload.tell()
+    payload.seek(0)
+    return size
+
+
+def _payload_startswith(payload: bytes | BinaryIO, prefix: bytes) -> bool:
+    if isinstance(payload, bytes):
+        return payload.startswith(prefix)
+    payload.seek(0)
+    result = payload.read(len(prefix)) == prefix
+    payload.seek(0)
+    return result
+
+
+def _pdf_page_count_from_content(payload: bytes | BinaryIO) -> int:
     """Count page objects by scanning the document content stream.
 
     Last resort: PDFs that store their page tree inside object streams — the
     default since PDF 1.5 — report a single page.
     """
-    counted = payload.count(b"/Type /Page") - payload.count(b"/Type /Pages")
+    if isinstance(payload, bytes):
+        counted = payload.count(b"/Type /Page") - payload.count(b"/Type /Pages")
+    else:
+        counts: dict[bytes, int] = {}
+        for token in (b"/Type /Page", b"/Type /Pages"):
+            payload.seek(0)
+            overlap = b""
+            count = 0
+            while chunk := payload.read(1024 * 1024):
+                combined = overlap + chunk
+                start = 0
+                while (position := combined.find(token, start)) >= 0:
+                    if position + len(token) > len(overlap):
+                        count += 1
+                    start = position + len(token)
+                overlap = combined[-(len(token) - 1):]
+            counts[token] = count
+        payload.seek(0)
+        counted = counts[b"/Type /Page"] - counts[b"/Type /Pages"]
     return max(1, counted)
 
 
-def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, Any] | None:
+@contextmanager
+def _open_pdf_document(payload: bytes | BinaryIO) -> Iterator[Any]:
+    """Open PDF bytes directly, or copy a seekable stream to a temporary file."""
+    if isinstance(payload, bytes):
+        document = fitz.open(stream=payload, filetype="pdf")
+        try:
+            yield document
+        finally:
+            document.close()
+        return
+
+    with tempfile.TemporaryDirectory(prefix="toolbox-media-inspect-") as staging:
+        path = Path(staging) / "input.pdf"
+        payload.seek(0)
+        with path.open("wb") as destination:
+            shutil.copyfileobj(payload, destination, length=1024 * 1024)
+        payload.seek(0)
+        document = fitz.open(filename=str(path), filetype="pdf")
+        try:
+            yield document
+        finally:
+            document.close()
+
+
+def _document_genre(
+    page_sizes: list[tuple[int, int]], metadata: Mapping[str, Any]
+) -> tuple[str, list[str]]:
+    """Whether a PDF is a slide deck, and the signals that say so.
+
+    Either signal suffices: software that only makes decks, or two or more
+    pages that are nearly all the same 4:3, 16:10 or 16:9 landscape size.
+    """
+    # The token is lowercased so consumers can compare it as is, whatever the
+    # casing the metadata used ("Microsoft® POWERPOINT®" -> producer:powerpoint).
+    signals = [
+        f"{field}:{match.group(1).lower()}"
+        for field in ("producer", "creator")
+        if (match := PRESENTATION_SOFTWARE.search(str(metadata.get(field) or "")))
+    ]
+    if len(page_sizes) >= 2:
+        size, count = Counter(page_sizes).most_common(1)[0]
+        width, height = size
+        if (
+            count / len(page_sizes) >= PRESENTATION_UNIFORM_SHARE
+            and height > 0
+            and any(
+                abs(width / height - aspect) <= PRESENTATION_ASPECT_TOLERANCE
+                for aspect in PRESENTATION_ASPECTS
+            )
+        ):
+            signals.append("geometry:landscape-uniform")
+    return ("presentation" if signals else "document"), signals
+
+
+def _inspect_pdf(
+    payload: bytes | BinaryIO,
+    filename: str,
+    media_type: str,
+    size_bytes: int | None = None,
+) -> dict[str, Any] | None:
     """Inspect a PDF, using PyMuPDF when available.
 
     Returns ``None`` when the payload carries no verifiable PDF structure, so
@@ -139,27 +254,40 @@ def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, An
     page_count_source: str | None = "content_stream_scan"
     dimensions: dict[str, Any] | None = None
     dimensions_source: str | None = None
-    verified = payload.startswith(b"%PDF-")
+    # Without PyMuPDF neither the pages nor the metadata are measured, so the
+    # genre stays unknown instead of defaulting to "document".
+    genre: str | None = None
+    genre_signals: list[str] = []
+    verified = _payload_startswith(payload, b"%PDF-")
 
     if fitz is not None:
-        document = None
         try:
-            document = fitz.open(stream=payload, filetype="pdf")
-            opened_pages = len(document)
-            if opened_pages > 0:
-                verified = True
-                page_count = opened_pages
-                page_count_source = "pymupdf"
-                frame = document[0].rect
-                width, height = round(frame.width), round(frame.height)
-                if width > 0 and height > 0:
-                    dimensions = _dimensions(width, height)
-                    dimensions_source = "pymupdf"
+            with _open_pdf_document(payload) as document:
+                opened_pages = len(document)
+                if opened_pages > 0:
+                    verified = True
+                    page_count = opened_pages
+                    page_count_source = "pymupdf"
+                    frame = document[0].rect
+                    width, height = round(frame.width), round(frame.height)
+                    if width > 0 and height > 0:
+                        dimensions = _dimensions(width, height)
+                        dimensions_source = "pymupdf"
+                    # The genre is optional, so a damaged later page or unreadable
+                    # metadata leaves it unknown instead of failing an inspection
+                    # that page 0 already answered.
+                    try:
+                        genre, genre_signals = _document_genre(
+                            [
+                                (round(page.rect.width), round(page.rect.height))
+                                for page in document
+                            ],
+                            document.metadata or {},
+                        )
+                    except Exception:
+                        genre, genre_signals = None, []
         except fitz.FileDataError:
             pass
-        finally:
-            if document is not None:
-                document.close()
 
     if not verified:
         return None
@@ -167,7 +295,7 @@ def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, An
     return {
         "media_type": "application/pdf",
         "declared_media_type": media_type or None,
-        "file_size_bytes": len(payload),
+        "file_size_bytes": size_bytes if size_bytes is not None else _payload_size(payload),
         "is_image": False,
         "is_pdf": True,
         "page_count": page_count,
@@ -177,19 +305,23 @@ def _inspect_pdf(payload: bytes, filename: str, media_type: str) -> dict[str, An
         "color_mode": None,
         "format": "PDF",
         "artifact_nature": "paginated_document",
+        "document_genre": genre,
+        "genre_signals": genre_signals,
         "requires_visual_inspection": False,
         "metadata": {"filename": filename},
     }
 
 
-def _unsupported_media(payload: bytes, filename: str, media_type: str) -> dict[str, Any]:
+def _unsupported_media(
+    filename: str, media_type: str, size_bytes: int
+) -> dict[str, Any]:
     """Report an artifact whose container could not be identified."""
     return {
         # Nothing was detected, so the neutral type is reported and the
         # caller's declaration is preserved separately.
         "media_type": "application/octet-stream",
         "declared_media_type": media_type or None,
-        "file_size_bytes": len(payload),
+        "file_size_bytes": size_bytes,
         "is_image": False,
         "is_pdf": False,
         "page_count": 1,
@@ -199,30 +331,32 @@ def _unsupported_media(payload: bytes, filename: str, media_type: str) -> dict[s
         "color_mode": None,
         "format": None,
         "artifact_nature": "unknown",
+        "document_genre": None,
+        "genre_signals": [],
         "requires_visual_inspection": False,
         "metadata": {"filename": filename},
     }
 
 
 def _inspect_media(
-    payload: bytes,
+    payload: bytes | BinaryIO,
     filename: str,
     media_type: str,
     parameters: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Perform deterministic inspection on the media payload."""
     params = dict(parameters or {})
-    size_bytes = len(payload)
+    size_bytes = _payload_size(payload)
     is_pdf_signal = (
         media_type == "application/pdf"
         or filename.lower().endswith(".pdf")
-        or payload.startswith(b"%PDF-")
+        or _payload_startswith(payload, b"%PDF-")
     )
     if is_pdf_signal:
-        document = _inspect_pdf(payload, filename, media_type)
+        document = _inspect_pdf(payload, filename, media_type, size_bytes)
         if document is not None:
             return document
-        return _unsupported_media(payload, filename, media_type)
+        return _unsupported_media(filename, media_type, size_bytes)
 
     if Image is None:
         raise ProviderUnavailableError(
@@ -239,7 +373,9 @@ def _inspect_media(
         aspect_window = SCANNED_PAGE_ASPECT
 
     try:
-        with Image.open(io.BytesIO(payload)) as image:
+        image_source = io.BytesIO(payload) if isinstance(payload, bytes) else payload
+        image_source.seek(0)
+        with Image.open(image_source) as image:
             width, height = image.size
             if width < 1 or height < 1:
                 raise ProviderExecutionError(
@@ -255,7 +391,7 @@ def _inspect_media(
                 format_name, f"image/{format_name.lower()}"
             )
     except UnidentifiedImageError:
-        return _unsupported_media(payload, filename, media_type)
+        return _unsupported_media(filename, media_type, size_bytes)
 
     aspect_ratio = round(width / height, 4)
     is_page_sized = min(width, height) >= min_dimension
@@ -281,6 +417,9 @@ def _inspect_media(
         "color_mode": color_mode,
         "format": format_name,
         "artifact_nature": nature,
+        # A slide deck is told apart by its pages; a single image has none.
+        "document_genre": None,
+        "genre_signals": [],
         # Only a page-sized, single-frame, document-proportioned image is
         # assumed to be text-recoverable; everything else may carry meaning in
         # its graphics, so vision inspection is requested.
@@ -291,6 +430,8 @@ def _inspect_media(
 
 class PureMediaInspectProvider:
     """Pure-Python media and artifact inspection provider."""
+
+    supports_streaming_input = True
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -304,7 +445,7 @@ class PureMediaInspectProvider:
     def execute(
         self,
         capability_id: str,
-        payload: bytes,
+        payload: bytes | BinaryIO,
         *,
         filename: str,
         media_type: str,

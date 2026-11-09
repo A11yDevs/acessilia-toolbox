@@ -57,7 +57,7 @@ if [[ "${MINERU_VARIANT}" == "cpu" ]]; then
             --build-arg "MINERU_BASE_IMAGE=${BASE_TAG}" \
             -t "${IMAGE_TAG}" \
             -f "${PROJECT_DIR}/docker/mineru-cpu-repair.Dockerfile" \
-            "${PROJECT_DIR}/docker"
+            "${PROJECT_DIR}"
         echo "✅ Repaired ${IMAGE_TAG}"
         exit 0
     fi
@@ -67,7 +67,7 @@ if [[ "${MINERU_VARIANT}" == "cpu" ]]; then
 
     echo "→ Building CPU-only image from ${DOCKERFILE}"
     docker build --build-arg "MINERU_VERSION=${MINERU_VERSION}" \
-        -t "${IMAGE_TAG}" -f "${DOCKERFILE}" "${PROJECT_DIR}/docker"
+        -t "${IMAGE_TAG}" -f "${DOCKERFILE}" "${PROJECT_DIR}"
 
     echo ""
     docker run --rm --entrypoint python3 "${IMAGE_TAG}" -c "from mineru.version import __version__; assert __version__ == '${MINERU_VERSION}', __version__"
@@ -86,7 +86,7 @@ if [[ "${MINERU_VARIANT}" == "gpu-basic" ]]; then
 
     echo "→ Building Basic-tier CUDA image from ${DOCKERFILE}"
     docker build --build-arg "MINERU_VERSION=${MINERU_VERSION}" \
-        -t "${IMAGE_TAG}" -f "${DOCKERFILE}" "${PROJECT_DIR}/docker"
+        -t "${IMAGE_TAG}" -f "${DOCKERFILE}" "${PROJECT_DIR}"
     docker run --rm --gpus all --entrypoint python3 "${IMAGE_TAG}" -c \
         "import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
     echo "✅ Built ${IMAGE_TAG} (GPU Basic/Torch variant)"

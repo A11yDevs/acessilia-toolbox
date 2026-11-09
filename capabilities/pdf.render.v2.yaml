@@ -1,0 +1,39 @@
+id: pdf.render
+version: 2
+description: >-
+  Render one page of a PDF, PNG or JPEG into a PNG image, optionally clipped to
+  a region and bounded in size. The PNG is stored as an artifact and the result
+  carries its reference and the transformation actually applied, never the
+  bytes. Version 1 (inline base64, PDF only) stays available while clients
+  migrate, through REST and the CLI by explicit version; MCP tools run this
+  version.
+
+input:
+  # Raster pages are not documents: artifact/binary@1 covers PDF, PNG and JPEG.
+  schema: artifact/binary@1
+  media_types:
+    - application/pdf
+    - image/png
+    - image/jpeg
+
+output:
+  schema: artifact/image@2
+  media_types:
+    - image/png
+  by_reference: true
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 60
+
+semantics:
+  requires:
+    - document_available
+  produces:
+    - page_rendered
+
+providers:
+  - id: pymupdf-pdf
+    version: "1.24+"

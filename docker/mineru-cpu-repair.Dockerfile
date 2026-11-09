@@ -8,7 +8,7 @@ ARG MINERU_BASE_IMAGE=mineru:cpu-base
 FROM ${MINERU_BASE_IMAGE}
 
 USER root
-COPY patch-mineru-warp.py /tmp/patch-mineru-warp.py
+COPY docker/patch-mineru-warp.py /tmp/patch-mineru-warp.py
 RUN pip install --no-cache-dir six && \
     python3 /tmp/patch-mineru-warp.py && rm /tmp/patch-mineru-warp.py && \
     mkdir -p /home/mineru/.cache/modelscope && \
