@@ -11,7 +11,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from acessilia_toolbox.core.artifact import ArtifactRef
-from acessilia_toolbox.core.capability import CapabilityManifest
+from acessilia_toolbox.core.capability import (
+    CapabilityExecution,
+    CapabilityIO,
+    CapabilityManifest,
+)
 from acessilia_toolbox.core.provenance import ExecutionProvenance
 from acessilia_toolbox.core.provider import ProviderHealth
 
@@ -49,19 +53,22 @@ class CapabilitySummary(BaseModel):
     media_types: list[str]
     deterministic: bool
     cacheable: bool
-    #: The manifest's binding blocks, as ``CapabilityManifest.binding_data``
-    #: projects them for the static contract and the MCP resource too. The
-    #: flat fields above stay for existing clients.
-    input: dict[str, Any] = Field(
+    #: The manifest's binding blocks, typed with the manifest's own models so
+    #: the OpenAPI document describes them. Serialized by alias (``schema``)
+    #: with every default, they equal ``CapabilityManifest.binding_data``, the
+    #: projection the static contract and the MCP resource publish
+    #: (tests/unit/test_binding_data.py). The flat fields above stay for
+    #: existing clients.
+    input: CapabilityIO = Field(
         description="Input binding: schema reference, accepted media types, by_reference."
     )
-    output: dict[str, Any] = Field(
+    output: CapabilityIO = Field(
         description=(
             "Output binding: schema reference, media types and by_reference. For a "
             "by-reference output, media_types describe the referenced binary."
         )
     )
-    execution: dict[str, Any] = Field(
+    execution: CapabilityExecution = Field(
         description=(
             "deterministic, idempotent (repeating the same operation has no effect "
             "beyond the first execution), cacheable, and timeout_hint_seconds (a hint "
@@ -98,7 +105,9 @@ class CapabilitySummary(BaseModel):
             media_types=manifest.input.media_types,
             deterministic=manifest.execution.deterministic,
             cacheable=manifest.execution.cacheable,
-            **manifest.binding_data(),
+            input=manifest.input,
+            output=manifest.output,
+            execution=manifest.execution,
             providers=sorted(registered) if registered is not None else declared,
             declared_providers=declared,
         )

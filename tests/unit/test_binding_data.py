@@ -134,7 +134,36 @@ def _providers_config(tmp_path: Path, capability: str) -> Path:
     return path
 
 
-def test_a_minimal_manifest_publishes_its_defaults(tmp_path: Path) -> None:
+def _every_interface(
+    capabilities_dir: Path, providers_config: Path
+) -> dict[str, dict[tuple[str, int], dict[str, Any]]]:
+    """The binding blocks of each capability version, as each interface publishes them.
+
+    ``detail`` asks for every version explicitly, so a route that picked the
+    wrong version, or dropped a default, would differ from the contract.
+    """
+    capabilities = CapabilityRegistry.from_directory(capabilities_dir)
+    providers = ProviderRegistry.from_file(providers_config)
+    client = TestClient(create_app(capabilities, providers))
+    executor = CapabilityExecutor(capabilities, providers, lambda descriptor: None)
+    mcp = create_mcp_app(capabilities, providers, executor)
+    contract = _exporter().build(capabilities_dir, providers_config, ROOT / "schemas")
+    detail = {}
+    for manifest in capabilities.manifests():
+        response = client.get(
+            f"/v1/capabilities/{manifest.id}", params={"version": manifest.version}
+        )
+        assert response.status_code == 200, manifest.key
+        detail[(manifest.id, manifest.version)] = {b: response.json()[b] for b in BLOCKS}
+    return {
+        "contract": _by_key(contract["capabilities"]),
+        "catalogue": _by_key(client.get("/v1/capabilities").json()),
+        "detail": detail,
+        "mcp": _by_key(json.loads(mcp.read_resource("acessilia://capabilities"))),
+    }
+
+
+def test_a_minimal_manifest_publishes_its_defaults_everywhere(tmp_path: Path) -> None:
     capabilities = tmp_path / "capabilities"
     _write(
         capabilities,
@@ -143,12 +172,9 @@ def test_a_minimal_manifest_publishes_its_defaults(tmp_path: Path) -> None:
         "input:\n  schema: artifact/binary@1\noutput:\n  schema: artifact/binary@1\n",
     )
 
-    contract = _exporter().build(
-        capabilities, _providers_config(tmp_path, "demo.minimal"), ROOT / "schemas"
-    )
+    published = _every_interface(capabilities, _providers_config(tmp_path, "demo.minimal"))
 
-    [entry] = contract["capabilities"]
-    assert {b: entry[b] for b in BLOCKS} == {
+    expected = {
         "input": {"schema": "artifact/binary@1", "media_types": [], "by_reference": False},
         "output": {"schema": "artifact/binary@1", "media_types": [], "by_reference": False},
         "execution": {
@@ -158,9 +184,11 @@ def test_a_minimal_manifest_publishes_its_defaults(tmp_path: Path) -> None:
             "timeout_hint_seconds": 120,
         },
     }
+    for interface, blocks in published.items():
+        assert blocks == {("demo.minimal", 1): expected}, interface
 
 
-def test_two_versions_of_one_id_keep_their_own_metadata(tmp_path: Path) -> None:
+def test_two_versions_of_one_id_keep_their_own_metadata_everywhere(tmp_path: Path) -> None:
     capabilities = tmp_path / "capabilities"
     for version, idempotent, output in (
         (1, "true", "artifact/binary@1"),
@@ -174,15 +202,16 @@ def test_two_versions_of_one_id_keep_their_own_metadata(tmp_path: Path) -> None:
             f"execution:\n  idempotent: {idempotent}\n",
         )
 
-    contract = _exporter().build(
-        capabilities, _providers_config(tmp_path, "demo.versioned"), ROOT / "schemas"
-    )
+    published = _every_interface(capabilities, _providers_config(tmp_path, "demo.versioned"))
 
-    blocks = _by_key(contract["capabilities"])
-    assert blocks[("demo.versioned", 1)]["execution"]["idempotent"] is True
-    assert blocks[("demo.versioned", 2)]["execution"]["idempotent"] is False
-    assert blocks[("demo.versioned", 1)]["output"]["schema"] == "artifact/binary@1"
-    assert blocks[("demo.versioned", 2)]["output"]["schema"] == "artifact/image@2"
+    for interface, blocks in published.items():
+        first, second = blocks[("demo.versioned", 1)], blocks[("demo.versioned", 2)]
+        assert first["execution"]["idempotent"] is True, interface
+        assert second["execution"]["idempotent"] is False, interface
+        assert first["output"]["schema"] == "artifact/binary@1", interface
+        assert second["output"]["schema"] == "artifact/image@2", interface
+    assert published["catalogue"] == published["contract"] == published["mcp"]
+    assert published["detail"] == published["contract"]
 
 
 def test_the_contract_classifies_every_schema_reference(contract: dict[str, Any]) -> None:
