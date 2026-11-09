@@ -409,6 +409,7 @@
                     "artifacts"
                 ],
                 "summary": "Store Artifact",
+                "description": "Store the upload; return ``artifact/reference@1``, as ``artifact.store`` declares.\n\nThe stored record (with ``uri`` and ``filename``) stays readable on\n``GET /v1/artifacts/{id}/metadata``.",
                 "operationId": "store_artifact_v1_artifacts_post",
                 "requestBody": {
                     "content": {
@@ -426,7 +427,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ArtifactRef"
+                                    "$ref": "#/components/schemas/ArtifactReference"
                                 }
                             }
                         }
@@ -2151,6 +2152,53 @@
                 ],
                 "title": "ArtifactRef",
                 "description": "Reference to stored content; `uri` must never embed credentials."
+            },
+            "ArtifactReference": {
+                "properties": {
+                    "artifact_id": {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$",
+                        "title": "Artifact Id"
+                    },
+                    "digest": {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$",
+                        "title": "Digest"
+                    },
+                    "media_type": {
+                        "type": "string",
+                        "minLength": 1,
+                        "title": "Media Type"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "minimum": 0.0,
+                        "title": "Size"
+                    },
+                    "store": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Store"
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                    "artifact_id",
+                    "digest",
+                    "media_type",
+                    "size",
+                    "store"
+                ],
+                "title": "ArtifactReference",
+                "description": "``artifact/reference@1`` (``schemas/reference@1.json``), the published contract.\n\nA projection of :class:`ArtifactRef`, the record the stores and the cache\nkeep. Build it with :func:`reference_of`, the only producer, which\nguarantees what the schema cannot express: ``digest`` equals\n``artifact_id``, both in canonical form, and ``store`` is never\n``failover``. ``uri`` and ``filename`` stay in the record (A11yDevs/acessilia-toolbox#145)."
             },
             "Body_execute_capability_v1_capabilities__capability_id__execute_post": {
                 "properties": {

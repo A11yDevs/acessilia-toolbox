@@ -1365,9 +1365,9 @@
     },
     {
       "ref": "artifact/reference@1",
-      "status": "unpublished",
-      "file": null,
-      "note": "artifact reference; published by A11yDevs/acessilia-toolbox#145"
+      "status": "published",
+      "file": "schemas/reference@1.json",
+      "note": null
     },
     {
       "ref": "artifact/region-transcription@1",
