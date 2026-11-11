@@ -1,0 +1,513 @@
+{
+  "$schema": "urn:a11y-devs:schema:processing-manifest:1.1.0",
+  "schema_version": "1.1.0",
+  "manifest_id": "manifest-b5dbe02e17dd536e-r1",
+  "revision": 1,
+  "status": "extracted",
+  "created_at": "2026-08-17T05:07:13.863959Z",
+  "source": {
+    "document_id": "doc-b5dbe02e17dd536e",
+    "filename": "004.pdf",
+    "path": "/Users/akira/dados/dev/acessilia-structure-extractor/tests/dataset/input/004.pdf",
+    "media_type": "application/pdf",
+    "byte_size": 358314,
+    "sha256": "b5dbe02e17dd536e085fb0f24ededab28c583a970846d2191a4b5c090d0e8899"
+  },
+  "extractor": {
+    "name": "docling",
+    "version": "docling-serve",
+    "started_at": "2026-08-17T05:06:41.607782Z",
+    "completed_at": "2026-08-17T05:07:13.863959Z",
+    "duration_ms": 32255,
+    "configuration": {
+      "extractor": "docling-serve",
+      "base_url": "http://localhost:5001"
+    }
+  },
+  "title": "CASTINGS\tPOSSÍVEIS",
+  "language": "pt-BR",
+  "pages": [
+    {
+      "page_number": 1,
+      "width": 595.280029296875,
+      "height": 793.7000122070312,
+      "element_ids": [
+        "element-000001",
+        "element-000002",
+        "element-000003",
+        "element-000004",
+        "element-000005",
+        "element-000006",
+        "element-000007",
+        "element-000008",
+        "element-000009",
+        "element-000010",
+        "element-000011"
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "id": "element-000001",
+      "type": "heading",
+      "raw_label": "section_header",
+      "reading_order": 1,
+      "hierarchy_level": 1,
+      "text": "CASTINGS\tPOSSÍVEIS",
+      "source_ref": "#/texts/0",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 67.5238,
+            "top": 714.2388618070312,
+            "right": 156.22252723040012,
+            "bottom": 702.8994426070311,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 18
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000002",
+      "type": "paragraph",
+      "raw_label": "text",
+      "reading_order": 2,
+      "hierarchy_level": 1,
+      "text": "Abaixo\testão\trelacionados\ttodos\tos\tcasts\tpossíveis\tna\tlinguagem\tJava,\tmostrando\ta\tconversão de um\tvalor em outro.\tA\tindicação Impl. quer\tdizer\tque\taquele\tcast\té\timplícito\te\tautomático,\tou seja,\tvocê\tnão\tprecisa\tindicar\to\tcast\texplicitamente\t(lembrando\tque\to\ttipo\tboolean\tnão\tpode\tser convertido\tem\tnenhum\toutro\ttipo).",
+      "source_ref": "#/texts/1",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 67.52412,
+            "top": 687.5898618070312,
+            "right": 527.6379377439999,
+            "bottom": 624.3935426070311,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 317
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000003",
+      "type": "heading",
+      "raw_label": "section_header",
+      "reading_order": 3,
+      "hierarchy_level": 1,
+      "text": "TAMANHO\tDOS\tTIPOS",
+      "source_ref": "#/texts/2",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 67.5238,
+            "top": 408.13786180703124,
+            "right": 159.32448876839993,
+            "bottom": 396.79844260703123,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 17
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000004",
+      "type": "paragraph",
+      "raw_label": "text",
+      "reading_order": 4,
+      "hierarchy_level": 1,
+      "text": "Na\ttabela\tabaixo,\testão\tos\ttamanhos\tde\tcada\ttipo\tprimitivo\tdo\tJava.",
+      "source_ref": "#/texts/3",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 84.8094,
+            "top": 381.48886180703124,
+            "right": 396.6193681319999,
+            "bottom": 370.14944260703123,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 67
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000005",
+      "type": "heading",
+      "raw_label": "section_header",
+      "reading_order": 5,
+      "hierarchy_level": 1,
+      "text": "3.6\tO\tIF\tE\tO\tELSE",
+      "source_ref": "#/texts/4",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 56.0,
+            "top": 149.5440122070312,
+            "right": 174.41125132100004,
+            "bottom": 134.66101220703126,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 17
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000006",
+      "type": "paragraph",
+      "raw_label": "text",
+      "reading_order": 6,
+      "hierarchy_level": 1,
+      "text": "No\tJava,\ta\tsintaxe\tdo if é\ta\tseguinte:",
+      "source_ref": "#/texts/5",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 73.2855,
+            "top": 121.48386180703119,
+            "right": 253.50695428400007,
+            "bottom": 109.86168956597476,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 38
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000007",
+      "type": "code",
+      "raw_label": "code",
+      "reading_order": 7,
+      "hierarchy_level": 1,
+      "text": "if\t(condicaoBooleana)\t{ codigo; }",
+      "source_ref": "#/texts/6",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 56.0,
+            "top": 95.1717436070312,
+            "right": 165.24336745000016,
+            "bottom": 65.59058433188113,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 33
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000008",
+      "type": "page_footer",
+      "raw_label": "page_footer",
+      "reading_order": 8,
+      "hierarchy_level": 1,
+      "text": "26",
+      "source_ref": "#/texts/7",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 56.0,
+            "top": 41.528598407031154,
+            "right": 65.61077136,
+            "bottom": 32.94129223531854,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 2
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "furniture"
+      }
+    },
+    {
+      "id": "element-000009",
+      "type": "page_footer",
+      "raw_label": "page_footer",
+      "reading_order": 9,
+      "hierarchy_level": 1,
+      "text": "3.6\tO\tIF\tE\tO\tELSE",
+      "source_ref": "#/texts/8",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 79.5313,
+            "top": 41.528598407031154,
+            "right": 152.491055926,
+            "bottom": 32.94129223531854,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 17
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "furniture"
+      }
+    },
+    {
+      "id": "element-000010",
+      "type": "table",
+      "raw_label": "table",
+      "reading_order": 10,
+      "hierarchy_level": 1,
+      "text": null,
+      "source_ref": "#/tables/0",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 135.98802796164605,
+            "top": 613.5540195883789,
+            "right": 459.0258391409487,
+            "bottom": 483.83318208579806,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 0
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000011",
+      "type": "table",
+      "raw_label": "table",
+      "reading_order": 11,
+      "hierarchy_level": 1,
+      "text": null,
+      "source_ref": "#/tables/1",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 158.82043922723844,
+            "top": 359.40035446568555,
+            "right": 436.14770629394707,
+            "bottom": 210.05177313480192,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 0
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    }
+  ],
+  "observations": [
+    {
+      "id": "observation-preserve-code-semantics-000007",
+      "kind": "code-requires-processing",
+      "severity": "info",
+      "message": "O bloco de código deve preservar indentação, linguagem e leitura literal.",
+      "target_ids": [
+        "element-000007"
+      ],
+      "evidence": {
+        "raw_label": "code",
+        "page_number": 1
+      }
+    },
+    {
+      "id": "observation-linearize-table-000010",
+      "kind": "table-requires-processing",
+      "severity": "warning",
+      "message": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis.",
+      "target_ids": [
+        "element-000010"
+      ],
+      "evidence": {
+        "raw_label": "table",
+        "page_number": 1
+      }
+    },
+    {
+      "id": "observation-linearize-table-000011",
+      "kind": "table-requires-processing",
+      "severity": "warning",
+      "message": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis.",
+      "target_ids": [
+        "element-000011"
+      ],
+      "evidence": {
+        "raw_label": "table",
+        "page_number": 1
+      }
+    }
+  ],
+  "obligations": [
+    {
+      "id": "obligation-preserve-code-semantics-000007",
+      "kind": "preserve-code-semantics",
+      "status": "candidate",
+      "selected": false,
+      "target_ids": [
+        "element-000007"
+      ],
+      "dependencies": [],
+      "admissible_methods": [
+        "pandoc-code",
+        "human-review"
+      ],
+      "method_costs": {
+        "pandoc-code": 10,
+        "human-review": 100
+      },
+      "attempts": [],
+      "rationale": "O bloco de código deve preservar indentação, linguagem e leitura literal."
+    },
+    {
+      "id": "obligation-linearize-table-000010",
+      "kind": "linearize-table",
+      "status": "candidate",
+      "selected": false,
+      "target_ids": [
+        "element-000010"
+      ],
+      "dependencies": [],
+      "admissible_methods": [
+        "docling-table",
+        "pandoc-table",
+        "human-review"
+      ],
+      "method_costs": {
+        "docling-table": 10,
+        "pandoc-table": 15,
+        "human-review": 100
+      },
+      "attempts": [],
+      "rationale": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis."
+    },
+    {
+      "id": "obligation-linearize-table-000011",
+      "kind": "linearize-table",
+      "status": "candidate",
+      "selected": false,
+      "target_ids": [
+        "element-000011"
+      ],
+      "dependencies": [],
+      "admissible_methods": [
+        "docling-table",
+        "pandoc-table",
+        "human-review"
+      ],
+      "method_costs": {
+        "docling-table": 10,
+        "pandoc-table": 15,
+        "human-review": 100
+      },
+      "attempts": [],
+      "rationale": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis."
+    }
+  ],
+  "artifacts": [],
+  "summary": {
+    "page_count": 1,
+    "element_count": 11,
+    "observation_count": 3,
+    "obligation_count": 3,
+    "element_types": {
+      "code": 1,
+      "heading": 3,
+      "page_footer": 2,
+      "paragraph": 3,
+      "table": 2
+    }
+  }
+}
