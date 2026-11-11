@@ -10,6 +10,7 @@ import csv
 import io
 import os
 from collections.abc import Sequence
+from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import quote, unquote
 
@@ -31,6 +32,20 @@ from acessilia_toolbox.core.errors import (
 )
 from acessilia_toolbox.core.provider import ProviderDescriptor
 
+LEGACY_NUMBERED_INPUTS = {f"{number:03d}" for number in range(1, 9)}
+
+
+def _legacy_input_path(row: dict[str, str]) -> str | None:
+    """Resolve original filenames in the published legacy Dataset layout."""
+    filename = row.get("original_filename")
+    if not filename:
+        return None
+    subdirectory = row.get("subdirectory", "")
+    if not subdirectory and row["id"] in LEGACY_NUMBERED_INPUTS:
+        filename = row["id"] + PurePosixPath(filename).suffix
+    return "/".join(part for part in ("input", subdirectory, filename) if part)
+
+
 # ---------------------------------------------------------------------------
 # Known dataset definitions - extend this dict to add a third dataset.
 # ---------------------------------------------------------------------------
@@ -46,7 +61,7 @@ DATASET_DEFS: dict[str, dict[str, Any]] = {
         ),
         "source": "https://github.com/A11yDevs/acessilia-dataset",
         "source_type": "github",
-        "default_revision": "main",
+        "default_revision": "9ed07b28aeddb69721228f2dd66de6f9794c0001",
         "owner": "A11yDevs",
         "repo": "acessilia-dataset",
         "splits": {
@@ -97,6 +112,10 @@ def _validate_repo_path(value: str, name: str) -> str:
 
 class GitHubDatasetProvider:
     """Fetches dataset metadata and artifacts from a GitHub repository."""
+
+    @property
+    def cache_namespace(self) -> str:
+        return "legacy-dataset-pin:" + self._defs["acessilia-dataset"]["default_revision"]
 
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
@@ -373,7 +392,12 @@ class GitHubDatasetProvider:
                 "png": "image/png",
             }.get(ext, media_type_raw or "application/octet-stream")
 
-            source_path = f"input/{subdir}/{item_id}.{ext}" if subdir else f"input/{item_id}.{ext}"
+            source_path = _legacy_input_path(row)
+            if source_path is None:
+                source_path = "/".join(
+                    part for part in ("input", subdir, f"{item_id}.{ext}") if part
+                )
+            source_path = _validate_repo_path(source_path, "input_path")
             artifacts.append(
                 DatasetArtifactRef(path=source_path, media_type=media)
             )

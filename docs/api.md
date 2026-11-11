@@ -578,3 +578,15 @@ limit for those byte-based paths. Size it together with execution concurrency
 and available memory. The limit bounds the input allocation, not decoded
 images, models, outputs, or total process memory.
 - HTTP **503**: execution capacity is exhausted or a required provider/dependency is unavailable. Retry capacity failures after load decreases; check provider health and installation for unavailable dependencies.
+
+
+### Dataset compatibility pin before the reference migration
+
+The GitHub Dataset default and `tests/fixtures/dataset` are fixed at
+`9ed07b28aeddb69721228f2dd66de6f9794c0001`, the published legacy revision.
+All three historical splits remain available. Explicit revision parameters
+continue to override the default. Metadata and mirrored-artifact keys include
+the provider's pin namespace so warmed pre-migration caches are not reused.
+Publish this preparatory change before the Dataset adds its tagged compatible
+`references/` layout; adopt that revision in the reference-provider change,
+then complete the deprecation release before retiring historical splits.

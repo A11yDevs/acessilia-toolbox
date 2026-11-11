@@ -34,6 +34,8 @@ def test_github_artifact_path_is_encoded_without_changing_filename(path):
         assert provider.get_artifact("acessilia-dataset", path)[0] == b"fixture"
     finally:
         provider._http.close()
-    assert seen[0].path == "/A11yDevs/acessilia-dataset/main/" + path
+    assert seen[0].path == (
+        "/A11yDevs/acessilia-dataset/9ed07b28aeddb69721228f2dd66de6f9794c0001/" + path
+    )
     assert not seen[0].query
     assert not seen[0].fragment

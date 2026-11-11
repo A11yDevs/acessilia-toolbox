@@ -118,6 +118,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check out pinned Dataset submodule
+        run: git submodule update --init tests/fixtures/dataset
+
       - name: Set up Python 3.12
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
@@ -149,6 +152,9 @@ jobs:
 
       - name: Type check with mypy
         run: python -m mypy src/
+
+      - name: Verify paths in the published legacy Dataset
+        run: python -m pytest tests/integration/test_dataset_legacy_paths.py -v
 
       - name: Run tests
         run: python -m pytest tests/unit/ -v --junitxml=test-results.xml

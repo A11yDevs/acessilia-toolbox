@@ -539,12 +539,18 @@ class DatasetAdapter:
         self, dataset_id: str, artifact_path: str, revision: str | None = None
     ) -> str:
         """Reference identity; artifact identities remain content-addressed."""
-        raw = json.dumps([self.descriptor.id, dataset_id, revision, artifact_path]).encode()
+        raw = json.dumps([
+            self.descriptor.id, str(getattr(self._provider, "cache_namespace", "")),
+            dataset_id, revision, artifact_path,
+        ]).encode()
         return fingerprint_bytes(raw)
 
     def _meta_cache_key(self, operation: str, kw: dict[str, Any]) -> str:
         """Cache key for metadata operations."""
-        identity = [self.descriptor.id, operation, kw.get("dataset_id"), kw.get("revision")]
+        identity = [
+            self.descriptor.id, str(getattr(self._provider, "cache_namespace", "")),
+            operation, kw.get("dataset_id"), kw.get("revision"),
+        ]
         if operation == "list_items":
             identity += [kw.get("split"), kw.get("limit"), kw.get("offset")]
         return _META_CACHE_PREFIX + fingerprint_bytes(json.dumps(identity).encode())
