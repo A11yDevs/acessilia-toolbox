@@ -596,6 +596,21 @@ def get_dataset_item(
 
 @dataset_router.get(
     "/{dataset_id}/splits/{split}/items/{item_id}/artifacts/{path:path}",
+    responses={
+        200: {
+            "description": "Raw dataset artifact bytes",
+            "headers": {
+                "X-Dataset-Revision": {
+                    "description": "Immutable commit SHA used to retrieve the artifact",
+                    "schema": {"type": "string"},
+                },
+                "X-Dataset-Requested-Revision": {
+                    "description": "Revision parameter supplied by the caller",
+                    "schema": {"type": "string"},
+                },
+            },
+        }
+    },
 )
 def get_dataset_artifact(
     dataset_id: str,
@@ -625,7 +640,12 @@ def get_dataset_artifact(
     doc = result.document
     payload = bytes.fromhex(doc["payload"])
     media_type = doc.get("media_type", "application/octet-stream")
-    return Response(content=payload, media_type=media_type)
+    headers = {}
+    if doc.get("revision"):
+        headers["X-Dataset-Revision"] = str(doc["revision"])
+    if doc.get("requested_revision"):
+        headers["X-Dataset-Requested-Revision"] = str(doc["requested_revision"])
+    return Response(content=payload, media_type=media_type, headers=headers)
 
 
 @dataset_router.get(

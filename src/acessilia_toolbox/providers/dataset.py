@@ -48,8 +48,10 @@ from acessilia_toolbox.core.normalization.extraction import ExtractionResult
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderHealth
 
 # Cache key prefixes
-_META_CACHE_PREFIX = "dataset:meta:"
-_ARTIFACT_CACHE_PREFIX = "dataset:artifact:"
+_META_CACHE_PREFIX = "dataset:meta:v2:"
+_ARTIFACT_CACHE_PREFIX = "dataset:artifact:v2:"
+_DATASET_METADATA_SCHEMA = "acessilia-dataset-item-metadata@1"
+_DATASET_PROVIDER_CONTRACT_VERSION = "2"
 _METADATA_SCHEMAS: dict[str, TypeAdapter[Any]] = {
     "list_datasets": TypeAdapter(list[DatasetInfo]),
     "describe": TypeAdapter(DatasetInfo),
@@ -275,6 +277,13 @@ class DatasetAdapter:
                 capability=capability_id,
             )
 
+        requested_revision = kw.get("revision")
+        effective_revision = self._resolve_effective_revision(kw)
+        if effective_revision is not None:
+            # All nested provider calls in one adapter operation now use the
+            # same immutable revision, including pagination and sync.
+            kw["revision"] = effective_revision
+
         # Pre-compute cache key for metadata operations.
         cache_key = self._meta_cache_key(method_name, kw)
 
@@ -318,11 +327,22 @@ class DatasetAdapter:
         }
 
         result = cached_result if cached_result is not None else sig[method_name]()
+        result = self._stamp_revision(
+            method_name,
+            result,
+            requested_revision=requested_revision,
+            effective_revision=effective_revision,
+        )
 
         # Serialise to plain dict so the executor's dict branch handles it.
         if isinstance(result, tuple) and len(result) == 2:
             # get_artifact returns (bytes, media_type) - wrap in a dict.
-            return {"payload": result[0].hex(), "media_type": result[1]}
+            return {
+                "payload": result[0].hex(),
+                "media_type": result[1],
+                "revision": effective_revision,
+                "requested_revision": requested_revision or effective_revision,
+            }
         if isinstance(result, list):
             return [
                 item.model_dump(mode="json") if hasattr(item, "model_dump") else item
@@ -331,6 +351,64 @@ class DatasetAdapter:
         if hasattr(result, "model_dump"):
             return result.model_dump(mode="json")
         return result  # already a dict (sync report, cached data)
+
+    def _resolve_effective_revision(self, kw: dict[str, Any]) -> str | None:
+        dataset_id = kw.get("dataset_id")
+        if not dataset_id:
+            return None
+        resolver = getattr(self._provider, "resolve_revision", None)
+        if callable(resolver):
+            return resolver(dataset_id, kw.get("revision"))
+        revision = kw.get("revision")
+        return revision if isinstance(revision, str) else None
+
+    def _stamp_revision(
+        self,
+        operation: str,
+        result: Any,
+        *,
+        requested_revision: str | None,
+        effective_revision: str | None,
+    ) -> Any:
+        """Attach the request and immutable revision to serialized item metadata."""
+        if effective_revision is None:
+            return result
+        requested = requested_revision or effective_revision
+
+        def stamp(item: Any) -> Any:
+            if not isinstance(item, (DatasetItem, ItemSummary)):
+                return item
+            metadata = dict(item.metadata)
+            contract = dict(metadata.get("dataset_contract") or {})
+            contract.setdefault("schema", _DATASET_METADATA_SCHEMA)
+            contract.setdefault(
+                "provider_contract_version", _DATASET_PROVIDER_CONTRACT_VERSION
+            )
+            contract["revision"] = {
+                "requested": requested,
+                "effective": effective_revision,
+            }
+            metadata["dataset_contract"] = contract
+            return item.model_copy(
+                update={"revision": effective_revision, "metadata": metadata}
+            )
+
+        if isinstance(result, (DatasetItem, ItemSummary)):
+            return stamp(result)
+        if isinstance(result, list):
+            if operation == "sync":
+                return [
+                    {
+                        **row,
+                        "requested_revision": requested,
+                        "revision": effective_revision,
+                    }
+                    if isinstance(row, dict)
+                    else row
+                    for row in result
+                ]
+            return [stamp(item) for item in result]
+        return result
 
     # ------------------------------------------------------------------
     # Cached metadata helpers
@@ -490,27 +568,67 @@ class DatasetAdapter:
                             "status": "skipped",
                             "reason": str(exc),
                         })
-                for ann in item.annotations:
-                    try:
-                        if ann.path not in refreshed:
-                            self._get_artifact_maybe_mirrored(
-                                dataset_id, ann.path, revision, refresh=True
-                            )
-                            refreshed.add(ann.path)
-                        synced.append({
-                            "item": summary.id,
-                            "split": sp,
-                            "artifact": ann.path,
-                            "status": "mirrored",
-                        })
-                    except Exception as exc:
-                        synced.append({
-                            "item": summary.id,
-                            "split": sp,
-                            "artifact": ann.path,
-                            "status": "skipped",
-                            "reason": str(exc),
-                        })
+                contract = item.metadata.get("dataset_contract", {})
+                references = contract.get("references", [])
+                logical_references = [
+                    reference
+                    for reference in references
+                    if isinstance(reference, dict) and reference.get("path")
+                ] if isinstance(references, list) else []
+                if logical_references:
+                    # Physical bytes are fetched once, while every task binding
+                    # remains visible in the sync report with its selector.
+                    for reference in logical_references:
+                        path = reference["path"]
+                        relation = {
+                            "task": reference.get("task"),
+                            "availability": reference.get("availability"),
+                            "record_selector": reference.get("record_selector"),
+                        }
+                        try:
+                            if path not in refreshed:
+                                self._get_artifact_maybe_mirrored(
+                                    dataset_id, path, revision, refresh=True
+                                )
+                                refreshed.add(path)
+                            synced.append({
+                                "item": summary.id,
+                                "split": sp,
+                                "artifact": path,
+                                **relation,
+                                "status": "mirrored",
+                            })
+                        except Exception as exc:
+                            synced.append({
+                                "item": summary.id,
+                                "split": sp,
+                                "artifact": path,
+                                **relation,
+                                "status": "skipped",
+                                "reason": str(exc),
+                            })
+                else:
+                    for ann in item.annotations:
+                        try:
+                            if ann.path not in refreshed:
+                                self._get_artifact_maybe_mirrored(
+                                    dataset_id, ann.path, revision, refresh=True
+                                )
+                                refreshed.add(ann.path)
+                            synced.append({
+                                "item": summary.id,
+                                "split": sp,
+                                "artifact": ann.path,
+                                "status": "mirrored",
+                            })
+                        except Exception as exc:
+                            synced.append({
+                                "item": summary.id,
+                                "split": sp,
+                                "artifact": ann.path,
+                                "status": "skipped",
+                                "reason": str(exc),
+                            })
 
         return synced
 
@@ -539,21 +657,45 @@ class DatasetAdapter:
         self, dataset_id: str, artifact_path: str, revision: str | None = None
     ) -> str:
         """Reference identity; artifact identities remain content-addressed."""
-        raw = json.dumps([
-            self.descriptor.id, str(getattr(self._provider, "cache_namespace", "")),
-            dataset_id, revision, artifact_path,
-        ]).encode()
+        raw = json.dumps(
+            [
+                self.descriptor.id,
+                getattr(self.descriptor, "version", ""),
+                self._provider_cache_namespace(),
+                _DATASET_PROVIDER_CONTRACT_VERSION,
+                dataset_id,
+                revision,
+                artifact_path,
+            ],
+            sort_keys=True,
+        ).encode()
         return fingerprint_bytes(raw)
 
     def _meta_cache_key(self, operation: str, kw: dict[str, Any]) -> str:
         """Cache key for metadata operations."""
         identity = [
-            self.descriptor.id, str(getattr(self._provider, "cache_namespace", "")),
-            operation, kw.get("dataset_id"), kw.get("revision"),
+            self.descriptor.id,
+            getattr(self.descriptor, "version", ""),
+            self._provider_cache_namespace(),
+            _DATASET_METADATA_SCHEMA,
+            _DATASET_PROVIDER_CONTRACT_VERSION,
+            operation,
+            kw.get("dataset_id"),
+            kw.get("revision"),
         ]
         if operation == "list_items":
             identity += [kw.get("split"), kw.get("limit"), kw.get("offset")]
         return _META_CACHE_PREFIX + fingerprint_bytes(json.dumps(identity).encode())
+
+    def _provider_cache_namespace(self) -> str:
+        provider = getattr(self, "_provider", None)
+        return str(
+            getattr(
+                provider,
+                "cache_namespace",
+                f"legacy:{type(provider).__name__}",
+            )
+        )
 
 
 

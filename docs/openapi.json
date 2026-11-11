@@ -1583,10 +1583,24 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Successful Response",
+                        "description": "Raw dataset artifact bytes",
                         "content": {
                             "application/json": {
                                 "schema": {}
+                            }
+                        },
+                        "headers": {
+                            "X-Dataset-Revision": {
+                                "description": "Immutable commit SHA used to retrieve the artifact",
+                                "schema": {
+                                    "type": "string"
+                                }
+                            },
+                            "X-Dataset-Requested-Revision": {
+                                "description": "Revision parameter supplied by the caller",
+                                "schema": {
+                                    "type": "string"
+                                }
                             }
                         }
                     },
