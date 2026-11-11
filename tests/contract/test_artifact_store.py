@@ -20,6 +20,7 @@ from acessilia_toolbox.providers.storage import S3ArtifactStore, create_artifact
 pytestmark = pytest.mark.contract
 
 PAYLOAD = b"%PDF-contract-test"
+METADATA_PAYLOAD = b"%PDF-contract-metadata"
 BUCKET_CHECK = b"bucket-health-check"
 
 
@@ -102,12 +103,17 @@ def test_stored_content_round_trips(live_store: S3ArtifactStore) -> None:
 
 
 def test_metadata_survives_retrieval(live_store: S3ArtifactStore) -> None:
-    ref = live_store.put(PAYLOAD, media_type="application/pdf", filename="report.pdf")
+    # Use content that no earlier identity test has stored with the default
+    # media type. S3 objects are immutable by content-addressed key, so a
+    # previous put of the same bytes correctly keeps its first metadata.
+    ref = live_store.put(
+        METADATA_PAYLOAD, media_type="application/pdf", filename="report.pdf"
+    )
     stat = live_store.stat(ref.artifact_id)
 
     assert stat.media_type == "application/pdf"
     assert stat.filename == "report.pdf"
-    assert stat.size == len(PAYLOAD)
+    assert stat.size == len(METADATA_PAYLOAD)
     assert stat.storage_backend == "s3"
 
 

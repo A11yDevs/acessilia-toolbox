@@ -32,7 +32,7 @@ from acessilia_toolbox.providers import create_adapter  # noqa: E402
 
 DOCUMENTS_DIR = PROJECT_ROOT / "tests" / "fixtures" / "dataset" / "input"
 EXPECTED_DIR = (
-    PROJECT_ROOT / "tests" / "fixtures" / "dataset" / "intermediate" / "processing-manifest"
+    PROJECT_ROOT / "tests" / "snapshot" / "references" / "processing-manifest"
 )
 BASELINE_DIR = PROJECT_ROOT / "tests" / "snapshot" / "snapshots"
 CAPABILITY = "document.structure.extract"

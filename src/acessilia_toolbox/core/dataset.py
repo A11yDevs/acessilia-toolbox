@@ -43,6 +43,7 @@ class SplitInfo(BaseModel):
     description: str = ""
     item_count: int = Field(default=0, ge=0)
     has_ground_truth: bool = False
+    deprecated: bool = False
     artifact_types: list[str] = Field(default_factory=list)
 
 

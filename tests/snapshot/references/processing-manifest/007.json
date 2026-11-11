@@ -1,0 +1,154 @@
+{
+  "$schema": "urn:a11y-devs:schema:processing-manifest:1.1.0",
+  "schema_version": "1.1.0",
+  "manifest_id": "manifest-965a50c5055cb4f1-r1",
+  "revision": 1,
+  "status": "extracted",
+  "created_at": "2026-08-17T05:07:36.142131Z",
+  "source": {
+    "document_id": "doc-965a50c5055cb4f1",
+    "filename": "007.pdf",
+    "path": "/Users/akira/dados/dev/acessilia-structure-extractor/tests/dataset/input/007.pdf",
+    "media_type": "application/pdf",
+    "byte_size": 648946,
+    "sha256": "965a50c5055cb4f138f3962f16b0821e73314458e8e707883838e6771589b10b"
+  },
+  "extractor": {
+    "name": "docling",
+    "version": "docling-serve",
+    "started_at": "2026-08-17T05:07:19.993125Z",
+    "completed_at": "2026-08-17T05:07:36.142131Z",
+    "duration_ms": 16149,
+    "configuration": {
+      "extractor": "docling-serve",
+      "base_url": "http://localhost:5001"
+    }
+  },
+  "title": "SISTEMA INTERNACIONAL DE UNIDADES (SI) Grandezas e Unidades de Base",
+  "language": "pt-BR",
+  "pages": [
+    {
+      "page_number": 1,
+      "width": 960.0,
+      "height": 540.0,
+      "element_ids": [
+        "element-000001",
+        "element-000002"
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "id": "element-000001",
+      "type": "heading",
+      "raw_label": "section_header",
+      "reading_order": 1,
+      "hierarchy_level": 1,
+      "text": "SISTEMA INTERNACIONAL DE UNIDADES (SI) Grandezas e Unidades de Base",
+      "source_ref": "#/texts/0",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 285.3333333333333,
+            "top": 522.0,
+            "right": 650.0,
+            "bottom": 471.0,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 67
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    },
+    {
+      "id": "element-000002",
+      "type": "table",
+      "raw_label": "table",
+      "reading_order": 2,
+      "hierarchy_level": 1,
+      "text": null,
+      "source_ref": "#/tables/0",
+      "parent_ref": "#/body",
+      "parent_id": null,
+      "page_number": 1,
+      "confidence": null,
+      "provenance": [
+        {
+          "page_number": 1,
+          "bbox": {
+            "left": 84.5426254272461,
+            "top": 445.30985260009766,
+            "right": 856.9712524414062,
+            "bottom": 35.4071044921875,
+            "coord_origin": "BOTTOMLEFT"
+          },
+          "char_start": 0,
+          "char_end": 0
+        }
+      ],
+      "metadata": {
+        "docling_class": "_ItemProxy",
+        "content_layer": "body"
+      }
+    }
+  ],
+  "observations": [
+    {
+      "id": "observation-linearize-table-000002",
+      "kind": "table-requires-processing",
+      "severity": "warning",
+      "message": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis.",
+      "target_ids": [
+        "element-000002"
+      ],
+      "evidence": {
+        "raw_label": "table",
+        "page_number": 1
+      }
+    }
+  ],
+  "obligations": [
+    {
+      "id": "obligation-linearize-table-000002",
+      "kind": "linearize-table",
+      "status": "candidate",
+      "selected": false,
+      "target_ids": [
+        "element-000002"
+      ],
+      "dependencies": [],
+      "admissible_methods": [
+        "docling-table",
+        "pandoc-table",
+        "human-review"
+      ],
+      "method_costs": {
+        "docling-table": 10,
+        "pandoc-table": 15,
+        "human-review": 100
+      },
+      "attempts": [],
+      "rationale": "A tabela deve ter cabeçalhos e ordem de leitura verificáveis."
+    }
+  ],
+  "artifacts": [],
+  "summary": {
+    "page_count": 1,
+    "element_count": 2,
+    "observation_count": 1,
+    "obligation_count": 1,
+    "element_types": {
+      "heading": 1,
+      "table": 1
+    }
+  }
+}

@@ -9,6 +9,7 @@
     "description": { "type": "string" },
     "item_count": { "type": "integer", "minimum": 0 },
     "has_ground_truth": { "type": "boolean" },
+    "deprecated": { "type": "boolean" },
     "artifact_types": { "type": "array", "items": { "type": "string" } }
   },
   "required": ["id", "item_count", "has_ground_truth"]

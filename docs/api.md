@@ -100,6 +100,63 @@ If asynchronous job state is exposed through the Toolbox, its
 authoritative state must live in an external state service rather than
 process memory.
 
+## Dataset provider revisions and references
+
+The GitHub provider defaults to the immutable Acessilia Dataset revision
+855e9e927e606328203e87de74b1afcc6014e5b4. Set `config.default_revision`
+on the `dataset-github` provider descriptor to use another full commit SHA,
+including a pinned legacy revision. A caller may still request a Git
+branch, tag, or commit with the revision parameter. Branches and tags are
+resolved to a full commit SHA before manifests, metadata, or artifact bytes are
+read. Item metadata records both the requested value and effective SHA under
+metadata.dataset_contract.revision; item and list responses also set revision
+to the effective SHA. Artifact downloads return the
+X-Dataset-Requested-Revision and X-Dataset-Revision headers.
+
+The provider supports these layouts:
+
+| Layout at the requested revision | Advertised splits | Reference behavior |
+|---|---|---|
+| Legacy: no references/manifest.csv, and the input manifest has no input_path | input, plus intermediate and outputs only when their manifests exist | Numbered top-level inputs keep their stored ID filenames. Named files in subdirectories keep their basenames. The legacy formula CSV is attached only to inputs with a matching record. Revision `9ed07b2` requires that CSV. Intermediate and available output paths come from their manifests. |
+| Transition: references/manifest.csv v1.2.0 and legacy split manifests coexist | input, plus intermediate and outputs marked deprecated when their manifests exist | The v1.2.0 references manifest wins for input annotations. Legacy manifests do not replace or repair invalid new references. |
+| References v1.2: input_path plus references/manifest.csv v1.2.0 | input | Each input carries task coverage and record selectors from the references manifest. |
+
+If a new input manifest has input_path but the required references manifest
+is missing, the provider returns a dataset error instead of falling back to a
+legacy layout. The provider validates the manifest against
+`references/manifest.schema.json` at the same revision and checks the schema
+version even when the CSV has no rows. A missing schema, incompatible version,
+or malformed manifest fails explicitly. The split summary verifies its
+references and selectors before advertising ground truth. The provider validates
+the selected CSV rows and JSON documents against their content schemas at the
+effective SHA. Item operations also verify the existence of input files and
+available legacy artifacts at that SHA. A reference selector
+must identify the input, select records for the declared task, and match the
+declared record count. An unknown
+eligible count is returned as null. A valid header-only manifest is an empty collection. A
+task marked unannotated appears in metadata and does not create an annotation
+artifact; explicit negative references remain annotation artifacts.
+
+Reference links live in the versioned
+metadata.dataset_contract.references structure. Each entry identifies task,
+availability, coverage, provenance, content schema, physical path, and the
+CSV/JSON selector for the applicable records. Several logical links may point
+to the same physical file: annotations deduplicates that file by path while
+metadata retains every task selector. has_annotations means the item has at
+least one applicable reference file. artifact_count is the number of unique
+physical paths across artifacts and annotations; a shared file is counted
+once.
+
+The pinned transition revision still contains intermediate and outputs
+manifests, so it advertises those splits with deprecated=true while clients
+migrate. They remain accessible on historical revisions selected with an
+explicit full SHA in the revision parameter. A future provider default must
+not omit either public split until the deprecated flag has appeared for at
+least one released version and the removal is recorded in the changelog, as
+required by issue #108. The current branch establishes the flag and retains
+the historical layouts; the later default-revision migration is a separate
+release step.
+
 ## Authentication
 
 The REST API requires Bearer token authentication with the key in the

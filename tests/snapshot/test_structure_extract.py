@@ -14,7 +14,7 @@ Requires docling-serve and the dataset submodule; skipped when either is absent.
 
 from __future__ import annotations
 
-import csv
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -33,8 +33,8 @@ pytestmark = pytest.mark.snapshot
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATASET_DIR = PROJECT_ROOT / "tests" / "fixtures" / "dataset"
 DOCUMENTS_DIR = DATASET_DIR / "input"
-EXPECTED_DIR = DATASET_DIR / "intermediate" / "processing-manifest"
-MANIFEST_CSV = DATASET_DIR / "intermediate" / "manifest.csv"
+REFERENCE_DIR = Path(__file__).parent / "references"
+EXPECTED_DIR = REFERENCE_DIR / "processing-manifest"
 BASELINE_DIR = Path(__file__).parent / "snapshots"
 CAPABILITY = "document.structure.extract"
 
@@ -180,35 +180,19 @@ def test_reference_manifests_are_reported(
             print(f"  - {diff}")
 
 
-@pytest.mark.skipif(not MANIFEST_CSV.is_file(), reason="dataset manifest missing")
-def test_expected_manifests_are_declared_in_the_dataset_index() -> None:
-    declared = {
-        row["input_id"]
-        for row in _dataset_index()
-        if row.get("intermediate_type") == "processing-manifest"
+def test_historical_manifest_inventory() -> None:
+    manifest = json.loads((REFERENCE_DIR / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["source_revision"] == "9ed07b28aeddb69721228f2dd66de6f9794c0001"
+    assert manifest["schema_version"] == "1.1.0"
+    rows = manifest["snapshots"]
+    assert [row["input_id"] for row in rows] == ["001", "003", "004", "005", "007", "008"]
+    assert {path.stem for path in EXPECTED_DIR.glob("*.json")} == {
+        row["input_id"] for row in rows
     }
-
-    for document_id, _, _ in REFERENCES:
-        assert document_id in declared, f"{document_id} is missing from manifest.csv"
-
-
-@pytest.mark.skipif(not MANIFEST_CSV.is_file(), reason="dataset manifest missing")
-def test_reference_manifests_predate_the_current_provider() -> None:
-    """Documents why reference differences are reported instead of asserted."""
-    versions = {
-        row["extractor_version"]
-        for row in _dataset_index()
-        if row.get("intermediate_type") == "processing-manifest"
-        and row.get("extractor_version")
-    }
-
-    assert versions, "dataset does not record the extractor version"
-    assert versions == {"2.87.0"}, (
-        f"reference manifests were produced with {versions}; update the note in "
-        "this module if the dataset is re-recorded"
-    )
-
-
-def _dataset_index() -> list[dict[str, str]]:
-    with MANIFEST_CSV.open(encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
+    for row in rows:
+        input_id = row["input_id"]
+        assert row["file_path"] == f"processing-manifest/{input_id}.json"
+        data = (REFERENCE_DIR / row["file_path"]).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == row["sha256"]
+        assert json.loads(data)["schema_version"] == manifest["schema_version"]
+        assert row["extractor_version"] == "2.87.0"

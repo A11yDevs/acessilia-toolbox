@@ -1,0 +1,74 @@
+{
+  "source_repository": "A11yDevs/acessilia-dataset",
+  "source_revision": "9ed07b28aeddb69721228f2dd66de6f9794c0001",
+  "schema_version": "1.1.0",
+  "purpose": "Historical Docling output for reporting provider drift in structure extraction.",
+  "snapshots": [
+    {
+      "input_id": "001",
+      "file_path": "processing-manifest/001.json",
+      "sha256": "b48cbf04ab3070b92486317d25c0d226bc0cd6166524a45748af433074db7d59",
+      "extractor_version": "2.87.0",
+      "extractor_config": {
+        "ocr": true,
+        "table_structure": true,
+        "remote_services": false
+      }
+    },
+    {
+      "input_id": "003",
+      "file_path": "processing-manifest/003.json",
+      "sha256": "31f28a7c224fae61f20578165fb235dec1c4da48d3b9ec54e2777dc63869a6a4",
+      "extractor_version": "2.87.0",
+      "extractor_config": {
+        "ocr": true,
+        "table_structure": true,
+        "remote_services": false
+      }
+    },
+    {
+      "input_id": "004",
+      "file_path": "processing-manifest/004.json",
+      "sha256": "dbef9086a4c5c5843dd0e3a97486c7c873192443770d5faf477e6d0b1bfd712d",
+      "extractor_version": "2.87.0",
+      "extractor_config": {
+        "ocr": true,
+        "table_structure": true,
+        "remote_services": false
+      }
+    },
+    {
+      "input_id": "005",
+      "file_path": "processing-manifest/005.json",
+      "sha256": "bdad2da1a4c5ea6e936ea71023392e6498b42de00d9ce7f98ddb4aa7f97f998c",
+      "extractor_version": "2.87.0",
+      "extractor_config": {
+        "ocr": true,
+        "table_structure": true,
+        "remote_services": false
+      }
+    },
+    {
+      "input_id": "007",
+      "file_path": "processing-manifest/007.json",
+      "sha256": "6ae8cebb9e63d2d862863f66c2d7fb9e2e063c474bffcb2eac93c44c0004ba02",
+      "extractor_version": "2.87.0",
+      "extractor_config": {
+        "ocr": true,
+        "table_structure": true,
+        "remote_services": false
+      }
+    },
+    {
+      "input_id": "008",
+      "file_path": "processing-manifest/008.json",
+      "sha256": "6c09696d87f3eb8fa3bdb73a5a69358b4a8f9df3c7bec6841fc0d253fc5950c9",
+      "extractor_version": "2.87.0",
+      "extractor_config": {
+        "ocr": true,
+        "table_structure": true,
+        "remote_services": false
+      }
+    }
+  ]
+}

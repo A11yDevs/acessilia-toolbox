@@ -117,6 +117,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: 0
+          submodules: true
 
       - name: Set up Python 3.12
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
@@ -145,13 +147,22 @@ jobs:
           python -m pip install ".[dev]"
 
       - name: Lint with ruff
-        run: python -m ruff check src/ tests/ scripts/
+        run: python -m ruff check --extend-exclude tests/fixtures/dataset src/ tests/ scripts/
 
       - name: Type check with mypy
         run: python -m mypy src/
 
+      - name: Verify paths in the published legacy Dataset
+        run: python -m pytest tests/integration/test_dataset_legacy_paths.py -v
+
       - name: Run tests
         run: python -m pytest tests/unit/ -v --junitxml=test-results.xml
+
+      - name: Verify the pinned Dataset provider contract
+        run: >-
+          python -m pytest tests/integration/test_dataset_github_contract.py
+          tests/snapshot/test_structure_extract.py::test_historical_manifest_inventory
+          -v --junitxml=dataset-contract-results.xml
 
       - name: Validate production and staging Compose deployment gates
         run: >-
@@ -166,4 +177,4 @@ jobs:
       - name: Reject unexpected skipped tests
         run: >-
           python scripts/check_no_skipped_tests.py test-results.xml artifact-test-results.xml
-          production-deployment-results.xml
+          production-deployment-results.xml dataset-contract-results.xml

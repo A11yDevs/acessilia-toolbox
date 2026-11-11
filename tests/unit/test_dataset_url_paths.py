@@ -4,7 +4,10 @@ import httpx
 import pytest
 
 from acessilia_toolbox.core.provider import ProviderDescriptor
-from acessilia_toolbox.providers.dataset_github import GitHubDatasetProvider
+from acessilia_toolbox.providers.dataset_github import (
+    DATASET_REFERENCE_REVISION,
+    GitHubDatasetProvider,
+)
 
 
 @pytest.mark.parametrize(
@@ -34,6 +37,8 @@ def test_github_artifact_path_is_encoded_without_changing_filename(path):
         assert provider.get_artifact("acessilia-dataset", path)[0] == b"fixture"
     finally:
         provider._http.close()
-    assert seen[0].path == "/A11yDevs/acessilia-dataset/main/" + path
+    assert seen[0].path == (
+        f"/A11yDevs/acessilia-dataset/{DATASET_REFERENCE_REVISION}/" + path
+    )
     assert not seen[0].query
     assert not seen[0].fragment
