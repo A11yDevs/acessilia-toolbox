@@ -279,7 +279,9 @@ providers:
     default_language: pt-BR
 - id: piper-tts
   version: '1.2'
-  transport: in_process
+  transport: http
+  endpoint: ${PIPER_TTS_URL:-http://piper-tts:5012}
+  health_path: /health
   timeout_seconds: 300
   capabilities:
   - audio.synthesize

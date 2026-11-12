@@ -48,6 +48,7 @@ services:
       PDF_UA_RENDER_URL: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
       VERAPDF_VALIDATE_URL: ${VERAPDF_VALIDATE_URL:-http://verapdf-validate:5008}
       MATH_SPEECH_URL: ${MATH_SPEECH_URL:-http://math-speech:5009}
+      PIPER_TTS_URL: ${PIPER_TTS_URL:-http://piper-tts:5012}
       VLM_SERVE_URL: ${VLM_SERVE_URL:-}
       VLM_API_KEY: ${VLM_API_KEY:-}
     env_file:
@@ -282,6 +283,21 @@ services:
       timeout: 5s
       retries: 10
 
+  piper-tts:
+    image: ${PIPER_TTS_IMAGE:-ghcr.io/a11ydevs/acessilia-piper-tts:latest}
+    container_name: piper-tts-staging
+    ports:
+      - "127.0.0.1:${PIPER_TTS_PORT:-5012}:5012"
+    volumes:
+      - piper-models:/models
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5012/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
       # ── One-shot bucket init ──────────────────────────────────────
   minio-init:
     image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio@sha256:4cf4831a2bbcf13ddca09c1cbcc9faff716dd3c4247e0babc32864b8ee8e0034}
@@ -309,4 +325,5 @@ volumes:
   minio-data:
   nougat-models:
   nougat-torch-models:
+  piper-models:
   valkey-data:

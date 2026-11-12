@@ -34,6 +34,7 @@ services:
       PDF_UA_RENDER_URL: ${PDF_UA_RENDER_URL:-http://pdf-ua-render:5007}
       VERAPDF_VALIDATE_URL: ${VERAPDF_VALIDATE_URL:-http://verapdf-validate:5008}
       MATH_SPEECH_URL: ${MATH_SPEECH_URL:-http://math-speech:5009}
+      PIPER_TTS_URL: ${PIPER_TTS_URL:-http://piper-tts:5012}
       VLM_SERVE_URL: ${VLM_SERVE_URL:-}
       VLM_API_KEY: ${VLM_API_KEY:-}
       MINIO_URL: ${MINIO_URL:-http://minio:9000}
@@ -312,6 +313,23 @@ services:
       retries: 10
       start_period: 10s
     restart: unless-stopped
+  piper-tts:
+    build:
+      context: .
+      dockerfile: docker/piper-tts.Dockerfile
+    image: ${PIPER_TTS_IMAGE:-piper-tts:latest}
+    container_name: piper-tts
+    ports:
+      - "${PIPER_TTS_PORT:-5012}:5012"
+    volumes:
+      - piper-models:/models
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5012/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
 
 volumes:
   artifact-fallback:
@@ -321,4 +339,5 @@ volumes:
   minio-data:
   nougat-models:
   nougat-torch-models:
+  piper-models:
   valkey-data:

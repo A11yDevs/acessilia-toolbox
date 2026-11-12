@@ -342,10 +342,12 @@ providers:
       default_voice: pt-BR-FranciscaNeural
       default_language: pt-BR
 
-  # piper-tts: local offline neural TTS via Piper ONNX runtime.
+  # piper-tts: local offline neural TTS via Piper sidecar container (HTTP).
   - id: piper-tts
     version: "1.2"
-    transport: in_process
+    transport: http
+    endpoint: ${PIPER_TTS_URL:-http://piper-tts:5012}
+    health_path: /health
     timeout_seconds: 300
     capabilities:
       - audio.synthesize
