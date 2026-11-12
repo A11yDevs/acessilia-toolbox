@@ -1,0 +1,37 @@
+id: audio.synthesize
+version: 1
+description: >-
+  Synthesize spoken audio from text into an MP3 or WAV file.
+  Voice, language, rate and volume are configurable parameters. The audio file
+  is stored as an artifact and the result carries its reference, never the bytes.
+
+input:
+  schema: artifact/document@1
+  media_types:
+    - text/plain
+    - text/markdown
+
+output:
+  schema: artifact/audio-export@1
+  media_types:
+    - audio/mpeg
+    - audio/wav
+  by_reference: true
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 300
+
+semantics:
+  requires:
+    - document_available
+  produces:
+    - audio_available
+
+providers:
+  - id: edge-tts
+    version: "7.3+"
+  - id: piper-tts
+    version: "1.2+"
