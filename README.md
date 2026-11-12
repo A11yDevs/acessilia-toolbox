@@ -199,6 +199,7 @@ flowchart TB
 | `pdf.split`, `pdf.render` (v1, v2), `document.text.spans` | pymupdf-pdf (in-process) | ✅ |
 | `math.recognize` | docling-math, rapid-latex-ocr, pp-formulanet | ✅ |
 | `math.convert`, `math.verbalize` | math-speech (MathJax + MathCAT sidecar) | ✅ |
+| `audio.synthesize` | edge-tts (in-process), piper-tts (sidecar) | ✅ |
 | `media.inspect` | pure-media-inspect (in-process, optional `media` extra) | ✅ |
 | `music.omr` | homr (in-process, local installs only), audiveris (sidecar) | ✅ |
 | `image.page.orient` | rapidocr-orient (sidecar, optional) | ✅ |

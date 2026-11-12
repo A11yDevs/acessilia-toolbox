@@ -330,7 +330,7 @@ providers:
   # edge-tts: cloud-based neural TTS via Microsoft Edge speech service.
   # Provides 1:1 parity with the legacy core executor (Acessilia #73).
   - id: edge-tts
-    version: "7.3"
+    version: "6.1"
     transport: in_process
     timeout_seconds: 300
     capabilities:

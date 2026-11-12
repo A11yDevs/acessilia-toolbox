@@ -19,9 +19,14 @@ RUN pip install --no-cache-dir \
     "piper-tts>=1.2.0" && \
     pip cache purge
 
-# Create models directory and non-root runtime user
+# Create models directory, download default pt-BR model, and set non-root user
+ARG DEFAULT_VOICE=pt_BR-faber-medium
 RUN useradd --create-home --shell /bin/bash appuser && \
     mkdir -p /models && \
+    curl -fsSL -o /models/${DEFAULT_VOICE}.onnx \
+        https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/pt/pt_BR/faber/medium/${DEFAULT_VOICE}.onnx && \
+    curl -fsSL -o /models/${DEFAULT_VOICE}.onnx.json \
+        https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/pt/pt_BR/faber/medium/${DEFAULT_VOICE}.onnx.json && \
     chown -R appuser:appuser /home/appuser /app /models
 
 COPY docker/piper-tts/server.py /app/server.py

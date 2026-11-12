@@ -284,7 +284,7 @@ services:
       retries: 10
 
   piper-tts:
-    image: ${PIPER_TTS_IMAGE:-ghcr.io/a11ydevs/acessilia-piper-tts:latest}
+    image: ${PIPER_TTS_IMAGE:-ghcr.io/a11ydevs/acessilia-toolbox-piper-tts:${TRACK_TAG:-develop}}
     container_name: piper-tts-staging
     ports:
       - "127.0.0.1:${PIPER_TTS_PORT:-5012}:5012"

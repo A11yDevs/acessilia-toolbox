@@ -256,7 +256,7 @@ providers:
   - application/json
   - text/plain
 - id: edge-tts
-  version: '7.3'
+  version: '6.1'
   transport: in_process
   timeout_seconds: 300
   capabilities:

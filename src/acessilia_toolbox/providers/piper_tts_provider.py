@@ -6,7 +6,9 @@ Keeps the Toolbox model-free (Principle 4 of the Constitution).
 
 from __future__ import annotations
 
+import io
 import logging
+import wave
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,6 +38,19 @@ DEFAULT_PIPER_VOICE = "pt_BR-faber-medium"
 DEFAULT_PIPER_LANGUAGE = "pt-BR"
 
 
+def _compute_wav_duration(payload: bytes) -> float | None:
+    """Read the duration in seconds from standard WAV PCM header."""
+    try:
+        with wave.open(io.BytesIO(payload), "rb") as wf:
+            frames = wf.getnframes()
+            rate = wf.getframerate()
+            if rate > 0:
+                return round(frames / float(rate), 3)
+    except Exception:
+        pass
+    return None
+
+
 class PiperTtsProvider:
     """HTTP client adapter for the out-of-process Piper TTS sidecar."""
 
@@ -45,6 +60,7 @@ class PiperTtsProvider:
     def __init__(self, descriptor: ProviderDescriptor) -> None:
         self.descriptor = descriptor
         self.base_url = (descriptor.endpoint or "").rstrip("/")
+        self._version_cache: dict[str, str] | None = None
 
     def _client(self, timeout: float | None = None) -> httpx.Client:
         return httpx.Client(
@@ -103,11 +119,13 @@ class PiperTtsProvider:
 
         completed_at = datetime.now(UTC)
         duration_ms = round((perf_counter() - started_clock) * 1000)
+        duration_seconds = _compute_wav_duration(wav_bytes)
 
-        document = {
+        document: dict[str, Any] = {
             "artifact_id": fingerprint_bytes(wav_bytes),
             "media_type": "audio/wav",
             "size_bytes": len(wav_bytes),
+            "duration_seconds": duration_seconds,
             "voice": voice,
             "language": language,
             "toolchain": {
@@ -167,20 +185,37 @@ class PiperTtsProvider:
                 provider=self.descriptor.id,
             )
 
+        piper_v = response.headers.get("X-Piper-Version")
+        piper_eng = response.headers.get("X-Piper-Engine")
+        if piper_v and self._version_cache is None:
+            self._version_cache = {
+                "version": piper_v,
+                "piper": piper_v,
+                "engine": piper_eng or "piper-onnx",
+            }
+
         return response.content
 
-    def _server_versions(self, client: httpx.Client) -> dict[str, str]:
-        try:
-            resp = client.get(VERSION_PATH, timeout=5.0)
-            if resp.is_success:
-                return {str(k): str(v) for k, v in resp.json().items()}
-        except Exception:
-            pass
+    def _server_versions(self, client: httpx.Client | None = None) -> dict[str, str]:
+        if self._version_cache is not None:
+            return self._version_cache
+
+        if client is not None:
+            try:
+                resp = client.get(VERSION_PATH, timeout=5.0)
+                if resp.is_success:
+                    self._version_cache = {str(k): str(v) for k, v in resp.json().items()}
+                    return self._version_cache
+            except Exception:
+                pass
         return {"version": self.descriptor.version}
 
     def versions(self) -> dict[str, str]:
+        if self._version_cache is not None:
+            return {"provider": self.descriptor.id, **self._version_cache}
         with self._client(timeout=5.0) as client:
-            return self._server_versions(client)
+            srv = self._server_versions(client)
+            return {"provider": self.descriptor.id, **srv}
 
     def health(self) -> ProviderHealth:
         checked_at = datetime.now(UTC)
