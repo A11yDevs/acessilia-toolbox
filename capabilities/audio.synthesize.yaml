@@ -32,6 +32,6 @@ semantics:
 
 providers:
   - id: edge-tts
-    version: "7.3+"
+    version: "6.1+"
   - id: piper-tts
     version: "1.2+"

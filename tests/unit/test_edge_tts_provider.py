@@ -17,7 +17,7 @@ from acessilia_toolbox.providers.edge_tts_provider import EdgeTtsProvider
 def make_descriptor(**overrides: object) -> ProviderDescriptor:
     base = {
         "id": "edge-tts",
-        "version": "7.3",
+        "version": "6.1",
         "transport": "in_process",
         "capabilities": ["audio.synthesize"],
         "timeout_seconds": 300,
@@ -66,14 +66,22 @@ class TestEdgeTtsProvider:
 
     def test_chunk_text_paragraphs(self) -> None:
         provider = EdgeTtsProvider(make_descriptor())
-        p1 = "Paragraph 1 " * 50
-        p2 = "Paragraph 2 " * 50
+        p1 = "Paragraph 1 " * 10
+        p2 = "Paragraph 2 " * 10
         text = f"{p1}\n\n{p2}"
 
         chunks = provider._chunk_text(text, chunk_size=200)
         assert len(chunks) == 2
         assert "Paragraph 1" in chunks[0]
         assert "Paragraph 2" in chunks[1]
+
+    def test_chunk_text_long_single_paragraph(self) -> None:
+        provider = EdgeTtsProvider(make_descriptor())
+        long_paragraph = "This is sentence one. " * 30  # ~660 chars without newlines
+        chunks = provider._chunk_text(long_paragraph, chunk_size=200)
+        assert len(chunks) > 1
+        for c in chunks:
+            assert len(c) <= 250
 
     def test_synthesize_success_mocked(self) -> None:
         provider = EdgeTtsProvider(make_descriptor())
@@ -89,7 +97,7 @@ class TestEdgeTtsProvider:
 
         mock_edge_tts = MagicMock()
         mock_edge_tts.Communicate = mock_communicate_cls
-        mock_edge_tts.__version__ = "7.3.1"
+        mock_edge_tts.__version__ = "6.1.12"
 
         with patch.dict("sys.modules", {"edge_tts": mock_edge_tts}):
             result = provider.execute(
@@ -97,8 +105,20 @@ class TestEdgeTtsProvider:
                 b"Primeiro paragrafo.\n\nSegundo paragrafo.",
                 filename="speech_sample.txt",
                 media_type="text/plain",
-                parameters={"voice": "pt-BR-AntonioNeural", "rate": "+10%", "chunk_size": 25},
+                parameters={
+                    "voice": "pt-BR-AntonioNeural",
+                    "rate": 1.2,
+                    "volume": 0.8,
+                    "pitch": 50,
+                    "chunk_size": 25,
+                },
             )
+
+        # Check parameter normalization
+        call_kwargs = mock_communicate_cls.call_args[1]
+        assert call_kwargs["rate"] == "+20%"
+        assert call_kwargs["volume"] == "-20%"
+        assert call_kwargs["pitch"] == "+50Hz"
 
         assert result.backend == "edge-tts"
         assert result.document["media_type"] == "audio/mpeg"
@@ -107,7 +127,7 @@ class TestEdgeTtsProvider:
         assert result.document["chunk_count"] == 2
         assert result.document["size_bytes"] == len(b"FAKE_MP3_FRAME_DATA" * 2)
         assert result.document["toolchain"]["provider"] == "edge-tts"
-        assert result.document["toolchain"]["edge_tts"] == "7.3.1"
+        assert result.document["toolchain"]["edge_tts"] == "6.1.12"
 
         assert len(result.outputs) == 1
         output = result.outputs[0]
@@ -172,7 +192,7 @@ class TestEdgeTtsProvider:
 
         mock_edge_tts = MagicMock()
         mock_edge_tts.Communicate = mock_communicate_cls
-        mock_edge_tts.__version__ = "7.3.1"
+        mock_edge_tts.__version__ = "6.1.12"
 
         with patch.dict("sys.modules", {"edge_tts": mock_edge_tts}):
             result = executor.execute(

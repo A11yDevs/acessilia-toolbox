@@ -115,6 +115,7 @@ class TestPiperTtsProvider:
         assert result.document["voice"] == "pt_BR-edresson-low"
         assert result.document["language"] == "pt-BR"
         assert result.document["size_bytes"] == len(FAKE_WAV_HEADER)
+        assert "duration_seconds" in result.document
         assert result.document["toolchain"]["provider"] == "piper-tts"
         assert result.document["toolchain"]["engine"] == "piper-onnx"
 
