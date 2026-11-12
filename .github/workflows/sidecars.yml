@@ -55,6 +55,7 @@ jobs:
           - { name: audiveris-serve, dockerfile: docker/audiveris-serve.Dockerfile }
           - { name: nougat, dockerfile: docker/nougat-cpu.Dockerfile }
           - { name: mineru, dockerfile: docker/mineru-cpu.Dockerfile }
+          - { name: piper-tts, dockerfile: docker/piper-tts.Dockerfile }
 
     steps:
       - name: Check out commit

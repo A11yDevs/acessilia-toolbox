@@ -265,6 +265,32 @@ providers:
   media_types:
   - application/json
   - text/plain
+- id: edge-tts
+  version: '6.1'
+  transport: in_process
+  timeout_seconds: 300
+  capabilities:
+  - audio.synthesize
+  media_types:
+  - text/plain
+  - text/markdown
+  config:
+    default_voice: pt-BR-FranciscaNeural
+    default_language: pt-BR
+- id: piper-tts
+  version: '1.2'
+  transport: http
+  endpoint: ${PIPER_TTS_URL:-http://piper-tts:5012}
+  health_path: /health
+  timeout_seconds: 300
+  capabilities:
+  - audio.synthesize
+  media_types:
+  - text/plain
+  - text/markdown
+  config:
+    default_voice: pt_BR-faber-medium
+    default_language: pt-BR
 - id: pure-chem
   version: '1.0'
   transport: in_process
