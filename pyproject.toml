@@ -48,10 +48,7 @@ cache = ["redis>=5.0"]
 pdf = ["pymupdf>=1.24"]
 media = ["Pillow>=10"]
 music = ["homr>=0.1"]
-audio = [
-    "edge-tts>=6.1.12",
-    "piper-tts>=1.2.0",
-]
+audio = ["edge-tts>=6.1.12"]
 dev = [
     "acessilia-toolbox[api,storage,cache,pdf,media,music,audio]",
     "pytest>=8.0",
