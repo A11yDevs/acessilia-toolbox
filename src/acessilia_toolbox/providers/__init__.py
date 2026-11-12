@@ -13,6 +13,7 @@ from acessilia_toolbox.providers.docling_chem import DoclingChemProvider
 from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
 from acessilia_toolbox.providers.docling_math import DoclingMathProvider
 from acessilia_toolbox.providers.docling_ocr import DoclingOcrProvider
+from acessilia_toolbox.providers.edge_tts_provider import EdgeTtsProvider
 from acessilia_toolbox.providers.math_speech import MathSpeechProvider
 from acessilia_toolbox.providers.media_inspect import PureMediaInspectProvider
 from acessilia_toolbox.providers.mineru import MineruProvider
@@ -23,6 +24,7 @@ from acessilia_toolbox.providers.nougat import NougatProvider
 from acessilia_toolbox.providers.openai_vlm import OpenAiCompatibleVlmProvider
 from acessilia_toolbox.providers.pandoc_docx import PandocDocxProvider
 from acessilia_toolbox.providers.pandoc_pdf_ua import PandocPdfUaProvider
+from acessilia_toolbox.providers.piper_tts_provider import PiperTtsProvider
 from acessilia_toolbox.providers.pp_formulanet import PPFormulaNetProvider
 from acessilia_toolbox.providers.pure_accessibility import PureAccessibilityProvider
 from acessilia_toolbox.providers.pure_chem import PureChemProvider
@@ -81,6 +83,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "docling-layout": DoclingLayoutProvider,
     "docling-math": DoclingMathProvider,
     "docling-ocr": DoclingOcrProvider,
+    "edge-tts": EdgeTtsProvider,
     "homr": HomrProvider,
     "math-speech": MathSpeechProvider,
     "mineru": MineruProvider,
@@ -89,6 +92,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "nougat": NougatProvider,
     "pandoc-docx": PandocDocxProvider,
     "pandoc-pdf-ua": PandocPdfUaProvider,
+    "piper-tts": PiperTtsProvider,
     "pp-formulanet": PPFormulaNetProvider,
     "pure-accessibility": PureAccessibilityProvider,
     "pure-chem": PureChemProvider,
@@ -124,6 +128,7 @@ __all__ = [
     "DoclingMathProvider",
     "DoclingOcrProvider",
     "DoclingProvider",
+    "EdgeTtsProvider",
     "GitHubDatasetProvider",
     "HomrProvider",
     "HuggingFaceDatasetProvider",
@@ -136,6 +141,7 @@ __all__ = [
     "PPFormulaNetProvider",
     "PandocDocxProvider",
     "PandocPdfUaProvider",
+    "PiperTtsProvider",
     "PureAccessibilityProvider",
     "PureChemProvider",
     "PureCodeProvider",
