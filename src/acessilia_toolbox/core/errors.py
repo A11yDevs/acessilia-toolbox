@@ -78,6 +78,34 @@ class AuthorizationError(ToolboxError):
     http_status = 401
 
 
+class OperationNotFoundError(ToolboxError):
+    """The operation id is unknown to this replica, or belongs to another task."""
+
+    code = "operation_not_found"
+    http_status = 404
+
+
+class OperationInProgressError(ToolboxError):
+    """The same operation id is already running; the caller must not repeat it."""
+
+    code = "operation_in_progress"
+    http_status = 409
+
+
+class OperationFinishedError(ToolboxError):
+    """The operation id is already terminal and must not run again."""
+
+    code = "operation_finished"
+    http_status = 409
+
+
+class OperationCancelledError(ToolboxError):
+    """A cancel request was observed before a result was published."""
+
+    code = "operation_cancelled"
+    http_status = 409
+
+
 class ProviderUnavailableError(ToolboxError):
     code = "provider_unavailable"
     http_status = 503

@@ -11,7 +11,7 @@ from typing import Annotated, Any, BinaryIO
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
@@ -23,6 +23,7 @@ from acessilia_toolbox.api.schemas import (
     ErrorResponse,
     ExecutionResponse,
     HealthResponse,
+    OperationCancelResponse,
     ReadinessResponse,
     UploadLimitResponse,
 )
@@ -31,10 +32,17 @@ from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import (
     DatasetNotFoundError,
     InvalidInputError,
+    OperationCancelledError,
+    OperationNotFoundError,
     ProviderUnavailableError,
     UploadTooLargeError,
 )
 from acessilia_toolbox.core.executor import CapabilityExecutor
+from acessilia_toolbox.core.operations import (
+    Operation,
+    OperationRegistry,
+    ensure_not_cancelled,
+)
 from acessilia_toolbox.core.pddl import (
     capability_action,
     domain_fragment,
@@ -73,6 +81,75 @@ UPLOAD_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 LOG = logging.getLogger(__name__)
+
+#: Operation headers are additive: a client that omits them keeps the legacy
+#: one-request behaviour and no cancellable state is retained.
+OPERATION_ID_HEADER = "X-Acessilia-Operation-Id"
+TASK_ID_HEADER = "X-Acessilia-Task-Id"
+ATTEMPT_ID_HEADER = "X-Acessilia-Attempt-Id"
+
+
+def operations(request: Request) -> OperationRegistry:
+    registry: OperationRegistry = request.app.state.operations
+    return registry
+
+
+def _begin_operation(
+    request: Request,
+    *,
+    capability_id: str,
+    operation_id: str | None,
+    task_id: str | None,
+    attempt_id: str | None,
+) -> tuple[Operation | None, bool]:
+    if operation_id is None:
+        return None, True
+    return operations(request).begin(
+        operation_id,
+        task_id=task_id,
+        attempt_id=attempt_id,
+        capability_id=capability_id,
+    )
+
+
+def _finish_operation(
+    request: Request,
+    operation: Operation | None,
+    state: str,
+    *,
+    result: Any = None,
+    error: BaseException | None = None,
+) -> None:
+    if operation is None:
+        return
+    # A provider failure after a cancel is still a cancelled operation: the
+    # caller asked to stop, and no result was published.
+    operations(request).finish(
+        operation,
+        "cancelled" if operation.cancel_requested else state,
+        result=result,
+        error=error,
+    )
+
+
+async def _join_operation(operation: Operation) -> Any:
+    """Wait for the owner request and return its result, without a new slot.
+
+    A retry with the same ``operation_id`` must not run the provider again.
+    Waiting happens in a thread so the event loop and the cancellation route
+    stay responsive.
+    """
+    if not operation.terminal:
+        await run_in_threadpool(operation.done_event.wait)
+    if operation.cancel_requested or operation.state == "cancelled":
+        raise OperationCancelledError(
+            "operation was cancelled", operation_id=operation.operation_id
+        )
+    if operation.error is not None:
+        raise operation.error
+    return operation.result
+
+
 
 
 def capabilities(request: Request) -> CapabilityRegistry:
@@ -223,16 +300,41 @@ async def execute_capability(
     language: Annotated[str, Form()] = "pt-BR",
     version: Annotated[int | None, Form()] = None,
     no_cache: Annotated[bool, Form(description="Skip execution cache")] = False,
+    operation_id: Annotated[str | None, Header(alias=OPERATION_ID_HEADER)] = None,
+    task_id: Annotated[str | None, Header(alias=TASK_ID_HEADER)] = None,
+    attempt_id: Annotated[str | None, Header(alias=ATTEMPT_ID_HEADER)] = None,
 ) -> ExecutionResponse:
     slots = request.app.state.execution_slots
+    operation, owner = _begin_operation(
+        request,
+        capability_id=capability_id,
+        operation_id=operation_id,
+        task_id=task_id,
+        attempt_id=attempt_id,
+    )
+    if not owner:
+        return await _join_operation(operation)
     if not slots.acquire(blocking=False):
-        raise ProviderUnavailableError("execution capacity exhausted; retry later")
+        error = ProviderUnavailableError("execution capacity exhausted; retry later")
+        _finish_operation(request, operation, "failed", error=error)
+        raise error
     try:
         with contextlib.ExitStack() as stack:
-            return await _execute_with_input(
+            response = await _execute_with_input(
                 runner, stack, capability_id, file, artifact_id, provider, parameters,
-                language, version, no_cache,
+                language, version, no_cache, operation=operation,
             )
+        ensure_not_cancelled(operation)
+        if operation is not None:
+            operations(request).finish(operation, "finished", result=response)
+        return response
+    except OperationCancelledError as exc:
+        if operation is not None:
+            operations(request).finish(operation, "cancelled", error=exc)
+        raise
+    except Exception as exc:
+        _finish_operation(request, operation, "failed", error=exc)
+        raise
     finally:
         slots.release()
 
@@ -241,6 +343,7 @@ async def _execute_with_input(
     runner: CapabilityExecutor, stack: contextlib.ExitStack, capability_id: str,
     file: UploadFile | None, artifact_id: str | None, provider: str | None,
     parameters: str | None, language: str, version: int | None, no_cache: bool,
+    *, operation: Operation | None = None,
 ) -> ExecutionResponse:
     payload: bytes | BinaryIO
     if file is not None and not artifact_id:
@@ -274,6 +377,7 @@ async def _execute_with_input(
         parameters=_parse_parameters(parameters),
         language=language,
         no_cache=no_cache,
+        operation=operation,
     )
     return ExecutionResponse(
         status=result.status,
@@ -282,6 +386,34 @@ async def _execute_with_input(
         artifacts=result.artifacts,
         document=result.document,
         provenance=result.provenance,
+    )
+
+
+@router.post(
+    "/operations/{operation_id}:cancel",
+    response_model=OperationCancelResponse,
+    responses=ERROR_RESPONSES,
+    tags=["operations"],
+)
+def cancel_operation(
+    operation_id: str,
+    request: Request,
+    task_id: Annotated[str | None, Header(alias=TASK_ID_HEADER)] = None,
+) -> OperationCancelResponse:
+    """Request cancellation; never claim the provider stopped computing.
+
+    ``cancel_requested`` is an acknowledgment, not confirmation.  The original
+    execution reports ``cancelled`` only if it observes the request before
+    publishing a result.
+    """
+    try:
+        operation = operations(request).cancel(operation_id, task_id=task_id)
+    except OperationNotFoundError:
+        raise
+    return OperationCancelResponse(
+        operation_id=operation.operation_id,
+        state=operation.state,
+        cancel_requested=operation.cancel_requested,
     )
 
 
@@ -295,6 +427,9 @@ async def store_artifact(
     runner: Annotated[CapabilityExecutor, Depends(executor)],
     file: Annotated[UploadFile, File(description="Content to store")],
     request: Request,
+    operation_id: Annotated[str | None, Header(alias=OPERATION_ID_HEADER)] = None,
+    task_id: Annotated[str | None, Header(alias=TASK_ID_HEADER)] = None,
+    attempt_id: Annotated[str | None, Header(alias=ATTEMPT_ID_HEADER)] = None,
 ) -> ArtifactReference:
     """Store the upload; return ``artifact/reference@1``, as ``artifact.store`` declares.
 
@@ -302,8 +437,19 @@ async def store_artifact(
     ``GET /v1/artifacts/{id}/metadata``.
     """
     slots = request.app.state.execution_slots
+    operation, owner = _begin_operation(
+        request,
+        capability_id="artifact.store",
+        operation_id=operation_id,
+        task_id=task_id,
+        attempt_id=attempt_id,
+    )
+    if not owner:
+        return await _join_operation(operation)
     if not slots.acquire(blocking=False):
-        raise ProviderUnavailableError("execution capacity exhausted")
+        error = ProviderUnavailableError("execution capacity exhausted")
+        _finish_operation(request, operation, "failed", error=error)
+        raise error
     try:
         await _check_upload_stream(file)
         stored = await run_in_threadpool(
@@ -312,7 +458,18 @@ async def store_artifact(
             media_type=file.content_type or "application/octet-stream",
             filename=file.filename,
         )
-        return reference_of(stored)
+        reference = reference_of(stored)
+        ensure_not_cancelled(operation)
+        if operation is not None:
+            operations(request).finish(operation, "finished", result=reference)
+        return reference
+    except OperationCancelledError as exc:
+        if operation is not None:
+            operations(request).finish(operation, "cancelled", error=exc)
+        raise
+    except Exception as exc:
+        _finish_operation(request, operation, "failed", error=exc)
+        raise
     finally:
         slots.release()
 

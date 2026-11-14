@@ -146,6 +146,14 @@ class ExecutionResponse(BaseModel):
     provenance: ExecutionProvenance
 
 
+class OperationCancelResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    state: Literal["running", "cancel_requested", "cancelled", "finished", "failed"]
+    cancel_requested: bool
+
+
 class ErrorResponse(BaseModel):
     """Machine-readable error; never carries provider credentials."""
 
