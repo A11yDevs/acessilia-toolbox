@@ -266,3 +266,51 @@ def test_retry_joins_a_running_operation_without_a_second_slot(monkeypatch):
             assert calls == 1
 
     asyncio.run(run())
+
+
+def test_route_cancels_a_blocked_artifact_upload(monkeypatch):
+    from acessilia_toolbox.core.artifact import ArtifactRef
+
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
+    capabilities, providers = _registries()
+    app = create_app(capabilities, providers)
+    entered, release = threading.Event(), threading.Event()
+
+    class Runner:
+        def store_artifact_stream(self, *_args, **_kwargs):
+            entered.set()
+            assert release.wait(3)
+            return ArtifactRef.of(b"%PDF", media_type=PDF, filename="doc.pdf")
+
+    app.state.executor = Runner()
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://audit"
+        ) as client:
+            headers = {
+                "X-Acessilia-Task-Id": "task-upload",
+                "X-Acessilia-Operation-Id": "op-upload",
+                "X-Acessilia-Attempt-Id": "attempt-1",
+            }
+            upload = asyncio.create_task(
+                client.post(
+                    "/v1/artifacts",
+                    files={"file": ("doc.pdf", PAYLOAD, PDF)},
+                    headers=headers,
+                )
+            )
+            try:
+                assert await asyncio.to_thread(entered.wait, 2)
+                response = await client.post(
+                    "/v1/operations/op-upload:cancel",
+                    headers={"X-Acessilia-Task-Id": "task-upload"},
+                )
+                assert response.json()["state"] == "cancel_requested"
+            finally:
+                release.set()
+                result = await upload
+            assert result.status_code == 409
+            assert result.json()["code"] == "operation_cancelled"
+
+    asyncio.run(run())
