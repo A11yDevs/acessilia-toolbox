@@ -268,6 +268,37 @@ def test_retry_joins_a_running_operation_without_a_second_slot(monkeypatch):
     asyncio.run(run())
 
 
+def test_route_cancel_after_finish_keeps_the_terminal_state(monkeypatch):
+    from acessilia_toolbox.core.operations import OperationRegistry
+
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
+    capabilities, providers = _registries()
+    app = create_app(capabilities, providers)
+    registry = OperationRegistry()
+    operation, _ = registry.begin(
+        "op-done", task_id="task-done", attempt_id=None, capability_id=CAPABILITY
+    )
+    registry.finish(operation, "finished", result={"ok": True})
+    app.state.operations = registry
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://audit"
+        ) as client:
+            response = await client.post(
+                "/v1/operations/op-done:cancel",
+                headers={"X-Acessilia-Task-Id": "task-done"},
+            )
+            assert response.status_code == 200
+            assert response.json() == {
+                "operation_id": "op-done",
+                "state": "finished",
+                "cancel_requested": False,
+            }
+
+    asyncio.run(run())
+
+
 def test_route_cancels_a_blocked_artifact_upload(monkeypatch):
     from acessilia_toolbox.core.artifact import ArtifactRef
 
