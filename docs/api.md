@@ -22,6 +22,7 @@ GET  /v1/providers
 GET  /v1/providers/{provider_id}
 GET  /v1/providers/{provider_id}/health
 
+POST /v1/operations/{operation_id}:cancel  # best-effort, returns the state
 POST /v1/artifacts                       # returns artifact/reference@1
 GET  /v1/artifacts/{artifact_id}
 GET  /v1/artifacts/{artifact_id}/metadata  # the stored record
@@ -257,6 +258,32 @@ environment's Toolbox points its VLM provider at it; see
   ]
 }
 ```
+
+## Operation identifiers and cancellation
+
+Capability and artifact calls may carry three optional headers:
+
+``` text
+X-Acessilia-Task-Id: <task_id>
+X-Acessilia-Operation-Id: <operation_id>
+X-Acessilia-Attempt-Id: <attempt_id>
+```
+
+The caller owns `task_id` and `operation_id`; the SDK creates a new
+`attempt_id` per HTTP attempt. A duplicate `operation_id` with the same
+`task_id` joins the running or finished operation instead of running the
+provider twice. Identifiers are 1–200 log-safe characters and require each
+other (`operation_id` requires `task_id`).
+
+`POST /v1/operations/{operation_id}:cancel` requires the same task header and
+answers `404 operation_not_found` for an unknown id or another task. States are
+`running`, `cancel_requested`, `cancelled`, `finished` and `failed`;
+`cancel_requested` is an acknowledgement, not proof that the provider stopped.
+The endpoint is idempotent. A cancelled execution publishes no result: it is
+not stored, cached or returned. An uninterruptible provider may keep its
+execution slot until it ends; the registry is process-local, so cancellation
+works on the replica that owns the operation (ADR-0019 in the core
+repository).
 
 ## MCP
 

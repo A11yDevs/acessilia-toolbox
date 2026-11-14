@@ -78,6 +78,20 @@ class AuthorizationError(ToolboxError):
     http_status = 401
 
 
+class OperationNotFoundError(ToolboxError):
+    """The operation id is unknown to this replica, or belongs to another task."""
+
+    code = "operation_not_found"
+    http_status = 404
+
+
+class OperationCancelledError(ToolboxError):
+    """A cancel request was observed before a result was published."""
+
+    code = "operation_cancelled"
+    http_status = 409
+
+
 class ProviderUnavailableError(ToolboxError):
     code = "provider_unavailable"
     http_status = 503

@@ -19,6 +19,7 @@ from acessilia_toolbox.core.artifact import ArtifactStore, ExecutionCache
 from acessilia_toolbox.core.capability import CapabilityRegistry
 from acessilia_toolbox.core.errors import ConfigurationError, ToolboxError
 from acessilia_toolbox.core.executor import CapabilityExecutor
+from acessilia_toolbox.core.operations import OperationRegistry
 from acessilia_toolbox.core.provider import ProviderDescriptor, ProviderRegistry
 from acessilia_toolbox.providers import configure_dataset_mirroring, create_adapter
 from acessilia_toolbox.providers.cache import create_cache
@@ -80,6 +81,7 @@ def create_app(
         cache=app.state.cache,
         store=app.state.store,
     )
+    app.state.operations = OperationRegistry()
 
     @app.exception_handler(ToolboxError)
     async def _toolbox_error(_: Request, error: ToolboxError) -> JSONResponse:

@@ -280,6 +280,54 @@
                             "type": "string",
                             "title": "Capability Id"
                         }
+                    },
+                    {
+                        "name": "X-Acessilia-Operation-Id",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "X-Acessilia-Operation-Id"
+                        }
+                    },
+                    {
+                        "name": "X-Acessilia-Task-Id",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "X-Acessilia-Task-Id"
+                        }
+                    },
+                    {
+                        "name": "X-Acessilia-Attempt-Id",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "X-Acessilia-Attempt-Id"
+                        }
                     }
                 ],
                 "requestBody": {
@@ -403,6 +451,140 @@
                 }
             }
         },
+        "/v1/operations/{operation_id}:cancel": {
+            "post": {
+                "tags": [
+                    "operations"
+                ],
+                "summary": "Cancel Operation",
+                "description": "Request cancellation; never claim the provider stopped computing.\n\n``cancel_requested`` is an acknowledgment, not confirmation.  The original\nexecution reports ``cancelled`` only if it observes the request before\npublishing a result.",
+                "operationId": "cancel_operation_v1_operations__operation_id__cancel_post",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "operation_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "title": "Operation Id"
+                        }
+                    },
+                    {
+                        "name": "X-Acessilia-Task-Id",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "X-Acessilia-Task-Id"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OperationCancelResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Request"
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Not Found"
+                    },
+                    "409": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Conflict"
+                    },
+                    "415": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Unsupported Media Type"
+                    },
+                    "502": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Bad Gateway"
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Service Unavailable"
+                    },
+                    "504": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        },
+                        "description": "Gateway Timeout"
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/artifacts": {
             "post": {
                 "tags": [
@@ -411,15 +593,70 @@
                 "summary": "Store Artifact",
                 "description": "Store the upload; return ``artifact/reference@1``, as ``artifact.store`` declares.\n\nThe stored record (with ``uri`` and ``filename``) stays readable on\n``GET /v1/artifacts/{id}/metadata``.",
                 "operationId": "store_artifact_v1_artifacts_post",
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "X-Acessilia-Operation-Id",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "X-Acessilia-Operation-Id"
+                        }
+                    },
+                    {
+                        "name": "X-Acessilia-Task-Id",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "X-Acessilia-Task-Id"
+                        }
+                    },
+                    {
+                        "name": "X-Acessilia-Attempt-Id",
+                        "in": "header",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "X-Acessilia-Attempt-Id"
+                        }
+                    }
+                ],
                 "requestBody": {
+                    "required": true,
                     "content": {
                         "multipart/form-data": {
                             "schema": {
                                 "$ref": "#/components/schemas/Body_store_artifact_v1_artifacts_post"
                             }
                         }
-                    },
-                    "required": true
+                    }
                 },
                 "responses": {
                     "200": {
@@ -433,77 +670,76 @@
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        }
+                        },
+                        "description": "Bad Request"
                     },
                     "404": {
-                        "description": "Not Found",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        }
+                        },
+                        "description": "Not Found"
                     },
                     "409": {
-                        "description": "Conflict",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        }
+                        },
+                        "description": "Conflict"
                     },
                     "415": {
-                        "description": "Unsupported Media Type",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        }
+                        },
+                        "description": "Unsupported Media Type"
                     },
                     "502": {
-                        "description": "Bad Gateway",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        }
+                        },
+                        "description": "Bad Gateway"
                     },
                     "503": {
-                        "description": "Service Unavailable",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        }
+                        },
+                        "description": "Service Unavailable"
                     },
                     "504": {
-                        "description": "Gateway Timeout",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ErrorResponse"
                                 }
                             }
-                        }
+                        },
+                        "description": "Gateway Timeout"
                     },
                     "413": {
-                        "description": "Request Entity Too Large",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -518,7 +754,8 @@
                                     "title": "Response 413 Store Artifact V1 Artifacts Post"
                                 }
                             }
-                        }
+                        },
+                        "description": "Request Entity Too Large"
                     },
                     "422": {
                         "description": "Validation Error",
@@ -530,12 +767,7 @@
                             }
                         }
                     }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
+                }
             }
         },
         "/v1/artifacts/{artifact_id}": {
@@ -2790,6 +3022,37 @@
                 ],
                 "title": "OpenAiErrorResponse",
                 "description": "Error of the VLM chat gateway, in the shape OpenAI-compatible clients read."
+            },
+            "OperationCancelResponse": {
+                "properties": {
+                    "operation_id": {
+                        "type": "string",
+                        "title": "Operation Id"
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": [
+                            "running",
+                            "cancel_requested",
+                            "cancelled",
+                            "finished",
+                            "failed"
+                        ],
+                        "title": "State"
+                    },
+                    "cancel_requested": {
+                        "type": "boolean",
+                        "title": "Cancel Requested"
+                    }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                    "operation_id",
+                    "state",
+                    "cancel_requested"
+                ],
+                "title": "OperationCancelResponse"
             },
             "ProviderHealth": {
                 "properties": {

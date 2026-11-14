@@ -39,6 +39,7 @@ from acessilia_toolbox.core.fingerprint import (
 )
 from acessilia_toolbox.core.input_memory import check_in_memory_size, read_in_memory
 from acessilia_toolbox.core.normalization import build_processing_manifest
+from acessilia_toolbox.core.operations import Operation, ensure_not_cancelled
 from acessilia_toolbox.core.preprocessing import (
     OrientationResult,
     detect_and_orient_image,
@@ -97,7 +98,9 @@ class CapabilityExecutor:
         parameters: Mapping[str, Any] | None = None,
         language: str = "pt-BR",
         no_cache: bool = False,
+        operation: Operation | None = None,
     ) -> CapabilityResult:
+        ensure_not_cancelled(operation)
         manifest = self._capabilities.get(capability_id, capability_version)
         _validate_input(manifest, payload, filename, media_type)
 
@@ -201,6 +204,7 @@ class CapabilityExecutor:
                         restored, allow_inline_json=not manifest.output.by_reference
                     )
                     if servable is not None:
+                        ensure_not_cancelled(operation)
                         return servable
 
         # Only adapters of capabilities with more than one version need to
@@ -208,6 +212,7 @@ class CapabilityExecutor:
         version_kwargs = (
             {"capability_version": manifest.version} if manifest.version > 1 else {}
         )
+        ensure_not_cancelled(operation)
         extraction = cast(Any, adapter).execute(
             manifest.id,
             execution_payload,
@@ -216,6 +221,9 @@ class CapabilityExecutor:
             parameters=parameters,
             **version_kwargs,
         )
+        # The provider may have completed after the cancel arrived: its result
+        # must not be normalized, stored, cached or returned.
+        ensure_not_cancelled(operation)
 
         # Capabilities that return a plain dict or list (e.g. pdf.split,
         # dataset.list) skip the processing-manifest builder and use the
@@ -240,6 +248,7 @@ class CapabilityExecutor:
             document_payload = document.model_dump(mode="json", by_alias=True)
             artifact_suffix = f"{Path(filename).stem}.structured-document.json"
 
+        ensure_not_cancelled(operation)
         serialized = json.dumps(document_payload, ensure_ascii=False).encode("utf-8")
 
         artifacts: list[ArtifactRef] = []
@@ -294,6 +303,7 @@ class CapabilityExecutor:
             ),
         )
 
+        ensure_not_cancelled(operation)
         if manifest.execution.cacheable:
             self._cache.put(cache_key, result.model_dump(mode="json"))
         return result
