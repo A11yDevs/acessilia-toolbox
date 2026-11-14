@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import tempfile
-from typing import Annotated, Any, BinaryIO
+from typing import Annotated, Any, BinaryIO, Literal, cast
 from urllib.parse import quote
 
 import httpx
@@ -115,7 +115,7 @@ def _begin_operation(
 def _finish_operation(
     request: Request,
     operation: Operation | None,
-    state: str,
+    state: Literal["cancelled", "finished", "failed"],
     *,
     result: Any = None,
     error: BaseException | None = None,
@@ -313,7 +313,8 @@ async def execute_capability(
         attempt_id=attempt_id,
     )
     if not owner:
-        return await _join_operation(operation)
+        assert operation is not None
+        return cast(ExecutionResponse, await _join_operation(operation))
     if not slots.acquire(blocking=False):
         error = ProviderUnavailableError("execution capacity exhausted; retry later")
         _finish_operation(request, operation, "failed", error=error)
@@ -445,7 +446,8 @@ async def store_artifact(
         attempt_id=attempt_id,
     )
     if not owner:
-        return await _join_operation(operation)
+        assert operation is not None
+        return cast(ArtifactReference, await _join_operation(operation))
     if not slots.acquire(blocking=False):
         error = ProviderUnavailableError("execution capacity exhausted")
         _finish_operation(request, operation, "failed", error=error)
