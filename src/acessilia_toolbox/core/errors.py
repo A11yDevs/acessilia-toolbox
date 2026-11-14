@@ -85,20 +85,6 @@ class OperationNotFoundError(ToolboxError):
     http_status = 404
 
 
-class OperationInProgressError(ToolboxError):
-    """The same operation id is already running; the caller must not repeat it."""
-
-    code = "operation_in_progress"
-    http_status = 409
-
-
-class OperationFinishedError(ToolboxError):
-    """The operation id is already terminal and must not run again."""
-
-    code = "operation_finished"
-    http_status = 409
-
-
 class OperationCancelledError(ToolboxError):
     """A cancel request was observed before a result was published."""
 
