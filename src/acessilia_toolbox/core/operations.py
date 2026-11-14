@@ -90,7 +90,7 @@ class OperationRegistry:
     same answer an old operation receives after its state was forgotten.
     """
 
-    def __init__(self, *, max_terminal_entries: int = 4096) -> None:
+    def __init__(self, *, max_terminal_entries: int = 64) -> None:
         self._lock = threading.Lock()
         self._operations: dict[str, Operation] = {}
         self._terminal_order: list[str] = []
