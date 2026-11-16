@@ -1,0 +1,143 @@
+"""Publish the existing version-1 layout variants without duplicating docstruct.
+
+Docling returns a compact page/region document. MinerU returns the existing
+processing manifest with layout classifications in extractor.configuration.
+Embed that published schema verbatim (apart from root metadata) so consumers
+need neither a network resolver nor a competing canonical document model.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+SCHEMAS = ROOT / "schemas"
+OUTPUT = SCHEMAS / "layout-analysis@1.json"
+
+
+def build(schemas_dir: Path = SCHEMAS) -> dict[str, Any]:
+    manifest = json.loads((schemas_dir / "structured-document@1.json").read_text("utf-8"))
+    for key in ("$schema", "$id", "description"):
+        manifest.pop(key, None)
+    definitions = manifest.pop("$defs")
+    reserved = {
+        "ProcessingManifest", "LayoutRegion", "LayoutPage", "LayoutPages",
+        "MineruLayoutRegion", "LayoutClassificationBox", "MineruLayoutConfiguration",
+        "MineruLayoutResult",
+    }
+    if conflicts := reserved.intersection(definitions):
+        raise ValueError(
+            f"layout definitions conflict with canonical definitions: {sorted(conflicts)}"
+        )
+    definitions["ProcessingManifest"] = manifest
+    box = {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4}
+    definitions["LayoutRegion"] = {
+        "type": "object",
+        "properties": {
+            "type": {"type": "string", "enum": [
+                "text_clean", "text_scanned", "embedded_image", "table", "formula",
+                "code_block", "list_block", "callout_box", "unknown", "ignore",
+            ]},
+            "label": {"type": "string"},
+            "bbox": {**box, "description": "[left, top, right, bottom], top-left page points."},
+            "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "text": {"type": ["string", "null"]},
+            "page_number": {"type": "integer", "minimum": 1},
+        },
+        "required": ["type", "label", "bbox", "confidence", "text", "page_number"],
+    }
+    definitions["LayoutPage"] = {
+        "type": "object",
+        "properties": {
+            "page_number": {"type": "integer", "minimum": 1},
+            "width": {"type": "number", "minimum": 0},
+            "height": {"type": "number", "minimum": 0},
+            "regions": {"type": "array", "items": {"$ref": "#/$defs/LayoutRegion"}},
+        },
+        "required": ["page_number", "width", "height", "regions"],
+    }
+    definitions["LayoutPages"] = {
+        "type": "object",
+        "properties": {
+            "pages": {"type": "array", "items": {"$ref": "#/$defs/LayoutPage"}},
+            "page_count": {"type": "integer", "minimum": 0},
+            "region_count": {"type": "integer", "minimum": 0},
+        },
+        "required": ["pages", "page_count", "region_count"],
+    }
+    definitions["MineruLayoutRegion"] = {
+        "type": "object",
+        "properties": {
+            "type": {"type": "string", "enum": [
+                "text", "title", "list_block", "table", "embedded_image", "formula",
+                "ignore", "unknown",
+            ]},
+            "source_label": {"type": "string"},
+            "raw_label": {"type": "string"},
+            "page": {"type": "integer", "minimum": 0},
+            "bbox": {"$ref": "#/$defs/LayoutClassificationBox"},
+            "text_preview": {"type": ["string", "null"], "maxLength": 120},
+        },
+        "required": ["type", "source_label", "raw_label", "page", "bbox", "text_preview"],
+    }
+    # This is the existing operational metadata wire shape. Canonical geometry
+    # (including its explicit origin) remains the manifest's BoundingBox above.
+    definitions["LayoutClassificationBox"] = {
+        "type": "object",
+        "properties": {key: {"type": "number"} for key in ("left", "top", "right", "bottom")},
+        "required": ["left", "top", "right", "bottom"],
+    }
+    definitions["MineruLayoutConfiguration"] = {
+        "type": "object",
+        "properties": {
+            "layout_regions": {"type": "array", "items": {"$ref": "#/$defs/MineruLayoutRegion"}},
+            "region_count": {"type": "integer", "minimum": 0},
+            "backend": {"const": "mineru-layout"},
+        },
+        "required": ["layout_regions", "region_count", "backend"],
+    }
+    definitions["MineruLayoutResult"] = {
+        "allOf": [
+            {"$ref": "#/$defs/ProcessingManifest"},
+            {"properties": {"extractor": {"properties": {
+                "configuration": {"$ref": "#/$defs/MineruLayoutConfiguration"},
+            }}}},
+        ],
+    }
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "$id": "urn:a11y-devs:schema:layout-analysis:1",
+        "$comment": "Generated by scripts/export_layout_schema.py; do not edit by hand.",
+        "title": "LayoutAnalysis",
+        "description": "Existing compact-layout or processing-manifest version-1 result.",
+        "type": "object",
+        "anyOf": [{"$ref": "#/$defs/LayoutPages"}, {"$ref": "#/$defs/MineruLayoutResult"}],
+        "$defs": definitions,
+    }
+
+
+def render() -> str:
+    return json.dumps(build(), ensure_ascii=False, indent=2) + "\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args(argv)
+    content = render()
+    if args.check:
+        if not OUTPUT.is_file() or OUTPUT.read_text("utf-8") != content:
+            print("layout schema is stale; run scripts/export_layout_schema.py", file=sys.stderr)
+            return 1
+    else:
+        OUTPUT.write_text(content, encoding="utf-8")
+        print(f"wrote {OUTPUT.relative_to(ROOT)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

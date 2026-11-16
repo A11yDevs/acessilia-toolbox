@@ -98,6 +98,12 @@ After changing those objects or dataset route bindings, regenerate with
 and the OpenAPI command above. Commit the generated files together. See
 [Dataset REST response contracts](docs/dataset-contracts.md).
 
+The layout result schema embeds the published canonical processing-manifest
+schema. After changing that source or the layout wire definitions, run
+`python scripts/export_layout_schema.py` and `python scripts/export_contract.py`.
+Commit the generated result and verify both scripts with `--check`. See
+[Layout-analysis result contract](docs/layout-contract.md).
+
 ### 3. Stay synchronized
 
 Always rebase with `develop` to avoid large conflicts:

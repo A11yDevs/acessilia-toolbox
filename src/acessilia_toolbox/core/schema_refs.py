@@ -35,9 +35,7 @@ EXTERNAL: dict[str, str] = {
     "artifact/pandoc-ast@1": "Pandoc's JSON AST (pandoc-types); the format is Pandoc's",
 }
 
-UNPUBLISHED: dict[str, str] = {
-    "artifact/layout-analysis@1": "JSON returned by document.layout.analyze; no schema yet",
-}
+UNPUBLISHED: dict[str, str] = {}
 
 _LISTED: dict[str, tuple[SchemaStatus, str]] = {
     **{ref: ("descriptor", note) for ref, note in DESCRIPTORS.items()},
