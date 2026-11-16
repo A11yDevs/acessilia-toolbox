@@ -92,6 +92,12 @@ A change to the REST routes or schemas also changes `docs/openapi.json`, which a
 test keeps in step with the application. Regenerate it with
 `UPDATE_OPENAPI=1 pytest -k committed_openapi` and commit the result.
 
+Dataset collection schemas are generated from the published object schemas.
+After changing those objects or dataset route bindings, regenerate with
+`python scripts/export_dataset_schemas.py`, `python scripts/export_contract.py`
+and the OpenAPI command above. Commit the generated files together. See
+[Dataset REST response contracts](docs/dataset-contracts.md).
+
 ### 3. Stay synchronized
 
 Always rebase with `develop` to avoid large conflicts:

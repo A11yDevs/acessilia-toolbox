@@ -207,8 +207,8 @@ What each field promises:
 | `output.by_reference` | The result is a binary in the artifact store, returned by id. |
 | `output.media_types` | For a by-reference output, the media types of the referenced binary (`pdf.render@2`: `image/png`). |
 
-The contract's `schema_refs` lists every schema reference the manifests use,
-input and output, with what it points at:
+The contract's `schema_refs` lists every schema reference the manifests and
+dedicated dataset route bindings use, input and output, with what it points at:
 
 | `status` | Meaning |
 |---|---|

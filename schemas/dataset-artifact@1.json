@@ -4,12 +4,34 @@
   "title": "DatasetArtifactRef",
   "type": "object",
   "properties": {
-    "path": { "type": "string", "minLength": 1 },
-    "media_type": { "type": "string" },
-    "size": { "type": "integer", "minimum": 0 },
-    "sha256": { "type": "string" },
-    "mirrored": { "type": "boolean" },
-    "artifact_id": { "type": "string" }
+    "path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "media_type": {
+      "type": "string"
+    },
+    "size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sha256": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mirrored": {
+      "type": "boolean"
+    },
+    "artifact_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
   },
-  "required": ["path"]
+  "required": [
+    "path"
+  ]
 }

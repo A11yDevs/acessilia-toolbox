@@ -100,6 +100,15 @@ If asynchronous job state is exposed through the Toolbox, its
 authoritative state must live in an external state service rather than
 process memory.
 
+## Dataset response contracts
+
+The published contract's `dataset_routes` and each OpenAPI operation's
+`x-toolbox-dataset-binding` identify the exact capability version and normative
+response schema for dedicated dataset routes. Listings contain summaries;
+sampling contains full items; sync returns an array of events. See
+[Dataset REST response contracts](dataset-contracts.md) for every route,
+schema, pagination rule and the refresh workflow.
+
 ## Authentication
 
 The REST API requires Bearer token authentication with the key in the

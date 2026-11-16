@@ -53,7 +53,7 @@ def test_schema_declares_a_versioned_identifier(path: Path) -> None:
 
 
 @pytest.mark.parametrize("path", SCHEMA_FILES, ids=lambda p: p.name)
-def test_schema_declares_an_object_type(path: Path) -> None:
+def test_schema_declares_a_structured_json_type(path: Path) -> None:
     schema = json.loads(path.read_text(encoding="utf-8"))
 
-    assert schema.get("type") == "object", path.name
+    assert schema.get("type") in {"object", "array"}, path.name

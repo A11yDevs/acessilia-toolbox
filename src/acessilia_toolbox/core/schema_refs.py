@@ -36,10 +36,6 @@ EXTERNAL: dict[str, str] = {
 }
 
 UNPUBLISHED: dict[str, str] = {
-    "artifact/dataset-item-list@1": "JSON returned by the dataset capabilities; no schema yet",
-    "artifact/dataset-list@1": "JSON returned by the dataset capabilities; no schema yet",
-    "artifact/dataset-splits@1": "JSON returned by the dataset capabilities; no schema yet",
-    "artifact/dataset-sync-report@1": "JSON returned by the dataset capabilities; no schema yet",
     "artifact/layout-analysis@1": "JSON returned by document.layout.analyze; no schema yet",
 }
 

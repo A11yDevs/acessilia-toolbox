@@ -221,6 +221,7 @@ def test_the_contract_classifies_every_schema_reference(contract: dict[str, Any]
         for capability in contract["capabilities"]
         for block in (capability["input"], capability["output"])
     }
+    used.update(route["output_schema"] for route in contract["dataset_routes"])
 
     assert set(entries) == used
     for ref, entry in entries.items():
