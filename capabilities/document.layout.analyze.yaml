@@ -1,12 +1,14 @@
 id: document.layout.analyze
 version: 1
 description: >-
-  Extract and classify the visual layout regions of a document page into
-  semantic categories: text_clean, text_scanned, embedded_image, table,
-  formula, code_block, list_block, callout_box, unknown, and ignore. Each
-  region's bbox is [left, top, right, bottom] in page points with a top-left
-  origin (y grows downwards); a box whose origin cannot be resolved is left
-  out rather than returned in another convention.
+  Extract and classify the visual layout regions of a document page.
+  Version 1 preserves compact pages/regions (docling-layout) or a canonical
+  processing manifest with extractor.configuration.layout_regions
+  (mineru-layout); artifact/layout-analysis@1 describes both representations.
+  A compact region's bbox is [left, top, right, bottom] in page points with a
+  top-left origin (y grows downwards); unresolved boxes are omitted. For a
+  processing manifest, interpret geometry using canonical element provenance
+  and its explicit coordinate origin.
 
 input:
   schema: artifact/document@1

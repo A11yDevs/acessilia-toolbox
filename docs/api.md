@@ -100,6 +100,14 @@ If asynchronous job state is exposed through the Toolbox, its
 authoritative state must live in an external state service rather than
 process memory.
 
+## Layout response contract
+
+`document.layout.analyze@1` returns the document described by
+`artifact/layout-analysis@1`: compact pages/regions or the existing canonical
+processing manifest with layout metadata. Both use page arrays. See
+[Layout-analysis result contract](layout-contract.md) for the variant fields,
+coordinate conventions, examples and compatibility rules.
+
 ## Dataset response contracts
 
 The published contract's `dataset_routes` and each OpenAPI operation's

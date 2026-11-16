@@ -1339,9 +1339,9 @@
     },
     {
       "ref": "artifact/layout-analysis@1",
-      "status": "unpublished",
-      "file": null,
-      "note": "JSON returned by document.layout.analyze; no schema yet"
+      "status": "published",
+      "file": "schemas/layout-analysis@1.json",
+      "note": null
     },
     {
       "ref": "artifact/mathml@1",
