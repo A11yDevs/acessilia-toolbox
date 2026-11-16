@@ -980,6 +980,9 @@
         {
           "properties": {
             "extractor": {
+              "required": [
+                "configuration"
+              ],
               "properties": {
                 "configuration": {
                   "$ref": "#/$defs/MineruLayoutConfiguration"

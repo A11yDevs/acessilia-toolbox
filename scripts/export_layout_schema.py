@@ -103,7 +103,7 @@ def build(schemas_dir: Path = SCHEMAS) -> dict[str, Any]:
     definitions["MineruLayoutResult"] = {
         "allOf": [
             {"$ref": "#/$defs/ProcessingManifest"},
-            {"properties": {"extractor": {"properties": {
+            {"properties": {"extractor": {"required": ["configuration"], "properties": {
                 "configuration": {"$ref": "#/$defs/MineruLayoutConfiguration"},
             }}}},
         ],

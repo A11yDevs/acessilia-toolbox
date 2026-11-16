@@ -182,6 +182,37 @@ def test_malformed_layout_is_not_a_valid_contract_example(value: dict[str, Any])
         VALIDATOR.validate(value)
 
 
+@pytest.mark.parametrize("missing", ["configuration", "layout_regions", "region_count", "backend"])
+def test_canonical_manifest_requires_layout_metadata(missing: str) -> None:
+    document = {
+        "manifest_id": "m", "created_at": "2026-01-01T00:00:00Z",
+        "source": {
+            "document_id": "d", "filename": "a.pdf", "path": "/a.pdf",
+            "media_type": "application/pdf", "byte_size": 1, "sha256": "0" * 64,
+        },
+        "extractor": {
+            "version": "4.0", "started_at": "2026-01-01T00:00:00Z",
+            "completed_at": "2026-01-01T00:00:01Z", "duration_ms": 1,
+            "configuration": {"layout_regions": [], "region_count": 0, "backend": "mineru-layout"},
+        },
+        "title": "a", "language": "en", "pages": [], "elements": [],
+        "summary": {
+            "page_count": 0, "element_count": 0, "observation_count": 0, "obligation_count": 0,
+        },
+    }
+    # The complete empty layout is valid; losing its metadata must not turn a
+    # generic canonical manifest into a layout-analysis result.
+    VALIDATOR.validate(document)
+    if missing == "configuration":
+        del document["extractor"]["configuration"]
+    else:
+        del document["extractor"]["configuration"][missing]
+    canonical = json.loads((ROOT / "schemas/structured-document@1.json").read_text("utf-8"))
+    jsonschema.Draft202012Validator(canonical).validate(document)
+    with pytest.raises(jsonschema.ValidationError):
+        VALIDATOR.validate(document)
+
+
 @pytest.mark.parametrize("field,value", [
     ("bbox", [1, 2, 3]), ("bbox", [1, 2, 3, "bad"]),
     ("confidence", True), ("confidence", 1.1), ("type", "not-a-region"),
