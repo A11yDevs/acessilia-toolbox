@@ -49,8 +49,15 @@ vazias `[]`. A resposta REST não tem envelope `document` nem de paginação.
 A listagem de itens usa `limit` (1–1000, default 100) e `offset` (ao menos 0,
 default 0). A amostragem usa `n` (1–100, default 5) e pode devolver menos
 itens do que o solicitado. Sync permite restringir um `split`. As restrições
-de consulta continuam publicadas no OpenAPI. Falhas externas ou datasets/itens
-ausentes continuam sendo erros, e não listas vazias bem-sucedidas.
+de consulta continuam publicadas no OpenAPI. Durante a listagem de itens, exceções
+lançadas por um provider continuam sendo erros (representados como texto `Error:`
+no MCP); elas não são convertidas em listas vazias bem-sucedidas.
+As listagens têm uma exceção existente:
+um manifesto GitHub ou diretório HuggingFace ausente (HTTP 404 externo) retorna
+`[]`, assim como um split legitimamente vazio. Portanto, uma listagem vazia por
+si só não comprova que o conteúdo externo existe. Datasets desconhecidos e itens
+ausentes continuam gerando erros. Esta publicação de contratos preserva esses
+comportamentos dos providers.
 
 ### Resumos e itens completos
 

@@ -50,8 +50,14 @@ There is no `document` or pagination envelope around the REST response.
 Item listings use `limit` (1–1000, default 100) and `offset` (at least 0,
 default 0). Sample uses `n` (1–100, default 5) and may return fewer items
 than requested. Sync optionally restricts a `split`. Query constraints remain
-published in OpenAPI. An upstream failure or missing dataset/item remains an
-error; it must not be reported as a successful empty list.
+published in OpenAPI. During item listing, exceptions raised by a provider remain
+errors (represented as `Error:` text in MCP); they are not converted into
+successful empty lists.
+Listings have an existing exception: a missing GitHub manifest or HuggingFace
+directory (upstream HTTP 404) returns `[]`, just like a legitimately empty split.
+An empty listing alone therefore does not prove that the upstream content exists.
+Unknown datasets and missing items still raise errors. This contract publication
+preserves those provider behaviors.
 
 ### Summaries and full items
 

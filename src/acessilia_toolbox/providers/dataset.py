@@ -369,8 +369,8 @@ class DatasetAdapter:
         cache_key: str,
     ) -> Sequence[ItemSummary]:
         result = self._provider.list_items(dataset_id, split, revision, limit, offset)
-        # Don't cache empty listings — they usually indicate a transient
-        # upstream failure (e.g. HF rate limit) and would poison the cache.
+        # Don't cache empty listings: they may reflect an empty split or a
+        # missing upstream manifest/directory, which should be rechecked.
         if result:
             self._cache.put(
                 cache_key,

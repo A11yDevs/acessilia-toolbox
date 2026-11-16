@@ -59,16 +59,20 @@ def gateway(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch,
     provider._defs[dataset]["splits"] = {
         split: provider._defs[dataset]["splits"][split]
     }
-    state = {"empty": False}
+    state = {"empty": False, "listing_status": 200}
 
     def upstream(req: httpx.Request) -> httpx.Response:
         path = req.url.path
         if kind == "github":
             if path.endswith("/input/manifest.csv"):
+                if state["listing_status"] != 200:
+                    return httpx.Response(state["listing_status"])
                 csv = "id,format\n" + ("" if state["empty"] else "one,pdf\ntwo,pdf\n")
                 return httpx.Response(200, text=csv)
             return httpx.Response(200, content=b"artifact", headers={"content-type": "text/plain"})
         if "/tree/rev/" in path:
+            if state["listing_status"] != 200:
+                return httpx.Response(state["listing_status"])
             directory = path.split("/tree/rev/", 1)[1]
             entries = {
                 "dev": [] if state["empty"] else ["subject"],
@@ -107,6 +111,11 @@ def arguments(gateway: SimpleNamespace) -> dict[str, Any]:
     }
 
 
+def mcp_text(gateway: SimpleNamespace, capability: str, args: dict[str, Any]) -> str:
+    result = gateway.mcp.call_tool(capability.replace(".", "_"), {"parameters": args})
+    return result[0]["content"][0]["text"]
+
+
 @pytest.mark.parametrize("capability", list(DATASET_REST_BINDINGS))
 def test_each_provider_rest_and_mcp_result_conforms(
     gateway: SimpleNamespace, capability: str, monkeypatch: pytest.MonkeyPatch,
@@ -135,14 +144,18 @@ def test_each_provider_rest_and_mcp_result_conforms(
     assert calls and all(call["capability_version"] == binding.capability_version for call in calls)
     assert result.status_code == 200, result.text
     if capability == "dataset.get_artifact":
+        args["artifact_path"] = "input/file.txt"
+    document = json.loads(mcp_text(gateway, capability, args))
+    if capability == "dataset.get_artifact":
         assert result.content == b"artifact"
+        assert bytes.fromhex(document["payload"]) == result.content
+        assert document["media_type"] == "text/plain"
+        assert result.headers["content-type"].split(";", 1)[0] == document["media_type"]
         return
     value = result.json()
     validate(binding.output_schema, value)
     manifest = gateway.runner._capabilities.get(capability, 1)
     validate(manifest.output.schema_ref, value)
-    mcp = gateway.mcp.call_tool(capability.replace(".", "_"), {"parameters": args})
-    document = json.loads(mcp[0]["content"][0]["text"])
     validate(binding.output_schema, document)
     validate(manifest.output.schema_ref, document)
     if capability == "dataset.describe":
@@ -171,6 +184,9 @@ def test_empty_collections_are_empty_arrays(gateway: SimpleNamespace, capability
     assert result.status_code == 200, result.text
     assert result.json() == []
     validate(binding.output_schema, result.json())
+    document = json.loads(mcp_text(gateway, capability, arguments(gateway)))
+    assert document == []
+    validate(binding.output_schema, document)
 
 
 def test_empty_discovery_and_split_lists(gateway: SimpleNamespace) -> None:
@@ -178,10 +194,12 @@ def test_empty_discovery_and_split_lists(gateway: SimpleNamespace) -> None:
     splits = gateway.client.get(f"/v1/datasets/{gateway.dataset}/splits")
     assert splits.json() == []
     validate("artifact/dataset-splits@1", splits.json())
+    assert json.loads(mcp_text(gateway, "dataset.list_splits", arguments(gateway))) == []
     gateway.provider._defs = {}
     datasets = gateway.client.get("/v1/datasets")
     assert datasets.json() == []
     validate("artifact/dataset-list@1", datasets.json())
+    assert json.loads(mcp_text(gateway, "dataset.list", {})) == []
 
 
 def test_sync_reports_disabled_mirroring_and_item_failure(
@@ -194,6 +212,9 @@ def test_sync_reports_disabled_mirroring_and_item_failure(
     result = gateway.client.post(path, params=params)
     assert result.json() == [{"status": "skipped", "reason": "mirroring is disabled"}]
     validate(binding.output_schema, result.json())
+    document = json.loads(mcp_text(gateway, "dataset.sync", arguments(gateway)))
+    assert document == result.json()
+    validate(binding.output_schema, document)
     gateway.adapter._mirror = True
 
     def unavailable(*_args: Any) -> Any:
@@ -204,6 +225,9 @@ def test_sync_reports_disabled_mirroring_and_item_failure(
     assert len(failures.json()) == 2
     assert all(entry["status"] == "skipped" for entry in failures.json())
     validate(binding.output_schema, failures.json())
+    document = json.loads(mcp_text(gateway, "dataset.sync", arguments(gateway)))
+    assert document == failures.json()
+    validate(binding.output_schema, document)
 
 
 def test_sync_artifact_failures_remain_entries(
@@ -226,12 +250,40 @@ def test_sync_artifact_failures_remain_entries(
     validate(binding.output_schema, result.json())
     failed = [entry for entry in result.json() if entry["status"] == "skipped"]
     assert failed and all(entry["artifact"] and entry["reason"] for entry in failed)
+    document = json.loads(mcp_text(gateway, "dataset.sync", arguments(gateway)))
+    assert document == result.json()
+    validate(binding.output_schema, document)
 
 
 def test_route_errors_do_not_become_successful_empty_results(gateway: SimpleNamespace) -> None:
     base = f"/v1/datasets/{gateway.dataset}/splits/{gateway.split}/items"
     assert gateway.client.get(base, params={"limit": 0}).status_code == 422
     assert gateway.client.get(base + "/absent", params={"revision": "rev"}).status_code == 404
+    assert mcp_text(gateway, "dataset.list_items", {
+        **arguments(gateway), "limit": 0,
+    }).startswith("Error:")
+    assert mcp_text(gateway, "dataset.get_item", {
+        **arguments(gateway), "item_id": "absent",
+    }).startswith("Error:")
+
+
+@pytest.mark.parametrize("status", [404, 500])
+def test_upstream_listing_status_matches_documented_behavior(
+    gateway: SimpleNamespace, status: int,
+) -> None:
+    gateway.state["listing_status"] = status
+    binding = DATASET_REST_BINDINGS["dataset.list_items"]
+    result = gateway.client.get(
+        binding.path.format(**arguments(gateway)), params={"revision": "rev"},
+    )
+    text = mcp_text(gateway, "dataset.list_items", arguments(gateway))
+    if status == 404:
+        assert result.status_code == 200
+        assert result.json() == json.loads(text) == []
+        validate(binding.output_schema, result.json())
+    else:
+        assert result.status_code == 502
+        assert text.startswith("Error:")
 
 
 @pytest.mark.parametrize("ref,value", [
