@@ -28,6 +28,7 @@ from acessilia_toolbox.api.schemas import (
 )
 from acessilia_toolbox.core.artifact import ArtifactRef, ArtifactReference, reference_of
 from acessilia_toolbox.core.capability import CapabilityRegistry
+from acessilia_toolbox.core.dataset_bindings import DATASET_REST_BINDINGS
 from acessilia_toolbox.core.errors import (
     DatasetNotFoundError,
     InvalidInputError,
@@ -460,6 +461,7 @@ def _resolve_dataset_provider(
             runner.execute(
                 "dataset.describe",
                 b"{}",
+                capability_version=DATASET_REST_BINDINGS["dataset.describe"].capability_version,
                 filename="query.json",
                 media_type="application/json",
                 provider_id=provider_id,
@@ -472,7 +474,10 @@ def _resolve_dataset_provider(
     raise DatasetNotFoundError(f"unknown dataset '{dataset_id}'", dataset=dataset_id)
 
 
-@dataset_router.get("", response_model=list[dict[str, Any]])
+@dataset_router.get(
+    "", response_model=list[dict[str, Any]],
+    openapi_extra=DATASET_REST_BINDINGS["dataset.list"].openapi(),
+)
 def list_datasets(
     runner: Annotated[CapabilityExecutor, Depends(executor)],
     providers: Annotated[ProviderRegistry, Depends(providers)],
@@ -484,6 +489,7 @@ def list_datasets(
         result = runner.execute(
             "dataset.list",
             b"{}",
+            capability_version=DATASET_REST_BINDINGS["dataset.list"].capability_version,
             filename="query.json",
             media_type="application/json",
             provider_id=provider_id,
@@ -495,7 +501,10 @@ def list_datasets(
     return datasets
 
 
-@dataset_router.get("/{dataset_id}", response_model=dict[str, Any])
+@dataset_router.get(
+    "/{dataset_id}", response_model=dict[str, Any],
+    openapi_extra=DATASET_REST_BINDINGS["dataset.describe"].openapi(),
+)
 def describe_dataset(
     dataset_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
@@ -507,6 +516,7 @@ def describe_dataset(
     result = runner.execute(
         "dataset.describe",
         b"{}",
+        capability_version=DATASET_REST_BINDINGS["dataset.describe"].capability_version,
         filename="query.json",
         media_type="application/json",
         provider_id=provider_id,
@@ -515,7 +525,10 @@ def describe_dataset(
     return result.document  # type: ignore[no-any-return]
 
 
-@dataset_router.get("/{dataset_id}/splits", response_model=list[dict[str, Any]])
+@dataset_router.get(
+    "/{dataset_id}/splits", response_model=list[dict[str, Any]],
+    openapi_extra=DATASET_REST_BINDINGS["dataset.list_splits"].openapi(),
+)
 def list_dataset_splits(
     dataset_id: str,
     runner: Annotated[CapabilityExecutor, Depends(executor)],
@@ -527,6 +540,7 @@ def list_dataset_splits(
     result = runner.execute(
         "dataset.list_splits",
         b"{}",
+        capability_version=DATASET_REST_BINDINGS["dataset.list_splits"].capability_version,
         filename="query.json",
         media_type="application/json",
         provider_id=provider_id,
@@ -535,7 +549,10 @@ def list_dataset_splits(
     return result.document  # type: ignore[no-any-return]
 
 
-@dataset_router.get("/{dataset_id}/splits/{split}/items", response_model=list[dict[str, Any]])
+@dataset_router.get(
+    "/{dataset_id}/splits/{split}/items", response_model=list[dict[str, Any]],
+    openapi_extra=DATASET_REST_BINDINGS["dataset.list_items"].openapi(),
+)
 def list_dataset_items(
     dataset_id: str,
     split: str,
@@ -550,6 +567,7 @@ def list_dataset_items(
     result = runner.execute(
         "dataset.list_items",
         b"{}",
+        capability_version=DATASET_REST_BINDINGS["dataset.list_items"].capability_version,
         filename="query.json",
         media_type="application/json",
         provider_id=provider_id,
@@ -567,6 +585,7 @@ def list_dataset_items(
 @dataset_router.get(
     "/{dataset_id}/splits/{split}/items/{item_id}",
     response_model=dict[str, Any],
+    openapi_extra=DATASET_REST_BINDINGS["dataset.get_item"].openapi(),
 )
 def get_dataset_item(
     dataset_id: str,
@@ -581,6 +600,7 @@ def get_dataset_item(
     result = runner.execute(
         "dataset.get_item",
         b"{}",
+        capability_version=DATASET_REST_BINDINGS["dataset.get_item"].capability_version,
         filename="query.json",
         media_type="application/json",
         provider_id=provider_id,
@@ -596,6 +616,7 @@ def get_dataset_item(
 
 @dataset_router.get(
     "/{dataset_id}/splits/{split}/items/{item_id}/artifacts/{path:path}",
+    openapi_extra=DATASET_REST_BINDINGS["dataset.get_artifact"].openapi(),
 )
 def get_dataset_artifact(
     dataset_id: str,
@@ -611,6 +632,7 @@ def get_dataset_artifact(
     result = runner.execute(
         "dataset.get_artifact",
         b"{}",
+        capability_version=DATASET_REST_BINDINGS["dataset.get_artifact"].capability_version,
         filename="query.json",
         media_type="application/json",
         provider_id=provider_id,
@@ -631,6 +653,7 @@ def get_dataset_artifact(
 @dataset_router.get(
     "/{dataset_id}/splits/{split}/sample",
     response_model=list[dict[str, Any]],
+    openapi_extra=DATASET_REST_BINDINGS["dataset.sample"].openapi(),
 )
 def sample_dataset(
     dataset_id: str,
@@ -645,6 +668,7 @@ def sample_dataset(
     result = runner.execute(
         "dataset.sample",
         b"{}",
+        capability_version=DATASET_REST_BINDINGS["dataset.sample"].capability_version,
         filename="query.json",
         media_type="application/json",
         provider_id=provider_id,
@@ -656,6 +680,7 @@ def sample_dataset(
 @dataset_router.post(
     "/{dataset_id}/sync",
     response_model=list[dict[str, Any]],
+    openapi_extra=DATASET_REST_BINDINGS["dataset.sync"].openapi(),
 )
 def sync_dataset(
     dataset_id: str,
@@ -672,6 +697,7 @@ def sync_dataset(
     result = runner.execute(
         "dataset.sync",
         b"{}",
+        capability_version=DATASET_REST_BINDINGS["dataset.sync"].capability_version,
         filename="query.json",
         media_type="application/json",
         provider_id=provider_id,

@@ -1181,7 +1181,14 @@
                     {
                         "ApiKeyAuth": []
                     }
-                ]
+                ],
+                "x-toolbox-dataset-binding": {
+                    "method": "GET",
+                    "path": "/v1/datasets",
+                    "capability": "dataset.list",
+                    "output_schema": "artifact/dataset-list@1",
+                    "capability_version": 1
+                }
             }
         },
         "/v1/datasets/{dataset_id}": {
@@ -1249,6 +1256,13 @@
                             }
                         }
                     }
+                },
+                "x-toolbox-dataset-binding": {
+                    "method": "GET",
+                    "path": "/v1/datasets/{dataset_id}",
+                    "capability": "dataset.describe",
+                    "output_schema": "artifact/dataset-info@1",
+                    "capability_version": 1
                 }
             }
         },
@@ -1320,6 +1334,13 @@
                             }
                         }
                     }
+                },
+                "x-toolbox-dataset-binding": {
+                    "method": "GET",
+                    "path": "/v1/datasets/{dataset_id}/splits",
+                    "capability": "dataset.list_splits",
+                    "output_schema": "artifact/dataset-splits@1",
+                    "capability_version": 1
                 }
             }
         },
@@ -1423,6 +1444,13 @@
                             }
                         }
                     }
+                },
+                "x-toolbox-dataset-binding": {
+                    "method": "GET",
+                    "path": "/v1/datasets/{dataset_id}/splits/{split}/items",
+                    "capability": "dataset.list_items",
+                    "output_schema": "artifact/dataset-item-summary-list@1",
+                    "capability_version": 1
                 }
             }
         },
@@ -1509,6 +1537,13 @@
                             }
                         }
                     }
+                },
+                "x-toolbox-dataset-binding": {
+                    "method": "GET",
+                    "path": "/v1/datasets/{dataset_id}/splits/{split}/items/{item_id}",
+                    "capability": "dataset.get_item",
+                    "output_schema": "artifact/dataset-item@1",
+                    "capability_version": 1
                 }
             }
         },
@@ -1600,6 +1635,13 @@
                             }
                         }
                     }
+                },
+                "x-toolbox-dataset-binding": {
+                    "method": "GET",
+                    "path": "/v1/datasets/{dataset_id}/splits/{split}/items/{item_id}/artifacts/{path}",
+                    "capability": "dataset.get_artifact",
+                    "output_schema": "artifact/binary@1",
+                    "capability_version": 1
                 }
             }
         },
@@ -1692,6 +1734,13 @@
                             }
                         }
                     }
+                },
+                "x-toolbox-dataset-binding": {
+                    "method": "GET",
+                    "path": "/v1/datasets/{dataset_id}/splits/{split}/sample",
+                    "capability": "dataset.sample",
+                    "output_schema": "artifact/dataset-sample@1",
+                    "capability_version": 1
                 }
             }
         },
@@ -1781,6 +1830,13 @@
                             }
                         }
                     }
+                },
+                "x-toolbox-dataset-binding": {
+                    "method": "POST",
+                    "path": "/v1/datasets/{dataset_id}/sync",
+                    "capability": "dataset.sync",
+                    "output_schema": "artifact/dataset-sync-report@1",
+                    "capability_version": 1
                 }
             }
         },

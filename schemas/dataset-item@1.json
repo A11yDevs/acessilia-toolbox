@@ -4,33 +4,73 @@
   "title": "DatasetItem",
   "type": "object",
   "properties": {
-    "id": { "type": "string", "minLength": 1 },
-    "dataset": { "type": "string" },
-    "split": { "type": "string" },
-    "revision": { "type": "string" },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dataset": {
+      "type": "string"
+    },
+    "split": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string"
+    },
     "artifacts": {
       "type": "array",
-      "items": { "$ref": "#/definitions/DatasetArtifactRef" }
+      "items": {
+        "$ref": "#/definitions/DatasetArtifactRef"
+      }
     },
     "annotations": {
       "type": "array",
-      "items": { "$ref": "#/definitions/DatasetArtifactRef" }
+      "items": {
+        "$ref": "#/definitions/DatasetArtifactRef"
+      }
     },
-    "metadata": { "type": "object" }
+    "metadata": {
+      "type": "object"
+    }
   },
-  "required": ["id"],
+  "required": [
+    "id"
+  ],
   "definitions": {
     "DatasetArtifactRef": {
+      "title": "DatasetArtifactRef",
       "type": "object",
       "properties": {
-        "path": { "type": "string", "minLength": 1 },
-        "media_type": { "type": "string" },
-        "size": { "type": "integer", "minimum": 0 },
-        "sha256": { "type": "string" },
-        "mirrored": { "type": "boolean" },
-        "artifact_id": { "type": "string" }
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mirrored": {
+          "type": "boolean"
+        },
+        "artifact_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       },
-      "required": ["path"]
+      "required": [
+        "path"
+      ]
     }
   }
 }

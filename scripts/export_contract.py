@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from acessilia_toolbox.core.capability import CapabilityRegistry
+from acessilia_toolbox.core.dataset_bindings import DATASET_REST_BINDINGS
 from acessilia_toolbox.core.provider import ProviderRegistry
 from acessilia_toolbox.core.schema_refs import classify
 
@@ -46,6 +47,8 @@ COMMENT = (
     "blocks as the manifest declares them, defaults included. schema_refs says "
     "what each schema reference points at: a published file in schemas/, or a "
     "descriptor, external or unpublished reference with no file."
+    " dataset_routes binds dedicated REST responses to their precise output schema; "
+    "the shared execute output remains in capabilities."
 )
 
 
@@ -57,9 +60,16 @@ def build(
     capabilities = CapabilityRegistry.from_directory(capabilities_dir)
     providers = ProviderRegistry.from_file(providers_config)
     manifests = sorted(capabilities.manifests(), key=lambda m: (m.id, m.version))
+    selected = {(manifest.id, manifest.version) for manifest in manifests}
+    routes = [
+        binding.to_dict()
+        for binding in DATASET_REST_BINDINGS.values()
+        if (binding.capability, binding.capability_version) in selected
+    ]
     refs = sorted(
         {manifest.input.schema_ref for manifest in manifests}
         | {manifest.output.schema_ref for manifest in manifests}
+        | {route["output_schema"] for route in routes}
     )
     return {
         "_comment": COMMENT,
@@ -77,6 +87,7 @@ def build(
             {"id": descriptor.id, "capabilities": sorted(descriptor.capabilities)}
             for descriptor in providers.descriptors()
         ],
+        "dataset_routes": sorted(routes, key=lambda route: (route["path"], route["method"])),
         "schema_refs": [classify(ref, schemas_dir) for ref in refs],
     }
 
