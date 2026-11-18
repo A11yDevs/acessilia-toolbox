@@ -79,12 +79,21 @@ dependencies of its own. The normalization builder uses it for table ASTs.
   document part (pages, elements, provenance, boxes) is checked against
   `docstruct.manifest`: its invariants run in the model's validator, and
   `tests/unit/test_structured_document_contract.py` compares the published
-  schema with `docstruct.manifest.field_specs`. With docstruct 0.5.4 this also
+  schema with `docstruct.manifest.field_specs`. Since docstruct 0.5.4 this also
   rejects duplicate element IDs inside a page, element/provenance references
   to missing pages when page descriptors exist, and parent/source-reference
   mismatches. Element-only fragments, unlisted elements and parents without a
   source reference retain their existing acceptance. No invariant is copied
   into the Toolbox, and the published wire fields remain unchanged.
+- **Shared contract cases.** Since docstruct 0.5.5, the contract test's
+  rejected and accepted documents are docstruct's catalog
+  (`docstruct.manifest_cases`), which the core and the SDK run against their
+  own models too (acessilia#470, criterion 4). Each case is applied to every
+  recorded snapshot it fits (two elements, the first listed on a page with a
+  provenance entry) and to docstruct's example document, and the model must
+  reject it for docstruct's reason: a field finding at the same location, the
+  unknown field the case added at its location, or docstruct's invariant
+  message.
 - **Pinned by hash.** docstruct is installed from the wheel of a
   `docstruct-vX.Y.Z` GitHub Release of the core, pinned by URL and `#sha256=`.
   See [Updating docstruct](dev-workflow.md#6-updating-docstruct).
