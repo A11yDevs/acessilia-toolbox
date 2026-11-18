@@ -428,3 +428,122 @@ def test_capacity_rejection_is_not_retained_for_the_next_retry(monkeypatch):
             assert len(calls) == 1
 
     asyncio.run(run())
+
+
+def test_a_cancel_before_the_store_writes_no_artifact(monkeypatch):
+    """Review of #157: a cancel observed before the store must not persist."""
+    from acessilia_toolbox.api import rest
+    from acessilia_toolbox.core.artifact import ArtifactRef
+
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
+    capabilities, providers = _registries()
+    app = create_app(capabilities, providers)
+    stored: list[str] = []
+
+    class Runner:
+        def store_artifact_stream(self, *_args, **_kwargs):
+            stored.append("written")
+            return ArtifactRef.of(b"%PDF", media_type=PDF, filename="doc.pdf")
+
+    app.state.executor = Runner()
+    checked, cancelled = asyncio.Event(), asyncio.Event()
+    original_check = rest._check_upload_stream
+
+    async def check_then_wait(file):
+        # The operation is registered and the upload checked; the cancel
+        # arrives before the store starts.
+        await original_check(file)
+        checked.set()
+        await cancelled.wait()
+
+    monkeypatch.setattr(rest, "_check_upload_stream", check_then_wait)
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://audit"
+        ) as client:
+            upload = asyncio.create_task(
+                client.post(
+                    "/v1/artifacts",
+                    files={"file": ("doc.pdf", PAYLOAD, PDF)},
+                    headers={
+                        "X-Acessilia-Task-Id": "task-pre-cancel",
+                        "X-Acessilia-Operation-Id": "op-pre-cancel",
+                        "X-Acessilia-Attempt-Id": "attempt-1",
+                    },
+                )
+            )
+            await asyncio.wait_for(checked.wait(), 2)
+            response = await client.post(
+                "/v1/operations/op-pre-cancel:cancel",
+                headers={"X-Acessilia-Task-Id": "task-pre-cancel"},
+            )
+            assert response.json()["state"] == "cancel_requested"
+            cancelled.set()
+            result = await upload
+            assert result.status_code == 409
+            assert result.json()["code"] == "operation_cancelled"
+
+    asyncio.run(run())
+    assert stored == []
+
+
+def test_an_operation_id_names_one_capability():
+    """Review of #157: joining across capabilities would return the wrong payload."""
+    registry = OperationRegistry()
+    registry.begin("op-1", task_id="task-1", attempt_id="a-1", capability_id=CAPABILITY)
+
+    with pytest.raises(InvalidInputError) as info:
+        registry.begin(
+            "op-1", task_id="task-1", attempt_id="a-2", capability_id="artifact.store"
+        )
+
+    assert info.value.details["capability_id"] == CAPABILITY
+    # The same capability still joins.
+    _, owner = registry.begin(
+        "op-1", task_id="task-1", attempt_id="a-3", capability_id=CAPABILITY
+    )
+    assert owner is False
+
+
+def test_an_upload_id_cannot_be_joined_by_an_execute_route(monkeypatch):
+    from acessilia_toolbox.core.artifact import ArtifactRef
+
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
+    capabilities, providers = _registries()
+    app = create_app(capabilities, providers)
+    executed: list[str] = []
+
+    class Runner:
+        def store_artifact_stream(self, *_args, **_kwargs):
+            return ArtifactRef.of(b"%PDF", media_type=PDF, filename="doc.pdf")
+
+        def execute(self, *_args, **_kwargs):
+            executed.append("ran")
+            raise AssertionError("the execute route must not run or join the upload")
+
+    app.state.executor = Runner()
+    headers = {
+        "X-Acessilia-Task-Id": "task-mixed",
+        "X-Acessilia-Operation-Id": "op-mixed",
+        "X-Acessilia-Attempt-Id": "attempt-1",
+    }
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://audit"
+        ) as client:
+            upload = await client.post(
+                "/v1/artifacts", files={"file": ("doc.pdf", PAYLOAD, PDF)}, headers=headers
+            )
+            assert upload.status_code == 200
+            execution = await client.post(
+                f"/v1/capabilities/{CAPABILITY}:execute",
+                files={"file": ("doc.pdf", PAYLOAD, PDF)},
+                headers={**headers, "X-Acessilia-Attempt-Id": "attempt-2"},
+            )
+            assert execution.status_code == 400
+            assert execution.json()["code"] == "invalid_input"
+
+    asyncio.run(run())
+    assert executed == []

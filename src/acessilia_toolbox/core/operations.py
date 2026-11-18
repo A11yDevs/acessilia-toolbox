@@ -123,6 +123,17 @@ class OperationRegistry:
                     raise OperationNotFoundError(
                         "unknown operation", operation_id=operation_id
                     )
+                if existing.capability_id != capability_id:
+                    # Joining would hand this caller a result of another
+                    # capability, which its route then casts to the wrong
+                    # response model. The id is the caller's own, so naming
+                    # the other capability discloses nothing.
+                    raise InvalidInputError(
+                        "operation_id is already used for another capability",
+                        field="operation_id",
+                        operation_id=operation_id,
+                        capability_id=existing.capability_id,
+                    )
                 return existing, False
             operation = Operation(
                 operation_id=operation_id,

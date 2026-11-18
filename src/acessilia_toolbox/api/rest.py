@@ -465,6 +465,11 @@ async def store_artifact(
         raise error
     try:
         await _check_upload_stream(file)
+        # A cancel observed before the store starts writes nothing. One that
+        # arrives while the store runs cannot be undone: artifacts are
+        # content-addressed and shared by every upload of the same bytes, so
+        # the object is kept and only the reference is withheld.
+        ensure_not_cancelled(operation)
         stored = await run_in_threadpool(
             runner.store_artifact_stream,
             file.file,

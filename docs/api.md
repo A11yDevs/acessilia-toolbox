@@ -275,7 +275,9 @@ The caller owns `task_id` and `operation_id`; the SDK creates a new
 provider twice. Only operations that may have run are joined: a request
 refused before the provider starts, such as `503` for lack of an execution
 slot, releases its `operation_id`, so a retry with that id is admitted once
-capacity is available. Identifiers are 1–200 log-safe characters and require
+capacity is available. An `operation_id` names one capability: reusing it for
+another (including `artifact.store` against an execute route) is
+`400 invalid_input`. Identifiers are 1–200 log-safe characters and require
 each other (`operation_id` requires `task_id`).
 
 `POST /v1/operations/{operation_id}:cancel` requires the same task header and
@@ -283,7 +285,11 @@ answers `404 operation_not_found` for an unknown id or another task. States are
 `running`, `cancel_requested`, `cancelled`, `finished` and `failed`;
 `cancel_requested` is an acknowledgement, not proof that the provider stopped.
 The endpoint is idempotent. A cancelled execution publishes no result: it is
-not stored, cached or returned. An uninterruptible provider may keep its
+not stored, cached or returned. For `POST /v1/artifacts`, a cancel observed
+before the store starts writes nothing; one that arrives while the store is
+writing cannot undo it, because artifacts are content-addressed and shared by
+every upload of the same bytes. The object is kept and the reference is not
+returned. An uninterruptible provider may keep its
 execution slot until it ends; the registry is process-local, so cancellation
 works on the replica that owns the operation (ADR-0019 in the core
 repository).
