@@ -470,6 +470,15 @@ MinerU 4.0.12's seal-detection warp can receive OpenCV interpolation values
 large pages. `docker/patch-mineru-warp.py` rewrites that mapping at image build
 time and refuses to apply when the upstream source no longer matches.
 
+MinerU 4.0.12 also declares `docvortex<1`, a range wider than it supports:
+docvortex 0.6.8 renamed an argument MinerU 4.0.12 still passes in its old
+form, so every parse that reaches the native span text step fails with
+`parse_failed` (`argument 'private_ranges'`). Every MinerU image installs with
+`docker/mineru-constraints.txt`, which keeps docvortex below 0.6.8. The repair
+layer (`MINERU_REPAIR=1`) applies it too, so an image built before the
+constraints existed is fixed without a full rebuild. Raising `MINERU_VERSION`
+to 4.1 or later makes the install fail until that file is reviewed (#165).
+
 ### Recovering an extraction provider
 
 Both Compose files give `docling-serve` and `mineru-serve` the

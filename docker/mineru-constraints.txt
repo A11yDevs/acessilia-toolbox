@@ -1,0 +1,13 @@
+# Constraints for every MinerU image (pip install -c), so a rebuild cannot
+# silently pick a dependency the pinned MinerU does not support (#165).
+#
+# MinerU 4.0.12 declares docvortex<1,>=0.5.16, but docvortex 0.6.8 renamed
+# prepare_span_texts(private_range) to private_ranges, a list of ranges.
+# MinerU 4.0.12 still passes one (start, end) pair, so every parse that reaches
+# the native span text step fails with parse_failed ("argument
+# 'private_ranges': 'int' object is not an instance of 'tuple'"). MinerU 4.1.0
+# is the first release built for the new signature (docvortex>=0.6.8,<0.7).
+#
+# Raising MINERU_VERSION to 4.1 or later makes this resolution fail on purpose:
+# review this file with it.
+docvortex>=0.5.16,<0.6.8

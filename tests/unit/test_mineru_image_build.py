@@ -109,3 +109,36 @@ def test_production_registry_and_compose_match_the_mineru4_adapter() -> None:
     assert "mineru-models:/home/mineru/.mineru" in service["volumes"]
     assert service["healthcheck"]["test"][-1].endswith("/v1/health')")
     assert "/openapi.json" not in str(service)
+
+
+#: The three MinerU images, which must install with the same constraints.
+MINERU_DOCKERFILES = (
+    "mineru-cpu.Dockerfile",
+    "mineru-cpu-repair.Dockerfile",
+    "mineru-gpu-basic.Dockerfile",
+)
+
+
+def test_the_constraints_keep_docvortex_where_mineru_4_0_12_runs() -> None:
+    """#165: docvortex 0.6.8 renamed the argument MinerU 4.0.12 passes."""
+    from packaging.requirements import Requirement
+
+    lines = [
+        line.strip()
+        for line in (ROOT / "docker/mineru-constraints.txt").read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    docvortex = next(Requirement(line) for line in lines if line.startswith("docvortex"))
+    assert docvortex.specifier.contains("0.6.7")
+    assert docvortex.specifier.contains("0.5.16")
+    assert not docvortex.specifier.contains("0.6.8")
+    assert not docvortex.specifier.contains("0.6.21")
+
+
+@pytest.mark.parametrize("filename", MINERU_DOCKERFILES)
+def test_every_mineru_image_installs_with_the_constraints(filename: str) -> None:
+    text = (ROOT / "docker" / filename).read_text()
+    assert "COPY docker/mineru-constraints.txt /tmp/mineru-constraints.txt" in text
+    installs = [line for line in text.splitlines() if "pip install" in line]
+    assert installs
+    assert all("-c /tmp/mineru-constraints.txt" in line for line in installs)

@@ -9,7 +9,9 @@ RUN apt-get update && \
     fc-cache -fv && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ARG MINERU_VERSION=4.0.12
-RUN pip install --no-cache-dir "mineru==${MINERU_VERSION}"
+# The constraints pin what MinerU itself leaves open (#165).
+COPY docker/mineru-constraints.txt /tmp/mineru-constraints.txt
+RUN pip install --no-cache-dir -c /tmp/mineru-constraints.txt "mineru==${MINERU_VERSION}"
 
 COPY docker/patch-mineru-warp.py /tmp/patch-mineru-warp.py
 RUN python3 /tmp/patch-mineru-warp.py && rm /tmp/patch-mineru-warp.py
