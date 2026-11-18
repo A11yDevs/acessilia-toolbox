@@ -148,9 +148,47 @@ def _example() -> dict:
     return _with_summary(payload)
 
 
-#: The documents the shared cases are applied to: a recorded snapshot and
-#: docstruct's example.
-BASES = {"snapshot": _valid, "docstruct example": _example}
+def _fits_the_catalog(payload: dict) -> bool:
+    """What the shared cases need: two elements, the first listed on a page
+    and holding a provenance entry."""
+    elements = payload["elements"]
+    return (
+        len(elements) >= 2
+        and any(elements[0]["id"] in page["element_ids"] for page in payload["pages"])
+        and bool(elements[0]["provenance"])
+    )
+
+
+def _from_snapshot(path: Path):
+    return lambda: copy.deepcopy(_snapshot(path))
+
+
+#: The documents the shared cases are applied to: every recorded snapshot the
+#: catalog fits (review of #164), and docstruct's example.
+BASES = {
+    **{
+        f"snapshot {path.stem}": _from_snapshot(path)
+        for path in SNAPSHOTS
+        if _fits_the_catalog(_snapshot(path))
+    },
+    "docstruct example": _example,
+}
+
+
+def test_the_catalog_runs_on_the_hierarchical_snapshots() -> None:
+    """001 and 008 (55 elements, a deep hierarchy) must stay bases."""
+    assert {"snapshot 001", "snapshot 008"} <= set(BASES)
+
+
+def _at(payload, location: tuple) -> bool:
+    """Whether ``location`` exists in ``payload``."""
+    value = payload
+    for key in location:
+        try:
+            value = value[key]
+        except (KeyError, IndexError, TypeError):
+            return False
+    return True
 FIELD_MESSAGES = (MSG_FIELD_WRONG_TYPE, MSG_FIELD_OUT_OF_RANGE, MSG_FIELD_NOT_ALLOWED)
 
 
@@ -169,9 +207,10 @@ def test_the_shared_example_is_a_valid_manifest() -> None:
 @pytest.mark.parametrize("case", list(BROKEN))
 def test_document_invariants_are_enforced(case: str, base: str) -> None:
     """Rejected for docstruct's reason: a field finding at the same location,
-    an unknown field as one, and an invariant with docstruct's message, which
-    the model raises for its first finding."""
+    the unknown field the case added at its location, and an invariant with
+    docstruct's message, which the model raises for its first finding."""
     payload = BASES[base]()
+    before = copy.deepcopy(payload)
     BROKEN[case](payload)
     _with_summary(payload)
     findings = document_findings(payload)
@@ -183,7 +222,15 @@ def test_document_invariants_are_enforced(case: str, base: str) -> None:
 
     errors = raised.value.errors()
     if message == "refused":
-        assert any(error["type"] == "extra_forbidden" for error in errors), errors
+        # The field the case added, at its location (review of #164).
+        added = [
+            tuple(error["loc"])
+            for error in errors
+            if error["type"] == "extra_forbidden"
+            and _at(payload, tuple(error["loc"]))
+            and not _at(before, tuple(error["loc"]))
+        ]
+        assert added, errors
     elif message in FIELD_MESSAGES:
         assert _location(context["path"]) in [tuple(error["loc"]) for error in errors], errors
     else:
