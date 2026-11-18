@@ -202,9 +202,9 @@ class ProcessingManifest(StrictModel):
             raise ValueError("extraction finished before it started")
 
         # Document invariants are docstruct's (acessilia#203): unique element
-        # ids, existing non-self parents, an acyclic hierarchy, character
-        # ranges that do not end before they start, unique page numbers and
-        # pages that list known elements.
+        # ids and page membership, consistent parent/source and page references,
+        # an acyclic hierarchy, and valid provenance character ranges.
+        # Keep their implementation in the pinned library.
         if findings := document_invariant_findings(self.pages, self.elements):
             msgid, kwargs = findings[0]
             raise ValueError(msgid.format(**kwargs))
