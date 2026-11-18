@@ -172,6 +172,36 @@ class OperationRegistry:
                     self._operations.pop(old, None)
             operation.done_event.set()
 
+    def release(self, operation: Operation, *, error: BaseException) -> None:
+        """Finish an operation refused before execution without retaining its id.
+
+        Capacity exhaustion and other refusals before the provider starts say
+        nothing about the request; retaining the entry would make every retry
+        join the old failure and never run (ADR-0019). The entry is finished
+        and dropped in one critical section, so a later request with the same
+        ``operation_id`` is admitted while one that already joined still gets
+        the error. A cancel still wins: the id stays terminal as ``cancelled``
+        so a retry does not start work after the cancel.
+        """
+        with self._lock:
+            if operation.terminal:
+                return
+            cancelled = operation.cancel_event.is_set()
+            operation.state = "cancelled" if cancelled else "failed"
+            operation.finished_at = time.time()
+            operation.result = None
+            operation.error = error
+            operation.done_event.set()
+            if not cancelled:
+                self._operations.pop(operation.operation_id, None)
+                return
+            self._terminal_order.append(operation.operation_id)
+            while len(self._terminal_order) > self._max_terminal_entries:
+                old = self._terminal_order.pop(0)
+                current = self._operations.get(old)
+                if current is not None and current.terminal:
+                    self._operations.pop(old, None)
+
     def get(self, operation_id: str) -> Operation | None:
         with self._lock:
             return self._operations.get(operation_id)

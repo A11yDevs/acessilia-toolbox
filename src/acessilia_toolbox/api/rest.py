@@ -132,6 +132,17 @@ def _finish_operation(
     )
 
 
+def _release_operation(
+    request: Request,
+    operation: Operation | None,
+    error: BaseException,
+) -> None:
+    """Forget an operation refused before execution, so a retry is admitted."""
+    if operation is None:
+        return
+    operations(request).release(operation, error=error)
+
+
 async def _join_operation(operation: Operation) -> Any:
     """Wait for the owner request and return its result, without a new slot.
 
@@ -317,7 +328,7 @@ async def execute_capability(
         return cast(ExecutionResponse, await _join_operation(operation))
     if not slots.acquire(blocking=False):
         error = ProviderUnavailableError("execution capacity exhausted; retry later")
-        _finish_operation(request, operation, "failed", error=error)
+        _release_operation(request, operation, error)
         raise error
     try:
         with contextlib.ExitStack() as stack:
@@ -450,7 +461,7 @@ async def store_artifact(
         return cast(ArtifactReference, await _join_operation(operation))
     if not slots.acquire(blocking=False):
         error = ProviderUnavailableError("execution capacity exhausted")
-        _finish_operation(request, operation, "failed", error=error)
+        _release_operation(request, operation, error)
         raise error
     try:
         await _check_upload_stream(file)

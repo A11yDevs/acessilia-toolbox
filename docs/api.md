@@ -272,8 +272,11 @@ X-Acessilia-Attempt-Id: <attempt_id>
 The caller owns `task_id` and `operation_id`; the SDK creates a new
 `attempt_id` per HTTP attempt. A duplicate `operation_id` with the same
 `task_id` joins the running or finished operation instead of running the
-provider twice. Identifiers are 1–200 log-safe characters and require each
-other (`operation_id` requires `task_id`).
+provider twice. Only operations that may have run are joined: a request
+refused before the provider starts, such as `503` for lack of an execution
+slot, releases its `operation_id`, so a retry with that id is admitted once
+capacity is available. Identifiers are 1–200 log-safe characters and require
+each other (`operation_id` requires `task_id`).
 
 `POST /v1/operations/{operation_id}:cancel` requires the same task header and
 answers `404 operation_not_found` for an unknown id or another task. States are

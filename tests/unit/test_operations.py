@@ -86,6 +86,39 @@ def test_finished_operation_can_be_joined_after_the_response_was_lost():
     assert joined.done_event.is_set()
 
 
+def test_a_pre_execution_rejection_is_not_retained():
+    """A capacity 503 says nothing about the request, so a retry must run."""
+    registry = OperationRegistry()
+    operation, _ = registry.begin(
+        "op-1", task_id="task-1", attempt_id="attempt-1", capability_id=CAPABILITY
+    )
+    registry.release(operation, error=RuntimeError("no execution slot"))
+
+    assert operation.state == "failed"
+    assert operation.done_event.is_set()
+    retry, owner = registry.begin(
+        "op-1", task_id="task-1", attempt_id="attempt-2", capability_id=CAPABILITY
+    )
+    assert owner is True
+    assert retry is not operation
+
+
+def test_a_cancel_still_wins_over_a_pre_execution_rejection():
+    registry = OperationRegistry()
+    operation, _ = registry.begin(
+        "op-1", task_id="task-1", attempt_id="attempt-1", capability_id=CAPABILITY
+    )
+    registry.cancel("op-1", task_id="task-1")
+    registry.release(operation, error=RuntimeError("no execution slot"))
+
+    assert operation.state == "cancelled"
+    joined, owner = registry.begin(
+        "op-1", task_id="task-1", attempt_id="attempt-2", capability_id=CAPABILITY
+    )
+    assert owner is False
+    assert joined is operation
+
+
 def test_route_cancels_a_blocked_execution(monkeypatch):
     monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
     capabilities, providers = _registries()
@@ -343,5 +376,55 @@ def test_route_cancels_a_blocked_artifact_upload(monkeypatch):
                 result = await upload
             assert result.status_code == 409
             assert result.json()["code"] == "operation_cancelled"
+
+    asyncio.run(run())
+
+
+def test_capacity_rejection_is_not_retained_for_the_next_retry(monkeypatch):
+    """A 503 before execution must not stick to the operation id (ADR-0019)."""
+    from acessilia_toolbox.core.artifact import ArtifactRef
+
+    monkeypatch.setenv("TOOLBOX_ALLOW_UNAUTHENTICATED", "1")
+    capabilities, providers = _registries()
+    app = create_app(capabilities, providers)
+    app.state.execution_slots = threading.BoundedSemaphore(1)
+    app.state.execution_slots.acquire()
+    calls: list[bytes] = []
+
+    class Runner:
+        def store_artifact_stream(self, payload, **_kwargs):
+            calls.append(payload)
+            return ArtifactRef.of(b"%PDF", media_type=PDF, filename="doc.pdf")
+
+    app.state.executor = Runner()
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://audit"
+        ) as client:
+            headers = {
+                "X-Acessilia-Task-Id": "task-capacity",
+                "X-Acessilia-Operation-Id": "op-capacity",
+                "X-Acessilia-Attempt-Id": "attempt-1",
+            }
+            rejected = await client.post(
+                "/v1/artifacts",
+                files={"file": ("doc.pdf", PAYLOAD, PDF)},
+                headers=headers,
+            )
+            assert rejected.status_code == 503
+            assert rejected.json()["code"] == "provider_unavailable"
+            assert calls == []
+
+            # A slot is free again: the retry keeps the operation id but must
+            # be admitted instead of joining the capacity failure.
+            app.state.execution_slots.release()
+            retry = await client.post(
+                "/v1/artifacts",
+                files={"file": ("doc.pdf", PAYLOAD, PDF)},
+                headers={**headers, "X-Acessilia-Attempt-Id": "attempt-2"},
+            )
+            assert retry.status_code == 200
+            assert len(calls) == 1
 
     asyncio.run(run())
