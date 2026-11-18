@@ -122,12 +122,28 @@ def _duplicate_element_id(payload: dict) -> None:
     payload["summary"]["element_count"] += 1
 
 
+def _parent_reference_mismatch(payload: dict) -> None:
+    parent, child = payload["elements"][:2]
+    parent.update(parent_id=None, parent_ref=None, source_ref="source-parent")
+    child.update(parent_id=parent["id"], parent_ref="different-source-parent")
+
+
 DOCUMENT_BREAKS = {
     "duplicate element id": _duplicate_element_id,
     "missing parent": lambda p: p["elements"][0].update(parent_id="nowhere"),
     "own parent": lambda p: p["elements"][0].update(parent_id=p["elements"][0]["id"]),
     "parent cycle": _element_parent_cycle,
     "page lists an unknown element": lambda p: p["pages"][0]["element_ids"].append("ghost"),
+    "page repeats an element": lambda p: p["pages"][0]["element_ids"].append(
+        p["pages"][0]["element_ids"][0]
+    ),
+    "element references an unknown page": lambda p: p["elements"][0].update(
+        page_number=max(page["page_number"] for page in p["pages"]) + 1
+    ),
+    "provenance references an unknown page": lambda p: p["elements"][0]["provenance"][0].update(
+        page_number=max(page["page_number"] for page in p["pages"]) + 1
+    ),
+    "parent source reference disagrees with parent id": _parent_reference_mismatch,
     "character range ends before it starts": lambda p: p["elements"][0]["provenance"][0].update(
         char_start=5, char_end=2
     ),
@@ -142,6 +158,28 @@ def test_document_invariants_are_enforced(case: str) -> None:
     assert validate_structured_document(structured_document_from_payload(payload)) != []
     with pytest.raises(ValidationError):
         ProcessingManifest.model_validate(payload)
+
+
+
+@pytest.mark.parametrize(
+    "case", ["fragment", "unlisted element", "parent without source reference"]
+)
+def test_docstruct_054_keeps_supported_document_shapes(case: str) -> None:
+    payload = _valid()
+    if case == "fragment":
+        payload["pages"] = []
+        payload["summary"]["page_count"] = 0
+    elif case == "unlisted element":
+        element_id = payload["elements"][0]["id"]
+        for page in payload["pages"]:
+            page["element_ids"] = [item for item in page["element_ids"] if item != element_id]
+    else:
+        parent, child = payload["elements"][:2]
+        parent.update(parent_id=None, parent_ref=None, source_ref=None)
+        child.update(parent_id=parent["id"], parent_ref="source-reference")
+
+    assert validate_structured_document(structured_document_from_payload(payload)) == []
+    ProcessingManifest.model_validate(payload)
 
 
 def _observation(payload: dict, observation_id: str) -> dict:
