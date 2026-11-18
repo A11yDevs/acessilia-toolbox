@@ -8,25 +8,38 @@ not generated from it but checked against it here (acessilia#203, D1):
   the manifest itself, have exactly the fields, types, nullability, defaults,
   bounds and enums that ``docstruct.manifest.field_specs`` declares;
 - the recorded snapshots convert to docstruct and back without loss;
-- the model rejects every document docstruct finds invalid, and the process
-  invariants of 1.1.0 that are not docstruct's.
+- the model rejects every document docstruct finds invalid, for the same
+  reason, and keeps every document docstruct keeps. The cases are docstruct's
+  shared catalog (``docstruct.manifest_cases``, 0.5.5), which the core and the
+  SDK run too (acessilia#470, criterion 4);
+- the process invariants of 1.1.0 that are not docstruct's.
 """
 
 from __future__ import annotations
 
 import copy
 import json
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 from docstruct.manifest import (
+    MSG_FIELD_NOT_ALLOWED,
+    MSG_FIELD_OUT_OF_RANGE,
+    MSG_FIELD_WRONG_TYPE,
     WIRE_NAMES,
     StructuredDocument,
     field_specs,
     structured_document_from_payload,
     structured_document_to_payload,
     validate_structured_document,
+)
+from docstruct.manifest_cases import (
+    BROKEN,
+    SUPPORTED,
+    document_findings,
+    example_document,
 )
 from pydantic import ValidationError
 
@@ -112,73 +125,79 @@ def _valid() -> dict:
     return payload
 
 
-def _element_parent_cycle(payload: dict) -> None:
-    first, second = payload["elements"][0], payload["elements"][1]
-    first["parent_id"], second["parent_id"] = second["id"], first["id"]
+def _with_summary(payload: dict) -> dict:
+    """The summary follows the document: a shared case changes the document
+    only, so the counts are recomputed after it."""
+    summary = payload["summary"]
+    summary["page_count"] = len(payload["pages"])
+    summary["element_count"] = len(payload["elements"])
+    types: dict[str, int] = {}
+    for element in payload["elements"]:
+        types[element["type"]] = types.get(element["type"], 0) + 1
+    summary["element_types"] = dict(sorted(types.items()))
+    return payload
 
 
-def _duplicate_element_id(payload: dict) -> None:
-    payload["elements"].append(copy.deepcopy(payload["elements"][0]))
-    payload["summary"]["element_count"] += 1
+def _example() -> dict:
+    """docstruct's shared example document, in a snapshot's process fields.
+
+    The snapshot's observations and obligations target its own elements, so
+    the example goes without them."""
+    payload = {**_valid(), **example_document(), "observations": [], "obligations": []}
+    payload["summary"].update(observation_count=0, obligation_count=0)
+    return _with_summary(payload)
 
 
-def _parent_reference_mismatch(payload: dict) -> None:
-    parent, child = payload["elements"][:2]
-    parent.update(parent_id=None, parent_ref=None, source_ref="source-parent")
-    child.update(parent_id=parent["id"], parent_ref="different-source-parent")
+#: The documents the shared cases are applied to: a recorded snapshot and
+#: docstruct's example.
+BASES = {"snapshot": _valid, "docstruct example": _example}
+FIELD_MESSAGES = (MSG_FIELD_WRONG_TYPE, MSG_FIELD_OUT_OF_RANGE, MSG_FIELD_NOT_ALLOWED)
 
 
-DOCUMENT_BREAKS = {
-    "duplicate element id": _duplicate_element_id,
-    "missing parent": lambda p: p["elements"][0].update(parent_id="nowhere"),
-    "own parent": lambda p: p["elements"][0].update(parent_id=p["elements"][0]["id"]),
-    "parent cycle": _element_parent_cycle,
-    "page lists an unknown element": lambda p: p["pages"][0]["element_ids"].append("ghost"),
-    "page repeats an element": lambda p: p["pages"][0]["element_ids"].append(
-        p["pages"][0]["element_ids"][0]
-    ),
-    "element references an unknown page": lambda p: p["elements"][0].update(
-        page_number=max(page["page_number"] for page in p["pages"]) + 1
-    ),
-    "provenance references an unknown page": lambda p: p["elements"][0]["provenance"][0].update(
-        page_number=max(page["page_number"] for page in p["pages"]) + 1
-    ),
-    "parent source reference disagrees with parent id": _parent_reference_mismatch,
-    "character range ends before it starts": lambda p: p["elements"][0]["provenance"][0].update(
-        char_start=5, char_end=2
-    ),
-}
+def _location(path: str) -> tuple:
+    """``elements[0].provenance[0].bbox`` as a Pydantic error location."""
+    return tuple(
+        int(part) if part.isdigit() else part for part in re.findall(r"[^.\[\]]+", path)
+    )
 
 
-@pytest.mark.parametrize("case", list(DOCUMENT_BREAKS))
-def test_document_invariants_are_enforced(case: str) -> None:
-    payload = _valid()
-    DOCUMENT_BREAKS[case](payload)
+def test_the_shared_example_is_a_valid_manifest() -> None:
+    ProcessingManifest.model_validate(_example())
 
-    assert validate_structured_document(structured_document_from_payload(payload)) != []
-    with pytest.raises(ValidationError):
+
+@pytest.mark.parametrize("base", list(BASES))
+@pytest.mark.parametrize("case", list(BROKEN))
+def test_document_invariants_are_enforced(case: str, base: str) -> None:
+    """Rejected for docstruct's reason: a field finding at the same location,
+    an unknown field as one, and an invariant with docstruct's message, which
+    the model raises for its first finding."""
+    payload = BASES[base]()
+    BROKEN[case](payload)
+    _with_summary(payload)
+    findings = document_findings(payload)
+    assert findings != []
+    message, context = findings[0]
+
+    with pytest.raises(ValidationError) as raised:
         ProcessingManifest.model_validate(payload)
 
-
-
-@pytest.mark.parametrize(
-    "case", ["fragment", "unlisted element", "parent without source reference"]
-)
-def test_docstruct_054_keeps_supported_document_shapes(case: str) -> None:
-    payload = _valid()
-    if case == "fragment":
-        payload["pages"] = []
-        payload["summary"]["page_count"] = 0
-    elif case == "unlisted element":
-        element_id = payload["elements"][0]["id"]
-        for page in payload["pages"]:
-            page["element_ids"] = [item for item in page["element_ids"] if item != element_id]
+    errors = raised.value.errors()
+    if message == "refused":
+        assert any(error["type"] == "extra_forbidden" for error in errors), errors
+    elif message in FIELD_MESSAGES:
+        assert _location(context["path"]) in [tuple(error["loc"]) for error in errors], errors
     else:
-        parent, child = payload["elements"][:2]
-        parent.update(parent_id=None, parent_ref=None, source_ref=None)
-        child.update(parent_id=parent["id"], parent_ref="source-reference")
+        assert message.format(**context) in str(raised.value)
 
-    assert validate_structured_document(structured_document_from_payload(payload)) == []
+
+@pytest.mark.parametrize("base", list(BASES))
+@pytest.mark.parametrize("case", list(SUPPORTED))
+def test_supported_document_shapes_stay_valid(case: str, base: str) -> None:
+    payload = BASES[base]()
+    SUPPORTED[case](payload)
+    _with_summary(payload)
+
+    assert document_findings(payload) == []
     ProcessingManifest.model_validate(payload)
 
 

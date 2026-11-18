@@ -85,6 +85,13 @@ dependencies of its own. The normalization builder uses it for table ASTs.
   mismatches. Element-only fragments, unlisted elements and parents without a
   source reference retain their existing acceptance. No invariant is copied
   into the Toolbox, and the published wire fields remain unchanged.
+- **Shared contract cases.** Since docstruct 0.5.5, the contract test's
+  rejected and accepted documents are docstruct's catalog
+  (`docstruct.manifest_cases`), which the core and the SDK run against their
+  own models too (acessilia#470, criterion 4). Each case is applied to a
+  recorded snapshot and to docstruct's example document, and the model must
+  reject it for docstruct's reason: the same field location, or docstruct's
+  invariant message.
 - **Pinned by hash.** docstruct is installed from the wheel of a
   `docstruct-vX.Y.Z` GitHub Release of the core, pinned by URL and `#sha256=`.
   See [Updating docstruct](dev-workflow.md#6-updating-docstruct).
