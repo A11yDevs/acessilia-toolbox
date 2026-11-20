@@ -89,10 +89,21 @@ class TestEdgeTtsProvider:
                 parameters={"concurrency": -1},
             )
 
+        with pytest.raises(InvalidInputError, match="valid integers"):
+            provider.execute(
+                "audio.synthesize",
+                b"Hello world",
+                filename="doc.txt",
+                media_type="text/plain",
+                parameters={"chunk_size": "not_an_int"},
+            )
+
     def test_normalization_neutral_and_edge_values(self) -> None:
-        # Multiplier 1.0 (neutral) must produce None, not +1%
+        # Multiplier 1.0 and integer 1 (neutral) must produce None, not +1%
         assert _normalize_rate(1.0) is None
+        assert _normalize_rate(1) is None
         assert _normalize_volume(1.0) is None
+        assert _normalize_volume(1) is None
         assert _normalize_rate(0) is None
         assert _normalize_volume(0) is None
         assert _normalize_pitch(0) is None

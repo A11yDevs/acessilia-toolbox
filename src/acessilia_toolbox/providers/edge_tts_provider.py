@@ -47,7 +47,7 @@ def _normalize_rate(val: Any) -> str | None:
                 return None
             pct = round((val - 1.0) * 100)
             return f"{pct:+d}%"
-        if val == 0:
+        if val in (0, 1):
             return None
         pct = round(val)
         return f"{pct:+d}%"
@@ -71,7 +71,7 @@ def _normalize_volume(val: Any) -> str | None:
                 return None
             pct = round((val - 1.0) * 100)
             return f"{pct:+d}%"
-        if val == 0:
+        if val in (0, 1):
             return None
         pct = round(val)
         return f"{pct:+d}%"
@@ -180,8 +180,14 @@ class EdgeTtsProvider:
         rate = _normalize_rate(params.get("rate"))
         volume = _normalize_volume(params.get("volume"))
         pitch = _normalize_pitch(params.get("pitch"))
-        chunk_size = int(params.get("chunk_size", DEFAULT_CHUNK_SIZE))
-        concurrency = int(params.get("concurrency", DEFAULT_CONCURRENCY))
+        try:
+            chunk_size = int(params.get("chunk_size", DEFAULT_CHUNK_SIZE))
+            concurrency = int(params.get("concurrency", DEFAULT_CONCURRENCY))
+        except (ValueError, TypeError) as exc:
+            raise InvalidInputError(
+                f"chunk_size and concurrency must be valid integers: {exc}",
+                capability=capability_id,
+            ) from exc
         if chunk_size <= 0:
             raise InvalidInputError(
                 f"chunk_size must be a positive integer, got {chunk_size}",
