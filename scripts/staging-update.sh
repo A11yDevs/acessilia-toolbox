@@ -49,7 +49,7 @@ GITHUB_REPO="A11yDevs/acessilia-toolbox"
 
 # Sidecars published by the Sidecars workflow (compose service names). They
 # are updated with the toolbox so the API never runs against an older sidecar.
-SIDECAR_SERVICES=(mineru-serve audiveris-serve nougat-serve rapid-latex-ocr pp-formulanet rapidocr-orient pdf-ua-render verapdf-validate math-speech)
+SIDECAR_SERVICES=(mineru-serve audiveris-serve nougat-serve rapid-latex-ocr pp-formulanet rapidocr-orient pdf-ua-render verapdf-validate math-speech piper-tts)
 # Sidecars that start only under a Compose profile (#108): audiveris-serve
 # with "music", nougat-serve with "nougat" (COMPOSE_PROFILES in .env).
 OPTIONAL_SIDECARS=(audiveris-serve nougat-serve)

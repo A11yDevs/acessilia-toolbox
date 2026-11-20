@@ -174,7 +174,10 @@ class TestShellSafety:
         assert _run(sync_env, example, env, "--check") == 1
         assert "! SMTP_NAME" in capsys.readouterr().out
 
-    @pytest.mark.skipif(shutil.which("bash") is None, reason="bash not installed")
+    @pytest.mark.skipif(
+        shutil.which("bash") is None or sys.platform == "win32",
+        reason="bash not installed or running on Windows",
+    )
     def test_repository_example_sources_in_bash_like_the_server_scripts(self):
         result = subprocess.run(
             ["bash", "-c", 'set -euo pipefail; set -a; source "$1"; set +a', "_",

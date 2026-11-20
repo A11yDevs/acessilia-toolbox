@@ -71,7 +71,7 @@ def test_the_contract_rest_and_mcp_publish_the_same_binding_data(
     )
 
     published = _by_key(contract["capabilities"])
-    assert len(published) == len(capabilities.manifests()) == 35
+    assert len(published) == len(capabilities.manifests()) == 36
     assert _by_key(rest.json()) == published
     assert _by_key(mcp) == published
 
