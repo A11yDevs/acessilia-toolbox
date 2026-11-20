@@ -11,7 +11,12 @@ import pytest
 from acessilia_toolbox.core.errors import InvalidInputError, ProviderUnavailableError
 from acessilia_toolbox.core.provider import ProviderDescriptor
 from acessilia_toolbox.providers import create_adapter
-from acessilia_toolbox.providers.edge_tts_provider import EdgeTtsProvider
+from acessilia_toolbox.providers.edge_tts_provider import (
+    EdgeTtsProvider,
+    _normalize_pitch,
+    _normalize_rate,
+    _normalize_volume,
+)
 
 
 def make_descriptor(**overrides: object) -> ProviderDescriptor:
@@ -63,6 +68,48 @@ class TestEdgeTtsProvider:
                 filename="doc.txt",
                 media_type="text/plain",
             )
+
+    def test_rejects_invalid_chunk_size_and_concurrency(self) -> None:
+        provider = EdgeTtsProvider(make_descriptor())
+        with pytest.raises(InvalidInputError, match="chunk_size must be a positive integer"):
+            provider.execute(
+                "audio.synthesize",
+                b"Hello world",
+                filename="doc.txt",
+                media_type="text/plain",
+                parameters={"chunk_size": 0},
+            )
+
+        with pytest.raises(InvalidInputError, match="concurrency must be at least 1"):
+            provider.execute(
+                "audio.synthesize",
+                b"Hello world",
+                filename="doc.txt",
+                media_type="text/plain",
+                parameters={"concurrency": -1},
+            )
+
+    def test_normalization_neutral_and_edge_values(self) -> None:
+        # Multiplier 1.0 (neutral) must produce None, not +1%
+        assert _normalize_rate(1.0) is None
+        assert _normalize_volume(1.0) is None
+        assert _normalize_rate(0) is None
+        assert _normalize_volume(0) is None
+        assert _normalize_pitch(0) is None
+
+        # Positive / negative rate & volume multipliers
+        assert _normalize_rate(1.2) == "+20%"
+        assert _normalize_rate(0.8) == "-20%"
+        assert _normalize_volume(1.5) == "+50%"
+        assert _normalize_volume(0.5) == "-50%"
+
+        # Pitch Hz values
+        assert _normalize_pitch(50) == "+50Hz"
+        assert _normalize_pitch(-20) == "-20Hz"
+
+        # Explicit string percentages
+        assert _normalize_rate("+15%") == "+15%"
+        assert _normalize_rate("0%") is None
 
     def test_chunk_text_paragraphs(self) -> None:
         provider = EdgeTtsProvider(make_descriptor())

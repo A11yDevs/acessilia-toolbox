@@ -42,13 +42,17 @@ def _normalize_rate(val: Any) -> str | None:
     if val is None:
         return None
     if isinstance(val, (int, float)):
-        if isinstance(val, float) and 0.0 < val < 5.0 and val != 1.0:
+        if isinstance(val, float) and 0.0 < val < 5.0:
+            if val == 1.0:
+                return None
             pct = round((val - 1.0) * 100)
             return f"{pct:+d}%"
+        if val == 0:
+            return None
         pct = round(val)
         return f"{pct:+d}%"
     s = str(val).strip()
-    if not s:
+    if not s or s in ("0", "+0", "-0", "0%", "+0%", "-0%"):
         return None
     if not (s.startswith("+") or s.startswith("-")):
         s = f"+{s}"
@@ -62,13 +66,17 @@ def _normalize_volume(val: Any) -> str | None:
     if val is None:
         return None
     if isinstance(val, (int, float)):
-        if isinstance(val, float) and 0.0 <= val <= 2.0 and val != 1.0:
+        if isinstance(val, float) and 0.0 <= val <= 2.0:
+            if val == 1.0:
+                return None
             pct = round((val - 1.0) * 100)
             return f"{pct:+d}%"
+        if val == 0:
+            return None
         pct = round(val)
         return f"{pct:+d}%"
     s = str(val).strip()
-    if not s:
+    if not s or s in ("0", "+0", "-0", "0%", "+0%", "-0%"):
         return None
     if not (s.startswith("+") or s.startswith("-")):
         s = f"+{s}"
@@ -82,10 +90,12 @@ def _normalize_pitch(val: Any) -> str | None:
     if val is None:
         return None
     if isinstance(val, (int, float)):
+        if val == 0:
+            return None
         pct = round(val)
         return f"{pct:+d}Hz"
     s = str(val).strip()
-    if not s:
+    if not s or s in ("0", "+0", "-0", "0Hz", "+0Hz", "-0Hz"):
         return None
     if not (s.startswith("+") or s.startswith("-")):
         s = f"+{s}"
@@ -172,6 +182,16 @@ class EdgeTtsProvider:
         pitch = _normalize_pitch(params.get("pitch"))
         chunk_size = int(params.get("chunk_size", DEFAULT_CHUNK_SIZE))
         concurrency = int(params.get("concurrency", DEFAULT_CONCURRENCY))
+        if chunk_size <= 0:
+            raise InvalidInputError(
+                f"chunk_size must be a positive integer, got {chunk_size}",
+                capability=capability_id,
+            )
+        if concurrency <= 0:
+            raise InvalidInputError(
+                f"concurrency must be at least 1, got {concurrency}",
+                capability=capability_id,
+            )
 
         try:
             import edge_tts

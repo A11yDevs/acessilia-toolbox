@@ -138,6 +138,19 @@ class TestPiperTtsProvider:
                 media_type="text/plain",
             )
 
+    def test_sidecar_404_raises_invalid_input(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"detail": "Voice model 'missing-voice' not found"})
+
+        provider = provider_with(handler)
+        with pytest.raises(InvalidInputError, match="Voice model 'missing-voice' not found"):
+            provider.execute(
+                "audio.synthesize",
+                b"some text",
+                filename="doc.txt",
+                media_type="text/plain",
+            )
+
     def test_sidecar_503_raises_provider_unavailable(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(503, json={"detail": "Model loading"})

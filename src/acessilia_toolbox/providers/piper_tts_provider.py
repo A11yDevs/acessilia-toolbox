@@ -174,6 +174,11 @@ class PiperTtsProvider:
                 format_http_error(self.descriptor.id, response, action="rejected input"),
                 capability="audio.synthesize",
             )
+        if response.status_code == 404:
+            raise InvalidInputError(
+                format_http_error(self.descriptor.id, response, action="model or voice not found"),
+                capability="audio.synthesize",
+            )
         if response.status_code == 503:
             raise ProviderUnavailableError(
                 format_http_error(self.descriptor.id, response, action="unavailable"),
