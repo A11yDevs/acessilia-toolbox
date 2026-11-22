@@ -31,6 +31,6 @@ semantics:
 
 providers:
   - id: docling-ocr
-    version: "1.32+"
+    version: "1.37+"
   - id: mineru-ocr
     version: "4.0.12+"

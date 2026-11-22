@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from acessilia_toolbox.core.errors import (
+    InvalidInputError,
     ProviderExecutionError,
     ProviderTimeoutError,
     ProviderUnavailableError,
@@ -260,3 +261,101 @@ class TestDoclingOcrProvider:
         extraction = extract(provider_with(handler))
         assert extraction.document["item_count"] == 1
         assert extraction.document["items"][0]["text"] == "Texto simples."
+
+
+def capture_convert(sent: list[httpx.Request]) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/version":
+            sent.append(request)
+        return convert_handler(request)
+
+    return handler
+
+
+def sent_ocr_langs(request: httpx.Request) -> list[str]:
+    """The ``ocr_lang`` form values of a multipart request."""
+    body = request.read().decode("utf-8", errors="replace")
+    parts = body.split('name="ocr_lang"')[1:]
+    return [part.split("\r\n\r\n", 1)[1].split("\r\n", 1)[0] for part in parts]
+
+
+def extract_with(adapter: DoclingOcrProvider, **parameters: object) -> ExtractionResult:
+    return adapter.execute(
+        "document.ocr",
+        b"fake-image-data",
+        filename="scan.png",
+        media_type="image/png",
+        parameters=parameters,
+    )
+
+
+class TestOcrLanguage:
+    """ocr_lang is BCP 47; docling-serve gets it behind ``iso:`` and maps it
+    onto whichever OCR engine it selects."""
+
+    @pytest.mark.parametrize(
+        ("requested", "sent"),
+        [
+            ("pt-BR", ["iso:pt-BR"]),
+            ("pt", ["iso:pt"]),
+            ("por", ["iso:por"]),
+            ("en-US", ["iso:en-US"]),
+            ("zh", ["iso:zh"]),
+            ("zh-Hans-CN", ["iso:zh-Hans-CN"]),
+            ("zh-Hant-TW", ["iso:zh-Hant-TW"]),
+            ("sr-Latn", ["iso:sr-Latn"]),
+            ("fil-PH", ["iso:fil-PH"]),
+            ("en-u-ca-gregory", ["iso:en-u-ca-gregory"]),
+            (" iso:de ", ["iso:de"]),
+            ("ISO:de", ["iso:de"]),
+            (["pt-BR", "en"], ["iso:pt-BR", "iso:en"]),
+        ],
+    )
+    def test_requested_language_is_sent_behind_the_iso_prefix(
+        self, requested: object, sent: list[str]
+    ) -> None:
+        requests: list[httpx.Request] = []
+        extraction = extract_with(provider_with(capture_convert(requests)), ocr_lang=requested)
+        assert sent_ocr_langs(requests[0]) == sent
+        assert extraction.configuration["ocr_lang"] == requested
+        assert extraction.configuration["docling_ocr_lang"] == sent
+
+    def test_default_language_is_brazilian_portuguese(self) -> None:
+        requests: list[httpx.Request] = []
+        extraction = extract(provider_with(capture_convert(requests)))
+        assert sent_ocr_langs(requests[0]) == ["iso:pt-BR"]
+        assert extraction.configuration["ocr_lang"] == "pt-BR"
+        assert extraction.document["language"] == "pt-BR"
+
+    @pytest.mark.parametrize(
+        ("requested", "language"),
+        [("en-US", "en-US"), ("iso:de", "de"), (["fr", "en"], "fr")],
+    )
+    def test_document_declares_the_requested_language(
+        self, requested: object, language: str
+    ) -> None:
+        extraction = extract_with(provider_with(convert_handler), ocr_lang=requested)
+        assert extraction.document["language"] == language
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "", "iso:", "pt BR", "pt_BR", "ch_sim", "português", "x-private", "e",
+            42, [], ["pt", None],
+        ],
+    )
+    def test_malformed_language_is_invalid_input_before_conversion(self, bad: object) -> None:
+        requests: list[httpx.Request] = []
+        with pytest.raises(InvalidInputError):
+            extract_with(provider_with(capture_convert(requests)), ocr_lang=bad)
+        assert requests == []
+
+    def test_missing_task_result_names_the_languages_sent(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                404,
+                json={"detail": "Task result not found. Please wait for a completion status."},
+            )
+
+        with pytest.raises(ProviderExecutionError, match="ocr_lang sent: iso:pt-BR"):
+            extract(provider_with(handler))
