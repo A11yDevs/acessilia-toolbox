@@ -7,6 +7,7 @@ confidence scores and bounding boxes.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from time import perf_counter
@@ -15,6 +16,7 @@ from typing import Any
 import httpx
 
 from acessilia_toolbox.core.errors import (
+    InvalidInputError,
     ProviderExecutionError,
     ProviderTimeoutError,
     ProviderUnavailableError,
@@ -29,6 +31,23 @@ from acessilia_toolbox.providers.docling_support import (
 from acessilia_toolbox.providers.http_support import format_http_error
 
 CONVERT_PATH = "/v1/convert/file"
+
+DEFAULT_OCR_LANG = "pt-BR"
+
+# docling-serve hands ``ocr_lang`` to its OCR engine (EasyOCR by default),
+# which wants its own language codes (``pt``, ``en``, ``ch_sim``), not BCP 47
+# tags. An unknown code makes the conversion fail inside docling-serve, and its
+# synchronous endpoint then answers only ``404 Task result not found``.
+_ENGINE_LANGUAGE_EXCEPTIONS = {
+    "zh-hans": "ch_sim",
+    "zh-cn": "ch_sim",
+    "zh-sg": "ch_sim",
+    "zh-hant": "ch_tra",
+    "zh-tw": "ch_tra",
+    "zh-hk": "ch_tra",
+}
+_LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$")
+_MISSING_RESULT = "Task result not found"
 
 VERSION_KEYS = ("docling-serve", "docling_serve_version", "version")
 COMPONENT_KEYS = ("docling-serve", "docling", "docling-core", "docling-ibm-models", "docling-parse")
@@ -56,11 +75,12 @@ class DoclingOcrProvider:
         started_clock = perf_counter()
 
         params = dict(parameters or {})
-        ocr_lang = params.get("ocr_lang", "pt-BR")
+        ocr_lang = params.get("ocr_lang", DEFAULT_OCR_LANG)
         force_ocr = params.get("force_ocr", True)
+        engine_lang = self._engine_languages(ocr_lang)
 
         with self._client() as client:
-            raw = self._convert(client, payload, filename, media_type, force_ocr, ocr_lang)
+            raw = self._convert(client, payload, filename, media_type, force_ocr, engine_lang)
             ocr_result = self._extract_ocr(raw)
             versions = self._server_versions(client)
 
@@ -80,6 +100,7 @@ class DoclingOcrProvider:
                 "ocr_lang": ocr_lang,
                 "component_versions": _components(versions),
                 **params,
+                "ocr_engine_lang": engine_lang,
             },
         )
 
@@ -113,6 +134,30 @@ class DoclingOcrProvider:
                 checked_at=checked_at,
             )
 
+    def _engine_languages(self, ocr_lang: Any) -> list[str]:
+        """Translate the requested language(s) into OCR engine codes.
+
+        Accepts one BCP 47 tag (``pt-BR``) or engine code (``pt``), or a list
+        of them; a malformed value is ``invalid_input`` before docling-serve
+        is called.
+        """
+        values = ocr_lang if isinstance(ocr_lang, list) else [ocr_lang]
+        if not values:
+            raise InvalidInputError("ocr_lang must name at least one language")
+        return [self._engine_language(value) for value in values]
+
+    def _engine_language(self, value: Any) -> str:
+        if not isinstance(value, str) or not _LANGUAGE_TAG.match(value.strip()):
+            raise InvalidInputError(
+                f"ocr_lang {value!r} is not a language tag (e.g. 'pt-BR' or 'pt')"
+            )
+        tag = value.strip().lower()
+        if tag in _ENGINE_LANGUAGE_EXCEPTIONS:
+            return _ENGINE_LANGUAGE_EXCEPTIONS[tag]
+        if "_" in tag and "-" not in tag:
+            return tag  # already an engine code, e.g. ``ch_sim``
+        return tag.split("-", 1)[0]
+
     def _client(self, timeout: float | None = None) -> httpx.Client:
         return httpx.Client(
             base_url=self.base_url,
@@ -126,7 +171,7 @@ class DoclingOcrProvider:
         filename: str,
         media_type: str,
         force_ocr: bool,
-        ocr_lang: str,
+        ocr_lang: list[str],
     ) -> dict[str, Any]:
         try:
             response = client.post(
@@ -145,8 +190,14 @@ class DoclingOcrProvider:
                 provider=self.descriptor.id,
             ) from exc
         except httpx.HTTPStatusError as exc:
+            message = format_http_error("docling-serve", exc.response)
+            if exc.response.status_code == 404 and _MISSING_RESULT in message:
+                message += (
+                    f" (the conversion failed inside docling-serve; "
+                    f"OCR languages sent: {', '.join(ocr_lang)})"
+                )
             raise ProviderExecutionError(
-                format_http_error("docling-serve", exc.response),
+                message,
                 provider=self.descriptor.id,
                 status_code=exc.response.status_code,
             ) from exc

@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from acessilia_toolbox.core.errors import (
+    InvalidInputError,
     ProviderExecutionError,
     ProviderTimeoutError,
     ProviderUnavailableError,
@@ -260,3 +261,78 @@ class TestDoclingOcrProvider:
         extraction = extract(provider_with(handler))
         assert extraction.document["item_count"] == 1
         assert extraction.document["items"][0]["text"] == "Texto simples."
+
+
+def capture_convert(sent: list[httpx.Request]) -> Callable[[httpx.Request], httpx.Response]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/version":
+            sent.append(request)
+        return convert_handler(request)
+
+    return handler
+
+
+def sent_ocr_langs(request: httpx.Request) -> list[str]:
+    """The ``ocr_lang`` form values of a multipart request."""
+    body = request.read().decode("utf-8", errors="replace")
+    parts = body.split('name="ocr_lang"')[1:]
+    return [part.split("\r\n\r\n", 1)[1].split("\r\n", 1)[0] for part in parts]
+
+
+def extract_with(adapter: DoclingOcrProvider, **parameters: object) -> ExtractionResult:
+    return adapter.execute(
+        "document.ocr",
+        b"fake-image-data",
+        filename="scan.png",
+        media_type="image/png",
+        parameters=parameters,
+    )
+
+
+class TestOcrLanguage:
+    """docling-serve's OCR engine wants engine codes, not BCP 47 tags."""
+
+    @pytest.mark.parametrize(
+        ("requested", "sent"),
+        [
+            ("pt-BR", ["pt"]),
+            ("pt", ["pt"]),
+            ("en-US", ["en"]),
+            ("EN", ["en"]),
+            ("zh-Hans", ["ch_sim"]),
+            ("zh-TW", ["ch_tra"]),
+            ("ch_sim", ["ch_sim"]),
+            (["pt-BR", "en"], ["pt", "en"]),
+        ],
+    )
+    def test_requested_language_is_sent_as_engine_code(
+        self, requested: object, sent: list[str]
+    ) -> None:
+        requests: list[httpx.Request] = []
+        extraction = extract_with(provider_with(capture_convert(requests)), ocr_lang=requested)
+        assert sent_ocr_langs(requests[0]) == sent
+        assert extraction.configuration["ocr_lang"] == requested
+        assert extraction.configuration["ocr_engine_lang"] == sent
+
+    def test_default_language_is_sent_as_portuguese_engine_code(self) -> None:
+        requests: list[httpx.Request] = []
+        extraction = extract(provider_with(capture_convert(requests)))
+        assert sent_ocr_langs(requests[0]) == ["pt"]
+        assert extraction.configuration["ocr_lang"] == "pt-BR"
+
+    @pytest.mark.parametrize("bad", ["", "pt BR", "português", 42, [], ["pt", None]])
+    def test_malformed_language_is_invalid_input_before_any_call(self, bad: object) -> None:
+        requests: list[httpx.Request] = []
+        with pytest.raises(InvalidInputError):
+            extract_with(provider_with(capture_convert(requests)), ocr_lang=bad)
+        assert requests == []
+
+    def test_missing_task_result_names_the_languages_sent(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                404,
+                json={"detail": "Task result not found. Please wait for a completion status."},
+            )
+
+        with pytest.raises(ProviderExecutionError, match="OCR languages sent: pt"):
+            extract(provider_with(handler))
