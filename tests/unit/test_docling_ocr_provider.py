@@ -290,38 +290,61 @@ def extract_with(adapter: DoclingOcrProvider, **parameters: object) -> Extractio
 
 
 class TestOcrLanguage:
-    """docling-serve's OCR engine wants engine codes, not BCP 47 tags."""
+    """ocr_lang is BCP 47; docling-serve gets it behind ``iso:`` and maps it
+    onto whichever OCR engine it selects."""
 
     @pytest.mark.parametrize(
         ("requested", "sent"),
         [
-            ("pt-BR", ["pt"]),
-            ("pt", ["pt"]),
-            ("en-US", ["en"]),
-            ("EN", ["en"]),
-            ("zh-Hans", ["ch_sim"]),
-            ("zh-TW", ["ch_tra"]),
-            ("ch_sim", ["ch_sim"]),
-            (["pt-BR", "en"], ["pt", "en"]),
+            ("pt-BR", ["iso:pt-BR"]),
+            ("pt", ["iso:pt"]),
+            ("por", ["iso:por"]),
+            ("en-US", ["iso:en-US"]),
+            ("zh", ["iso:zh"]),
+            ("zh-Hans-CN", ["iso:zh-Hans-CN"]),
+            ("zh-Hant-TW", ["iso:zh-Hant-TW"]),
+            ("sr-Latn", ["iso:sr-Latn"]),
+            ("fil-PH", ["iso:fil-PH"]),
+            ("en-u-ca-gregory", ["iso:en-u-ca-gregory"]),
+            (" iso:de ", ["iso:de"]),
+            ("ISO:de", ["iso:de"]),
+            (["pt-BR", "en"], ["iso:pt-BR", "iso:en"]),
         ],
     )
-    def test_requested_language_is_sent_as_engine_code(
+    def test_requested_language_is_sent_behind_the_iso_prefix(
         self, requested: object, sent: list[str]
     ) -> None:
         requests: list[httpx.Request] = []
         extraction = extract_with(provider_with(capture_convert(requests)), ocr_lang=requested)
         assert sent_ocr_langs(requests[0]) == sent
         assert extraction.configuration["ocr_lang"] == requested
-        assert extraction.configuration["ocr_engine_lang"] == sent
+        assert extraction.configuration["docling_ocr_lang"] == sent
 
-    def test_default_language_is_sent_as_portuguese_engine_code(self) -> None:
+    def test_default_language_is_brazilian_portuguese(self) -> None:
         requests: list[httpx.Request] = []
         extraction = extract(provider_with(capture_convert(requests)))
-        assert sent_ocr_langs(requests[0]) == ["pt"]
+        assert sent_ocr_langs(requests[0]) == ["iso:pt-BR"]
         assert extraction.configuration["ocr_lang"] == "pt-BR"
+        assert extraction.document["language"] == "pt-BR"
 
-    @pytest.mark.parametrize("bad", ["", "pt BR", "português", 42, [], ["pt", None]])
-    def test_malformed_language_is_invalid_input_before_any_call(self, bad: object) -> None:
+    @pytest.mark.parametrize(
+        ("requested", "language"),
+        [("en-US", "en-US"), ("iso:de", "de"), (["fr", "en"], "fr")],
+    )
+    def test_document_declares_the_requested_language(
+        self, requested: object, language: str
+    ) -> None:
+        extraction = extract_with(provider_with(convert_handler), ocr_lang=requested)
+        assert extraction.document["language"] == language
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "", "iso:", "pt BR", "pt_BR", "ch_sim", "português", "x-private", "e",
+            42, [], ["pt", None],
+        ],
+    )
+    def test_malformed_language_is_invalid_input_before_conversion(self, bad: object) -> None:
         requests: list[httpx.Request] = []
         with pytest.raises(InvalidInputError):
             extract_with(provider_with(capture_convert(requests)), ocr_lang=bad)
@@ -334,5 +357,5 @@ class TestOcrLanguage:
                 json={"detail": "Task result not found. Please wait for a completion status."},
             )
 
-        with pytest.raises(ProviderExecutionError, match="OCR languages sent: pt"):
+        with pytest.raises(ProviderExecutionError, match="ocr_lang sent: iso:pt-BR"):
             extract(provider_with(handler))

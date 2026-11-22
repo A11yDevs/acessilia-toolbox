@@ -34,19 +34,20 @@ CONVERT_PATH = "/v1/convert/file"
 
 DEFAULT_OCR_LANG = "pt-BR"
 
-# docling-serve hands ``ocr_lang`` to its OCR engine (EasyOCR by default),
-# which wants its own language codes (``pt``, ``en``, ``ch_sim``), not BCP 47
-# tags. An unknown code makes the conversion fail inside docling-serve, and its
-# synchronous endpoint then answers only ``404 Task result not found``.
-_ENGINE_LANGUAGE_EXCEPTIONS = {
-    "zh-hans": "ch_sim",
-    "zh-cn": "ch_sim",
-    "zh-sg": "ch_sim",
-    "zh-hant": "ch_tra",
-    "zh-tw": "ch_tra",
-    "zh-hk": "ch_tra",
-}
-_LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*$")
+# ``ocr_lang`` is public as BCP 47 (RFC 5646), like ``language`` elsewhere.
+# docling-serve reads a bare value as a code native to whichever OCR engine
+# it selects (EasyOCR ``pt``, Tesseract ``por``, RapidOCR ``latin``...), and a
+# BCP 47 tag only behind the ``iso:`` prefix (docling >= 2.127), which it
+# canonicalizes and maps onto that engine. Sending ``iso:<tag>`` keeps the
+# provider independent of the engine and of docling-serve's ``ocr_preset``.
+# A bare ``pt-BR`` names no engine code: the conversion fails inside
+# docling-serve, whose synchronous endpoint then answers only
+# ``404 Task result not found``.
+ISO_PREFIX = "iso:"
+# Well-formed shape of an RFC 5646 language tag: a 2-8 letter primary subtag
+# followed by subtags of 1-8 letters or digits (script, region, variants,
+# extensions). Whether docling supports the language is docling's to decide.
+_LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$")
 _MISSING_RESULT = "Task result not found"
 
 VERSION_KEYS = ("docling-serve", "docling_serve_version", "version")
@@ -77,11 +78,12 @@ class DoclingOcrProvider:
         params = dict(parameters or {})
         ocr_lang = params.get("ocr_lang", DEFAULT_OCR_LANG)
         force_ocr = params.get("force_ocr", True)
-        engine_lang = self._engine_languages(ocr_lang)
+        tags = self._language_tags(ocr_lang)
+        docling_lang = [ISO_PREFIX + tag for tag in tags]
 
         with self._client() as client:
-            raw = self._convert(client, payload, filename, media_type, force_ocr, engine_lang)
-            ocr_result = self._extract_ocr(raw)
+            raw = self._convert(client, payload, filename, media_type, force_ocr, docling_lang)
+            ocr_result = self._extract_ocr(raw, language=tags[0])
             versions = self._server_versions(client)
 
         completed_at = datetime.now(UTC)
@@ -100,7 +102,7 @@ class DoclingOcrProvider:
                 "ocr_lang": ocr_lang,
                 "component_versions": _components(versions),
                 **params,
-                "ocr_engine_lang": engine_lang,
+                "docling_ocr_lang": docling_lang,
             },
         )
 
@@ -134,29 +136,27 @@ class DoclingOcrProvider:
                 checked_at=checked_at,
             )
 
-    def _engine_languages(self, ocr_lang: Any) -> list[str]:
-        """Translate the requested language(s) into OCR engine codes.
+    def _language_tags(self, ocr_lang: Any) -> list[str]:
+        """Validate the requested language(s) as BCP 47 tags.
 
-        Accepts one BCP 47 tag (``pt-BR``) or engine code (``pt``), or a list
-        of them; a malformed value is ``invalid_input`` before docling-serve
-        is called.
+        Accepts one tag (``pt-BR``) or a list of them; an ``iso:`` prefix the
+        caller already wrote is tolerated. A malformed value is
+        ``invalid_input``, raised before the conversion request.
         """
         values = ocr_lang if isinstance(ocr_lang, list) else [ocr_lang]
         if not values:
             raise InvalidInputError("ocr_lang must name at least one language")
-        return [self._engine_language(value) for value in values]
+        return [self._language_tag(value) for value in values]
 
-    def _engine_language(self, value: Any) -> str:
-        if not isinstance(value, str) or not _LANGUAGE_TAG.match(value.strip()):
+    def _language_tag(self, value: Any) -> str:
+        tag = value.strip() if isinstance(value, str) else ""
+        if tag[: len(ISO_PREFIX)].lower() == ISO_PREFIX:
+            tag = tag[len(ISO_PREFIX):]
+        if not _LANGUAGE_TAG.match(tag):
             raise InvalidInputError(
-                f"ocr_lang {value!r} is not a language tag (e.g. 'pt-BR' or 'pt')"
+                f"ocr_lang {value!r} is not a BCP 47 language tag (e.g. 'pt-BR')"
             )
-        tag = value.strip().lower()
-        if tag in _ENGINE_LANGUAGE_EXCEPTIONS:
-            return _ENGINE_LANGUAGE_EXCEPTIONS[tag]
-        if "_" in tag and "-" not in tag:
-            return tag  # already an engine code, e.g. ``ch_sim``
-        return tag.split("-", 1)[0]
+        return tag
 
     def _client(self, timeout: float | None = None) -> httpx.Client:
         return httpx.Client(
@@ -194,7 +194,7 @@ class DoclingOcrProvider:
             if exc.response.status_code == 404 and _MISSING_RESULT in message:
                 message += (
                     f" (the conversion failed inside docling-serve; "
-                    f"OCR languages sent: {', '.join(ocr_lang)})"
+                    f"ocr_lang sent: {', '.join(ocr_lang)})"
                 )
             raise ProviderExecutionError(
                 message,
@@ -226,7 +226,7 @@ class DoclingOcrProvider:
             return {}
         return {str(key): str(value) for key, value in data.items()}
 
-    def _extract_ocr(self, raw: dict[str, Any]) -> dict[str, Any]:
+    def _extract_ocr(self, raw: dict[str, Any], *, language: str) -> dict[str, Any]:
         """Extract OCR text items from docling-serve response.
 
         Each ``bbox`` is ``[left, top, right, bottom]`` with a top-left origin,
@@ -270,7 +270,7 @@ class DoclingOcrProvider:
             "items": items,
             "item_count": len(items),
             "full_text": "\n".join(full_text_parts),
-            "language": "pt-BR",
+            "language": language,
         }
 
 
