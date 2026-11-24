@@ -13,6 +13,7 @@ import httpx
 import pytest
 from docstruct.tables.ast import (
     linearize_table_for_text,
+    normalize_table_ast,
     rows_from_table_ast,
     table_ast_from_rows,
 )
@@ -202,6 +203,19 @@ def test_blank_cell_does_not_shift_header_association():
     ast = table_ast_from_rows(rows)
     assert rows_from_table_ast(ast) == rows
     assert "Age: ; City: Recife" in linearize_table_for_text({"table_ast": ast})[0]
+
+
+def test_blank_row_keeps_its_grid_position_and_is_not_a_header():
+    rows = [["", ""], ["Ana", "30"]]
+    ast = normalize_table_ast(rows)
+    assert ast is not None
+    assert rows_from_table_ast(ast) == rows
+    # A blank first row cannot label the columns: it stays a data row instead
+    # of being inferred as the header (docstruct #601).
+    assert linearize_table_for_text({"table_ast": ast}) == [
+        "Row 1:  | ",
+        "Row 2: Ana | 30",
+    ]
 
 
 def test_mineru_native_table_and_formula_reach_manifest(tmp_path):

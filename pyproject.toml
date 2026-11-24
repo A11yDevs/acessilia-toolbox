@@ -32,7 +32,7 @@ dependencies = [
     # GitHub Release; the #sha256 fragment makes pip verify the download even
     # without the lock file. To move to a new release, follow
     # docs/dev-workflow.md, section 6 "Updating docstruct".
-    "acessilia-docstruct @ https://github.com/A11yDevs/acessilia/releases/download/docstruct-v0.5.5/acessilia_docstruct-0.5.5-py3-none-any.whl#sha256=0d0effb1b5e09bc04647e69ee59eaab192541e957bb6f727428f4a01a9fff092",
+    "acessilia-docstruct @ https://github.com/A11yDevs/acessilia/releases/download/docstruct-v0.5.8/acessilia_docstruct-0.5.8-py3-none-any.whl#sha256=97a36045f1db8c8aa0fa276ee9572fef980fb08bbba278b3d979a683b8cdf047",
 ]
 
 [project.optional-dependencies]
