@@ -55,6 +55,12 @@ O `CapabilityResult.document` padrão contém `results`, `processed_count` e
   são rejeitados. Validadores do modelo verificam ids únicos e contagens
   consistentes além das restrições estruturais do JSON Schema.
 
+As coleções validadas de alvos/resultados são snapshots de tuplas imutáveis
+internamente; seus elementos e campos de contagem também são congelados.
+O JSON público continua usando arrays. Apenas alvos de entrada expõem o helper
+interno de fingerprint; observações carregam o `input_fingerprint` original
+separadamente do texto de saída.
+
 Os schemas são gerados dos DTOs operacionais Pydantic estritos, sem copiar
 o envelope de planejamento do Core:
 
@@ -68,9 +74,13 @@ python scripts/derive_providers_config.py --check
 ## Limites, repetição e ciclo de vida
 
 - Até **256 alvos**, ids de **1–256 caracteres** e **1.048.576 bytes** na
-  requisição serializada inteira. A verificação precede o decode JSON;
-  os limites globais de upload/spooling e memória continuam válidos.
-- O orçamento/hint de execução é **5 segundos**, ou timeout menor do provider.
+  requisição serializada inteira. O adaptador verifica os bytes antes do
+  decode JSON; quantidade de alvos/tamanho de ids são verificações do modelo
+  após o parsing. O executor genérico pode já ter calculado o fingerprint ou
+  materializado a entrada sob seus limites globais. Portanto, 1 MiB não é teto
+  de memória de ponta a ponta nem limite da resposta inteira; os limites
+  globais de upload/spooling e memória continuam válidos.
+- O orçamento/hint de parsing/computação do adaptador é **5 segundos**, ou timeout menor do provider.
   O adaptador verifica o tempo após computação delimitada e recusa resultado
   atrasado com `provider_timeout`; não interrompe código síncrono da Docstruct.
   A admissão usa o limite existente do processo (quatro execuções por padrão,
@@ -87,6 +97,11 @@ python scripts/derive_providers_config.py --check
   consumidores não devem reutilizar ids para trabalho alterado ou pular a
   verificação de fingerprints. O executor observa cancelamento antes/depois do provider
   e antes da publicação; reconhecimento não significa preempção síncrona.
+  Cancelamento observado nessas verificações impede o trabalho de publicação
+  subsequente; não desfaz gravações já iniciadas ou concluídas entre elas.
+  Publicações em storage e cache não são uma transação atômica. O orçamento
+  do adaptador não limita upload, fingerprint/materialização genéricos,
+  cache/storage ou construção da resposta.
 - A proveniência registra fingerprint do payload original, versões exatas de
   capacidade/provider, runtime Toolbox e Docstruct/algoritmo; essas versões de
   componentes também entram na chave do cache existente. Não há substituição

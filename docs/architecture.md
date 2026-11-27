@@ -67,8 +67,10 @@ dependencies of its own. The normalization builder uses it for table ASTs.
 
 - **Dependencies point down only.** The Toolbox never imports the core
   (`acessilia_core`, legacy `backend`/`frontend`) or `acessilia_sdk`;
-  `tests/unit/test_architecture.py` checks static and literal dynamic imports.
-  Clients reach it over REST/MCP.
+  `tests/unit/test_architecture.py` checks static imports and recognized literal
+  `__import__`/`import_module` calls (aliases, `name=` and literal `getattr`).
+  Computed import targets and arbitrary indirection are outside this AST guard;
+  it is not a runtime sandbox. Clients reach it over REST/MCP.
 - **Shared algorithms live in docstruct, not here.** A copy diverges: the
   table normalization this repository used to carry dropped empty cells
   (shifting columns) and could not read Docling's grid format, both fixed in

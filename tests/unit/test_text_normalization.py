@@ -31,6 +31,7 @@ from acessilia_toolbox.operations.text_normalization import (
     MAX_TARGETS,
     NormalizationRequest,
     NormalizationResult,
+    TextTarget,
     normalize_text,
 )
 from acessilia_toolbox.providers import create_adapter, docstruct_text
@@ -117,6 +118,35 @@ def test_an_empty_batch_returns_observations_without_deciding_workflow_success()
         "processed_count": 0,
         "changed_count": 0,
     }
+
+
+def test_validated_collections_cannot_be_mutated_or_alias_the_input_list():
+    data = {"targets": [{"id": "a", "text": "ﬁ"}]}
+    request = NormalizationRequest.model_validate(data)
+    result = normalize_text(request)
+    data["targets"].append({"id": "a", "text": "duplicate"})
+    assert len(request.targets) == len(result.results) == 1
+    for collection in (request.targets, result.results):
+        with pytest.raises(AttributeError):
+            collection.append(collection[0])
+        with pytest.raises(TypeError):
+            collection[0] = collection[0]
+    with pytest.raises(ValidationError):
+        request.targets[0].text = "changed"
+    with pytest.raises(ValidationError):
+        result.processed_count = 0
+    assert request.model_dump(mode="json")["targets"] == [{"id": "a", "text": "ﬁ"}]
+    wire = result.model_dump(mode="json")
+    assert isinstance(wire["results"], list)
+    assert NormalizationResult.model_validate_json(result.model_dump_json()) == result
+
+
+def test_only_input_targets_expose_input_fingerprinting():
+    target = TextTarget(id="a", text="ﬁ")
+    request = NormalizationRequest.model_validate({"targets": [target]})
+    observation = normalize_text(request).results[0]
+    assert observation.input_fingerprint == target.fingerprint()
+    assert not hasattr(observation, "fingerprint")
 
 
 @pytest.mark.parametrize(
@@ -218,15 +248,76 @@ def test_algorithm_failure_and_expired_budget_publish_no_partial_result(monkeypa
         execute(payload())
 
 
-def executor(**kwargs):
+@pytest.mark.parametrize(
+    ("configured", "elapsed", "times_out"),
+    [(1.0, 0.5, False), (1.0, 1.0, False), (1.0, 1.1, True), (10.0, 4.9, False), (10.0, 5.1, True)],
+)
+def test_configured_timeout_and_cap_are_respected(monkeypatch, configured, elapsed, times_out):
+    provider = DocstructTextProvider(
+        descriptor().model_copy(update={"timeout_seconds": configured})
+    )
+    clock = iter([10.0, 10.0 + elapsed])
+    monkeypatch.setattr(docstruct_text, "perf_counter", lambda: next(clock))
+    if times_out:
+        with pytest.raises(ProviderTimeoutError):
+            provider.execute(
+                CAPABILITY, payload(), filename="batch.json", media_type="application/json"
+            )
+    else:
+        result = provider.execute(
+            CAPABILITY, payload(), filename="batch.json", media_type="application/json"
+        )
+        assert result.document["results"][0]["text"] == "final text"
+
+
+def executor(*, provider=None, **kwargs):
     from acessilia_toolbox.core.executor import CapabilityExecutor
 
     return CapabilityExecutor(
         CapabilityRegistry.from_directory(ROOT / "capabilities"),
-        ProviderRegistry([descriptor()]),
+        ProviderRegistry([provider or descriptor()]),
         create_adapter,
         **kwargs,
     )
+
+
+def test_executor_timeout_does_not_publish_and_retry_uses_original_input(monkeypatch, tmp_path):
+    from acessilia_toolbox.providers.storage import FilesystemArtifactStore
+
+    original = "a-\nb-\nc"
+    request_bytes = payload(original)
+    clock = iter([0.0, 1.5, 2.0, 2.5])
+    monkeypatch.setattr(docstruct_text, "perf_counter", lambda: next(clock))
+    algorithm = Mock(wraps=docstruct_text.normalize_text)
+    monkeypatch.setattr(docstruct_text, "normalize_text", algorithm)
+    cache = Mock(spec=NullCache)
+    cache.get.return_value = None
+    store = Mock(spec=FilesystemArtifactStore, wraps=FilesystemArtifactStore(tmp_path))
+    runtime = executor(
+        provider=descriptor().model_copy(update={"timeout_seconds": 1.0}),
+        store=store,
+        cache=cache,
+    )
+    with pytest.raises(ProviderTimeoutError):
+        runtime.execute(
+            CAPABILITY, request_bytes, filename="batch.json", media_type="application/json"
+        )
+    store.put.assert_not_called()
+    cache.put.assert_not_called()
+    assert list(tmp_path.rglob("*.json")) == []
+    result = runtime.execute(
+        CAPABILITY, request_bytes, filename="batch.json", media_type="application/json"
+    )
+    assert result.document["results"][0]["text"] == "ab-\nc"
+    assert [call.args[0].targets[0].text for call in algorithm.call_args_list] == [
+        original,
+        original,
+    ]
+    assert result.document["results"][0]["input_fingerprint"] == fingerprint_parameters(
+        {"id": "b1", "text": original}
+    )
+    store.put.assert_called_once()
+    cache.put.assert_called_once()
 
 
 def test_provenance_and_cache_bind_input_versions_and_repeat_the_same_observations():

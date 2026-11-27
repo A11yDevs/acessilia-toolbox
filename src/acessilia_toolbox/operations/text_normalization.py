@@ -19,7 +19,7 @@ class OperationalDTO(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
 
-class TextTarget(OperationalDTO):
+class TextFields(OperationalDTO):
     id: str = Field(min_length=1, max_length=MAX_ID_LENGTH)
     text: str | None = Field(max_length=MAX_PAYLOAD_BYTES)
 
@@ -31,31 +31,52 @@ class TextTarget(OperationalDTO):
             value.encode("utf-8")
         return value
 
+
+class TextTarget(TextFields):
     def fingerprint(self) -> str:
         return fingerprint_parameters({"id": self.id, "text": self.text})
 
 
+def _bounded_array(value: object) -> object:
+    """Freeze a decoded JSON array without coercing its strictly validated items."""
+    if isinstance(value, list):
+        if len(value) > MAX_TARGETS:
+            raise ValueError("too many normalization targets/results")
+        return tuple(value)
+    return value
+
+
 class NormalizationRequest(OperationalDTO):
-    targets: list[TextTarget] = Field(max_length=MAX_TARGETS)
+    targets: tuple[TextTarget, ...] = Field(max_length=MAX_TARGETS)
+
+    @field_validator("targets", mode="before")
+    @classmethod
+    def freeze_targets(cls, value: object) -> object:
+        return _bounded_array(value)
 
     @field_validator("targets")
     @classmethod
-    def unique_ids(cls, targets: list[TextTarget]) -> list[TextTarget]:
+    def unique_ids(cls, targets: tuple[TextTarget, ...]) -> tuple[TextTarget, ...]:
         if len({target.id for target in targets}) != len(targets):
             raise ValueError("target ids must be unique")
         return targets
 
 
-class NormalizationObservation(TextTarget):
+class NormalizationObservation(TextFields):
     input_fingerprint: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     processed: bool
     changed: bool
 
 
 class NormalizationResult(OperationalDTO):
-    results: list[NormalizationObservation] = Field(max_length=MAX_TARGETS)
+    results: tuple[NormalizationObservation, ...] = Field(max_length=MAX_TARGETS)
     processed_count: int = Field(ge=0, le=MAX_TARGETS)
     changed_count: int = Field(ge=0, le=MAX_TARGETS)
+
+    @field_validator("results", mode="before")
+    @classmethod
+    def freeze_results(cls, value: object) -> object:
+        return _bounded_array(value)
 
     @model_validator(mode="after")
     def consistent_counts(self) -> Self:
@@ -86,7 +107,7 @@ def normalize_text(request: NormalizationRequest) -> NormalizationResult:
             )
         )
     return NormalizationResult(
-        results=results,
+        results=tuple(results),
         processed_count=sum(item.processed for item in results),
         changed_count=sum(item.changed for item in results),
     )

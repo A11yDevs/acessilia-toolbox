@@ -23,25 +23,46 @@ ADR = (
 )
 
 
-def _dynamic_import_target(node: ast.Call) -> str | None:
-    """The literal module name of ``__import__(...)`` or ``import_module(...)``."""
+def _dynamic_import_target(node: ast.Call, aliases: set[str]) -> str | None:
+    """Recognized import calls with literal positional or ``name=`` arguments."""
     func = node.func
     name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-    if name not in {"__import__", "import_module"} or not node.args:
+    if (
+        isinstance(func, ast.Call)
+        and isinstance(func.func, ast.Name)
+        and func.func.id == "getattr"
+        and len(func.args) == 2
+        and isinstance(func.args[1], ast.Constant)
+        and func.args[1].value in {"__import__", "import_module"}
+    ):
+        name = func.args[1].value
+    if name not in {"__import__", "import_module"} | aliases:
         return None
-    first = node.args[0]
+    first = (
+        node.args[0]
+        if node.args
+        else next((keyword.value for keyword in node.keywords if keyword.arg == "name"), None)
+    )
     return first.value if isinstance(first, ast.Constant) and isinstance(first.value, str) else None
 
 
 def _imported_roots(path: Path) -> set[str]:
     roots: set[str] = set()
     # utf-8-sig: some modules start with a BOM, which Python accepts on import.
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8-sig"))):
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    aliases = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and not node.level and node.module == "importlib"
+        for alias in node.names
+        if alias.name == "import_module"
+    }
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             roots.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
             roots.add(node.module.split(".")[0])
-        elif isinstance(node, ast.Call) and (target := _dynamic_import_target(node)):
+        elif isinstance(node, ast.Call) and (target := _dynamic_import_target(node, aliases)):
             roots.add(target.split(".")[0])
     return roots
 
@@ -69,6 +90,14 @@ def test_the_toolbox_imports_neither_the_sdk_nor_the_core() -> None:
         "__import__('{root}.manifest')",
         "import importlib\nimportlib.import_module('{root}.manifest')",
         "from importlib import import_module\nimport_module('{root}.manifest')",
+        "from importlib import import_module as load\nload('{root}.manifest')",
+        "import importlib as loader\nloader.import_module('{root}.manifest')",
+        "from importlib import import_module\nimport_module(name='{root}.manifest')",
+        "__import__(name='{root}.manifest')",
+        "import importlib\ngetattr(importlib, 'import_module')('{root}.manifest')",
+        "import importlib as loader\ngetattr(loader, 'import_module')(name='{root}.manifest')",
+        "def load():\n    from importlib import import_module as find\n"
+        "    return find(name='{root}.manifest')",
     ],
 )
 def test_forbidden_import_forms_are_detected(tmp_path: Path, root: str, source: str) -> None:

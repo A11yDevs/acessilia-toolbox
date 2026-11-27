@@ -53,6 +53,11 @@ and `changed_count`. Each result has the corresponding `id`, normalized
   Model validators enforce unique ids and consistent result counts beyond the
   structural JSON Schema constraints.
 
+Validated target/result collections are immutable tuple snapshots internally;
+their elements and count fields are frozen too. Public JSON continues to use
+arrays. Only input targets expose the internal input-fingerprint helper;
+observations carry the original `input_fingerprint` separately from output text.
+
 Schemas are generated from the strict Pydantic operational DTOs, not from a
 copy of the Core planning envelope:
 
@@ -66,9 +71,12 @@ python scripts/derive_providers_config.py --check
 ## Limits, repetition and lifecycle
 
 - At most **256 targets**, ids of **1–256 characters**, and **1,048,576 bytes**
-  for the entire serialized request. This is checked before JSON decoding;
-  transport upload/spooling and global in-memory limits still apply.
-- The execution budget/hint is **5 seconds**, or a lower provider timeout.
+  for the entire serialized request. The adapter checks the byte limit before
+  JSON decoding; target count/id length are model checks after parsing. The
+  generic executor may already have fingerprinted/materialized the input under
+  its global limits. Thus 1 MiB is neither an end-to-end memory ceiling nor a
+  total response-size limit; upload/spooling/global memory limits still apply.
+- The adapter parsing/computation budget/hint is **5 seconds**, or a lower provider timeout.
   The adapter checks elapsed time after bounded computation and refuses an
   over-budget result with `provider_timeout`; it cannot preempt synchronous
   Docstruct code. Admission uses the existing process limit (default four
@@ -85,7 +93,11 @@ python scripts/derive_providers_config.py --check
   callers must not reuse an id for changed work or skip fingerprint checks.
   Cancellation is observed by the existing executor
   before/after provider execution and before publication; acknowledgment is
-  not synchronous preemption.
+  not synchronous preemption. A cancel observed at those checks prevents
+  subsequent publication work; it does not roll back writes already started
+  or completed between checks. Storage and cache publication are not one
+  atomic transaction. The adapter budget does not bound upload, generic input
+  fingerprinting/materialization, cache/storage or response construction.
 - Provenance records the original payload fingerprint, exact capability/provider
   version, Toolbox runtime and Docstruct/algorithm versions; those component
   versions also enter the existing execution cache key. No hidden semantic
