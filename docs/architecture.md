@@ -66,11 +66,18 @@ dependencies of its own. The normalization builder uses it for table ASTs.
 | 3 | Agentic core | SDK, docstruct |
 
 - **Dependencies point down only.** The Toolbox never imports the core
-  (`backend`) or the SDK; its clients reach it over REST/MCP.
+  (`acessilia_core`, legacy `backend`/`frontend`) or `acessilia_sdk`;
+  `tests/unit/test_architecture.py` checks static and literal dynamic imports.
+  Clients reach it over REST/MCP.
 - **Shared algorithms live in docstruct, not here.** A copy diverges: the
   table normalization this repository used to carry dropped empty cells
   (shifting columns) and could not read Docling's grid format, both fixed in
   docstruct long before.
+- **Bounded operational runtime.** Internal `acessilia_toolbox.operations`
+  composes local algorithms under versioned capability contracts, following
+  [ADR-0032](https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0032-toolbox-runtime-library-placement.md).
+  Its first slice is [text normalization](text-normalization.md); Core goals,
+  obligations and semantic decisions do not enter this package.
 - **No planning policy.** docstruct holds none, and neither does the Toolbox:
   structured documents carry observations, never obligations, methods or costs
   (`obligations` is always empty; the field stays, without a `deprecated` mark,

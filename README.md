@@ -211,6 +211,7 @@ flowchart TB
 | `chem.convert` | pure-chem (in-process, mhchem) | ✅ |
 | `code.normalize` | pure-code (in-process) | ✅ |
 | `text.postprocess` | pure-text (in-process) | ✅ |
+| [`document.text.normalize@1`](docs/text-normalization.md) | docstruct-text (bounded batch, in-process Docstruct) | ✅ |
 | `accessibility.mark` | pure-accessibility (in-process) | ✅ |
 | `dataset.*` | dataset-github, dataset-huggingface (in-process, optional) | ✅ |
 | `artifact.store` / `artifact.retrieve` | minio (primary), filesystem (failover), optional | ✅ |

@@ -226,6 +226,14 @@ providers:
   - code.normalize
   media_types:
   - text/plain
+- id: docstruct-text
+  version: 1.0.0
+  transport: in_process
+  timeout_seconds: 5
+  capabilities:
+  - document.text.normalize
+  media_types:
+  - application/json
 - id: pure-text
   version: '1.0'
   transport: in_process

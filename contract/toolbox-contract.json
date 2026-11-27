@@ -634,6 +634,33 @@
       }
     },
     {
+      "id": "document.text.normalize",
+      "version": 1,
+      "providers": [
+        "docstruct-text"
+      ],
+      "input": {
+        "schema": "artifact/text-normalization-request@1",
+        "media_types": [
+          "application/json"
+        ],
+        "by_reference": false
+      },
+      "output": {
+        "schema": "artifact/text-normalization-result@1",
+        "media_types": [
+          "application/json"
+        ],
+        "by_reference": false
+      },
+      "execution": {
+        "deterministic": true,
+        "idempotent": true,
+        "cacheable": true,
+        "timeout_hint_seconds": 5
+      }
+    },
+    {
       "id": "document.text.spans",
       "version": 1,
       "providers": [
@@ -1071,6 +1098,12 @@
       ]
     },
     {
+      "id": "docstruct-text",
+      "capabilities": [
+        "document.text.normalize"
+      ]
+    },
+    {
       "id": "edge-tts",
       "capabilities": [
         "audio.synthesize"
@@ -1503,6 +1536,18 @@
       "ref": "artifact/table-candidates@1",
       "status": "published",
       "file": "schemas/table-candidates@1.json",
+      "note": null
+    },
+    {
+      "ref": "artifact/text-normalization-request@1",
+      "status": "published",
+      "file": "schemas/text-normalization-request@1.json",
+      "note": null
+    },
+    {
+      "ref": "artifact/text-normalization-result@1",
+      "status": "published",
+      "file": "schemas/text-normalization-result@1.json",
       "note": null
     },
     {

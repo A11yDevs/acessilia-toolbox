@@ -1,0 +1,32 @@
+id: document.text.normalize
+version: 1
+description: >-
+  Apply one pass of Docstruct norm_fix to a bounded ordered batch of text
+  targets, preserving ids, empty/null values and protected table/formula text.
+  Return input-bound change observations; the caller owns workflow decisions.
+
+input:
+  schema: artifact/text-normalization-request@1
+  media_types:
+    - application/json
+
+output:
+  schema: artifact/text-normalization-result@1
+  media_types:
+    - application/json
+
+execution:
+  deterministic: true
+  idempotent: true
+  cacheable: true
+  timeout_hint_seconds: 5
+
+semantics:
+  requires:
+    - text_available
+  produces:
+    - text_normalized
+
+providers:
+  - id: docstruct-text
+    version: "1.0.0+"
