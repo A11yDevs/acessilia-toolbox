@@ -13,9 +13,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 SRC = Path(__file__).resolve().parents[2] / "src" / "acessilia_toolbox"
 #: The SDK and the core's top-level packages.
-FORBIDDEN = frozenset({"acessilia_sdk", "backend", "frontend"})
+FORBIDDEN = frozenset({"acessilia_core", "acessilia_sdk", "backend", "frontend"})
 ADR = (
     "https://github.com/A11yDevs/acessilia/blob/develop/docs/adr/0002-component-responsibilities.md"
 )
@@ -55,3 +57,35 @@ def test_the_toolbox_imports_neither_the_sdk_nor_the_core() -> None:
     assert not offenders, (
         f"the Toolbox must depend on docstruct only (ADR-0002, see {ADR}): " + "; ".join(offenders)
     )
+
+
+@pytest.mark.parametrize("root", ["acessilia_core", "acessilia_sdk", "backend", "frontend"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import {root}.manifest.models",
+        "from {root}.manifest import ProcessingManifest",
+        "def load():\n    from {root}.manifest import ProcessingManifest",
+        "__import__('{root}.manifest')",
+        "import importlib\nimportlib.import_module('{root}.manifest')",
+        "from importlib import import_module\nimport_module('{root}.manifest')",
+    ],
+)
+def test_forbidden_import_forms_are_detected(tmp_path: Path, root: str, source: str) -> None:
+    module = tmp_path / "synthetic.py"
+    module.write_text(source.format(root=root), encoding="utf-8")
+    assert _imported_roots(module) & FORBIDDEN == {root}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from docstruct.text.norm_fix import norm_fix",
+        "from .acessilia_core import local_name",
+        "description = 'import acessilia_core'",
+    ],
+)
+def test_allowed_code_is_not_a_forbidden_import(tmp_path: Path, source: str) -> None:
+    module = tmp_path / "synthetic.py"
+    module.write_text(source, encoding="utf-8")
+    assert not (_imported_roots(module) & FORBIDDEN)
