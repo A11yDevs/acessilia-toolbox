@@ -24,6 +24,7 @@ roadmap candidates.
 | DOCX          | `document.export.docx`                                  | Pandoc (PDF/UA sidecar)                    | [implemented] |
 | Code          | `code.normalize`                                        | pure-python (in-process)                   | [implemented] |
 | Text          | `text.postprocess`                                      | pure-python (in-process)                   | [implemented] |
+| Normalization | [`document.text.normalize@1`](text-normalization.md)    | docstruct-text (bounded batch, in-process) | [implemented] |
 | Datasets      | `dataset.list`, `dataset.get_item`, `dataset.sync`, ... | GitHub, HuggingFace (in-process, optional) | [implemented] |
 | Artifacts     | `artifact.store`, `artifact.retrieve`                   | MinIO, S3                                  | [implemented] |
 | Cache         | `cache.get`, `cache.put`                                | Valkey, Redis                              | [implemented] |

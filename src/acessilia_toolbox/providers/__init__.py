@@ -13,6 +13,7 @@ from acessilia_toolbox.providers.docling_chem import DoclingChemProvider
 from acessilia_toolbox.providers.docling_layout import DoclingLayoutProvider
 from acessilia_toolbox.providers.docling_math import DoclingMathProvider
 from acessilia_toolbox.providers.docling_ocr import DoclingOcrProvider
+from acessilia_toolbox.providers.docstruct_text import DocstructTextProvider
 from acessilia_toolbox.providers.edge_tts_provider import EdgeTtsProvider
 from acessilia_toolbox.providers.math_speech import MathSpeechProvider
 from acessilia_toolbox.providers.media_inspect import PureMediaInspectProvider
@@ -83,6 +84,7 @@ ADAPTERS: dict[str, Callable[[ProviderDescriptor], ProviderAdapter]] = {
     "docling-layout": DoclingLayoutProvider,
     "docling-math": DoclingMathProvider,
     "docling-ocr": DoclingOcrProvider,
+    "docstruct-text": DocstructTextProvider,
     "edge-tts": EdgeTtsProvider,
     "homr": HomrProvider,
     "math-speech": MathSpeechProvider,
@@ -128,6 +130,7 @@ __all__ = [
     "DoclingMathProvider",
     "DoclingOcrProvider",
     "DoclingProvider",
+    "DocstructTextProvider",
     "EdgeTtsProvider",
     "GitHubDatasetProvider",
     "HomrProvider",
