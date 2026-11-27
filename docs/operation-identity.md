@@ -4,7 +4,8 @@ Brazilian Portuguese: [pt-BR version](operation-identity.pt-br.md).
 
 An `operation_id` names one logical execution within a task. Reusing it joins
 the original response or execution error only when the complete request matches.
-A changed request returns the existing `400 invalid_input` error. A different
+A conflicting validated request returns the existing `400 invalid_input` error;
+malformed or unsupported requests keep their normal validation errors. A different
 task receives `404 operation_not_found`; authentication is checked first.
 `attempt_id` changes on each HTTP attempt and does not affect request identity.
 Calls without operation headers retain their existing independent execution path.

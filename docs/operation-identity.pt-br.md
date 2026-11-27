@@ -4,8 +4,9 @@ Inglês: [English version](operation-identity.md).
 
 Um `operation_id` identifica uma execução lógica dentro de uma tarefa. Reutilizá-lo
 retorna a resposta ou erro de execução original apenas quando a requisição
-completa corresponde. Requisição alterada recebe o erro existente
-`400 invalid_input`. Outra tarefa recebe `404 operation_not_found`; a autenticação
+completa corresponde. Requisição validada conflitante recebe o erro existente
+`400 invalid_input`; requisições malformadas ou não suportadas mantêm seus erros
+normais de validação. Outra tarefa recebe `404 operation_not_found`; a autenticação
 é verificada primeiro. `attempt_id` muda a cada tentativa HTTP e não participa da
 identidade. Chamadas sem os headers de operação mantêm a execução independente.
 
