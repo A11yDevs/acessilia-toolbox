@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import tempfile
+from collections.abc import Mapping
 from typing import Annotated, Any, BinaryIO, Literal, cast
 from urllib.parse import quote
 
@@ -17,6 +18,12 @@ from starlette.concurrency import run_in_threadpool
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.api.auth import require_api_key
+from acessilia_toolbox.api.operation_identity import (
+    artifact_identity,
+    execution_binding,
+    request_fingerprint,
+    upload_identity,
+)
 from acessilia_toolbox.api.schemas import (
     CapabilityDetail,
     CapabilitySummary,
@@ -144,15 +151,18 @@ def _release_operation(
     operations(request).release(operation, error=error)
 
 
-async def _join_operation(operation: Operation) -> Any:
+async def _join_operation(operation: Operation, request: Request, fingerprint: str) -> Any:
     """Wait for the owner request and return its result, without a new slot.
 
     A retry with the same ``operation_id`` must not run the provider again.
-    Waiting happens in a thread so the event loop and the cancellation route
-    stay responsive.
+    Async notifications leave the worker pool available to the owner and cancel
+    route, including while the owner's request identity is still being prepared.
     """
+    if not operation.request_ready.is_set():
+        await operations(request).wait_for(operation, request_ready=True)
+    operations(request).check_request(operation, fingerprint)
     if not operation.terminal:
-        await run_in_threadpool(operation.done_event.wait)
+        await operations(request).wait_for(operation)
     if operation.cancel_requested or operation.state == "cancelled":
         raise OperationCancelledError(
             "operation was cancelled", operation_id=operation.operation_id
@@ -162,6 +172,22 @@ async def _join_operation(operation: Operation) -> Any:
     return operation.result
 
 
+async def _operation_input(
+    file: UploadFile | None,
+    artifact_id: str | None,
+    *,
+    default_filename: str | None = "upload",
+) -> dict[str, Any]:
+    if file is not None and artifact_id:
+        raise InvalidInputError("provide either a file or an artifact_id, not both")
+    if file is not None:
+        await _check_upload_stream(file)
+        return await run_in_threadpool(
+            upload_identity, file, max_bytes=MAX_UPLOAD_BYTES, default_filename=default_filename
+        )
+    if artifact_id:
+        return artifact_identity(artifact_id)
+    raise InvalidInputError("a file or an artifact_id is required")
 
 
 def capabilities(request: Request) -> CapabilityRegistry:
@@ -324,43 +350,89 @@ async def execute_capability(
         task_id=task_id,
         attempt_id=attempt_id,
     )
-    if not owner:
-        assert operation is not None
-        return cast(ExecutionResponse, await _join_operation(operation))
-    if not slots.acquire(blocking=False):
+    if owner and not slots.acquire(blocking=False):
         error = ProviderUnavailableError("execution capacity exhausted; retry later")
         _release_operation(request, operation, error)
         raise error
+    execution_started = False
     try:
+        parsed = None
+        if operation is not None:
+            source = await _operation_input(file, artifact_id)
+            parsed = _parse_parameters(parameters)
+            fingerprint, provider, version = execution_binding(
+                capabilities(request),
+                providers(request),
+                capability_id=capability_id,
+                provider_id=provider,
+                capability_version=version,
+                source=source,
+                parameters=parsed,
+                language=language,
+                no_cache=no_cache,
+            )
+            if not owner:
+                return cast(
+                    ExecutionResponse, await _join_operation(operation, request, fingerprint)
+                )
+            ensure_not_cancelled(operation)
+            operations(request).bind_request(operation, fingerprint)
         with contextlib.ExitStack() as stack:
-            response = await _execute_with_input(
-                runner, stack, capability_id, file, artifact_id, provider, parameters,
-                language, version, no_cache, operation=operation,
+            payload, filename, media_type = await _execution_input(
+                runner,
+                stack,
+                file,
+                artifact_id,
+                capability_id=capability_id,
+                upload_checked=operation is not None,
+            )
+            parsed = parsed if parsed is not None else _parse_parameters(parameters)
+            ensure_not_cancelled(operation)
+            execution_started = True
+            response = await _execute_prepared(
+                runner,
+                capability_id,
+                payload,
+                filename,
+                media_type,
+                provider,
+                parsed,
+                language,
+                version,
+                no_cache,
+                operation=operation,
             )
         ensure_not_cancelled(operation)
         if operation is not None:
             operations(request).finish(operation, "finished", result=response)
         return response
-    except OperationCancelledError as exc:
-        if operation is not None:
-            operations(request).finish(operation, "cancelled", error=exc)
-        raise
-    except Exception as exc:
-        _finish_operation(request, operation, "failed", error=exc)
+    except BaseException as exc:
+        if owner:
+            if isinstance(exc, OperationCancelledError):
+                _finish_operation(request, operation, "cancelled", error=exc)
+            elif execution_started:
+                _finish_operation(request, operation, "failed", error=exc)
+            else:
+                _release_operation(request, operation, exc)
         raise
     finally:
-        slots.release()
+        if owner:
+            slots.release()
 
 
-async def _execute_with_input(
-    runner: CapabilityExecutor, stack: contextlib.ExitStack, capability_id: str,
-    file: UploadFile | None, artifact_id: str | None, provider: str | None,
-    parameters: str | None, language: str, version: int | None, no_cache: bool,
-    *, operation: Operation | None = None,
-) -> ExecutionResponse:
+async def _execution_input(
+    runner: CapabilityExecutor,
+    stack: contextlib.ExitStack,
+    file: UploadFile | None,
+    artifact_id: str | None,
+    *,
+    capability_id: str,
+    upload_checked: bool = False,
+) -> tuple[bytes | BinaryIO, str, str]:
     payload: bytes | BinaryIO
     if file is not None and not artifact_id:
-        await _check_upload_stream(file)
+        if not upload_checked:
+            await _check_upload_stream(file)
         payload, filename, media_type = (
             file.file,
             file.filename or "upload",
@@ -378,6 +450,23 @@ async def _execute_with_input(
         raise InvalidInputError(
             f"upload exceeds {MAX_UPLOAD_BYTES} bytes", capability=capability_id
         )
+    return payload, filename, media_type
+
+
+async def _execute_prepared(
+    runner: CapabilityExecutor,
+    capability_id: str,
+    payload: bytes | BinaryIO,
+    filename: str,
+    media_type: str,
+    provider: str | None,
+    parameters: Mapping[str, Any],
+    language: str,
+    version: int | None,
+    no_cache: bool,
+    *,
+    operation: Operation | None = None,
+) -> ExecutionResponse:
 
     result = await run_in_threadpool(
         runner.execute,
@@ -387,7 +476,7 @@ async def _execute_with_input(
         media_type=media_type,
         provider_id=provider,
         capability_version=version,
-        parameters=_parse_parameters(parameters),
+        parameters=parameters,
         language=language,
         no_cache=no_cache,
         operation=operation,
@@ -457,20 +546,29 @@ async def store_artifact(
         task_id=task_id,
         attempt_id=attempt_id,
     )
-    if not owner:
-        assert operation is not None
-        return cast(ArtifactReference, await _join_operation(operation))
-    if not slots.acquire(blocking=False):
+    if owner and not slots.acquire(blocking=False):
         error = ProviderUnavailableError("execution capacity exhausted")
         _release_operation(request, operation, error)
         raise error
+    execution_started = False
     try:
-        await _check_upload_stream(file)
+        if operation is not None:
+            source = await _operation_input(file, None, default_filename=None)
+            fingerprint = request_fingerprint({"route": "artifact.store", "input": source})
+            if not owner:
+                return cast(
+                    ArtifactReference, await _join_operation(operation, request, fingerprint)
+                )
+            ensure_not_cancelled(operation)
+            operations(request).bind_request(operation, fingerprint)
+        else:
+            await _check_upload_stream(file)
         # A cancel observed before the store starts writes nothing. One that
         # arrives while the store runs cannot be undone: artifacts are
         # content-addressed and shared by every upload of the same bytes, so
         # the object is kept and only the reference is withheld.
         ensure_not_cancelled(operation)
+        execution_started = True
         stored = await run_in_threadpool(
             runner.store_artifact_stream,
             file.file,
@@ -482,15 +580,18 @@ async def store_artifact(
         if operation is not None:
             operations(request).finish(operation, "finished", result=reference)
         return reference
-    except OperationCancelledError as exc:
-        if operation is not None:
-            operations(request).finish(operation, "cancelled", error=exc)
-        raise
-    except Exception as exc:
-        _finish_operation(request, operation, "failed", error=exc)
+    except BaseException as exc:
+        if owner:
+            if isinstance(exc, OperationCancelledError):
+                _finish_operation(request, operation, "cancelled", error=exc)
+            elif execution_started:
+                _finish_operation(request, operation, "failed", error=exc)
+            else:
+                _release_operation(request, operation, exc)
         raise
     finally:
-        slots.release()
+        if owner:
+            slots.release()
 
 
 @router.get("/artifacts/{artifact_id}", responses=ERROR_RESPONSES, tags=["artifacts"])

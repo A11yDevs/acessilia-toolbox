@@ -11,6 +11,8 @@ import json
 from collections.abc import Mapping
 from typing import IO, Any
 
+from acessilia_toolbox.core.errors import UploadTooLargeError
+
 DIGEST_PREFIX = "sha256:"
 _CHUNK_SIZE = 1024 * 1024
 
@@ -19,16 +21,26 @@ def fingerprint_bytes(data: bytes) -> str:
     return DIGEST_PREFIX + hashlib.sha256(data).hexdigest()
 
 
-def fingerprint_stream(stream: IO[bytes]) -> str:
+def fingerprint_stream(stream: IO[bytes], *, max_bytes: int | None = None) -> str:
+    if max_bytes is not None and max_bytes < 0:
+        raise ValueError("max_bytes must be nonnegative")
     digest = hashlib.sha256()
-    while chunk := stream.read(_CHUNK_SIZE):
+    size = 0
+    while chunk := stream.read(
+        _CHUNK_SIZE if max_bytes is None else min(_CHUNK_SIZE, max_bytes - size + 1)
+    ):
+        size += len(chunk)
+        if max_bytes is not None and size > max_bytes:
+            raise UploadTooLargeError(f"upload exceeds {max_bytes} bytes")
         digest.update(chunk)
     return DIGEST_PREFIX + digest.hexdigest()
 
 
-def canonical_json(value: Any) -> str:
+def canonical_json(value: Any, *, allow_nan: bool = True) -> str:
     """Serialize deterministically so equivalent inputs hash identically."""
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=allow_nan
+    )
 
 
 def fingerprint_parameters(parameters: Mapping[str, Any] | None) -> str:

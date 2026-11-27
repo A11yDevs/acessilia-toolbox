@@ -14,6 +14,8 @@ toolbox.
 | [capability-model.md](capability-model.md)           | Normalized capability and provider contracts                        |
 | [pddl.md](pddl.md)                                   | PDDL publication and consumption model                              |
 | [api.md](api.md)                                     | REST and MCP interface principles                                   |
+| [operation-identity.md](operation-identity.md)       | Request binding, retry joining and preparation failures             |
+| [operation-identity.pt-br.md](operation-identity.pt-br.md) | Operation request identity (Brazilian Portuguese)              |
 | [artifacts.md](artifacts.md)                         | Artifact references, object storage, hashing, and cache             |
 | [tools.md](tools.md)                                 | Candidate capabilities and providers                                |
 | [rapidocr-orient.md](rapidocr-orient.md)             | Page orientation provider (English)                                 |

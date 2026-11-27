@@ -287,15 +287,18 @@ X-Acessilia-Attempt-Id: <attempt_id>
 ```
 
 The caller owns `task_id` and `operation_id`; the SDK creates a new
-`attempt_id` per HTTP attempt. A duplicate `operation_id` with the same
-`task_id` joins the running or finished operation instead of running the
-provider twice. Only operations that may have run are joined: a request
-refused before the provider starts, such as `503` for lack of an execution
-slot, releases its `operation_id`, so a retry with that id is admitted once
-capacity is available. An `operation_id` names one capability: reusing it for
-another (including `artifact.store` against an execute route) is
-`400 invalid_input`. Identifiers are 1–200 log-safe characters and require
-each other (`operation_id` requires `task_id`).
+`attempt_id` per HTTP attempt. Within the same `task_id`, a duplicate
+`operation_id` joins the running or retained terminal outcome only when the
+complete request matches: route, resolved capability/provider bindings, input,
+parameters, language and cache policy. Upload identity includes bytes, effective
+filename and media type; artifact references use the canonical content id.
+Changing the request returns `400 invalid_input`, without running again or
+changing the owner's state. An identical retry needs no additional execution
+slot. Preparation refusals, such as exhausted capacity or invalid parameters,
+release the id so a corrected retry can be admitted; cancellation still wins.
+Identifiers are 1–200 log-safe characters and require each other
+(`operation_id` requires `task_id`). See [operation request identity](operation-identity.md)
+for canonicalization, lifecycle and resource limits.
 
 `POST /v1/operations/{operation_id}:cancel` requires the same task header and
 answers `404 operation_not_found` for an unknown id or another task. States are

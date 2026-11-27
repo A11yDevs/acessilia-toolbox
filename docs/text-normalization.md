@@ -88,9 +88,9 @@ python scripts/derive_providers_config.py --check
 - Job ids, operation ids, input digests and cache keys have distinct roles.
   Use a new operation id when input/provider/version changes. Existing operation
   joining is process-local and may be evicted/restarted; it is not durable
-  distributed idempotency. The existing join does not validate the full input
-  identity ([Toolbox #173](https://github.com/A11yDevs/acessilia-toolbox/issues/173));
-  callers must not reuse an id for changed work or skip fingerprint checks.
+  distributed idempotency. [Operation request binding](operation-identity.md)
+  rejects changed requests with `400 invalid_input`; callers must still use
+  a new id for changed work and validate per-target fingerprints and context.
   Cancellation is observed by the existing executor
   before/after provider execution and before publication; acknowledgment is
   not synchronous preemption. A cancel observed at those checks prevents
