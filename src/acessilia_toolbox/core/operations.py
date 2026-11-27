@@ -25,6 +25,8 @@ the replica that owns the operation.  Both limits are explicit in ADR-0019.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import re
 import threading
 import time
@@ -35,6 +37,8 @@ from acessilia_toolbox.core.errors import (
     InvalidInputError,
     OperationCancelledError,
     OperationNotFoundError,
+    ProviderExecutionError,
+    ProviderUnavailableError,
 )
 
 OperationState = Literal[
@@ -64,7 +68,13 @@ class Operation:
     #: The response or error of the owner request, kept for a retry that joins
     #: the same operation instead of running the provider twice.
     result: Any = None
-    error: BaseException | None = None
+    error: Exception | None = None
+    request_fingerprint: str | None = field(default=None, repr=False)
+    request_ready: threading.Event = field(default_factory=threading.Event)
+    waiters: set[tuple[bool, asyncio.AbstractEventLoop, asyncio.Future[None]]] = field(
+        default_factory=set,
+        repr=False,
+    )
 
     @property
     def cancel_requested(self) -> bool:
@@ -107,8 +117,9 @@ class OperationRegistry:
         """Return the operation and whether this caller owns its execution.
 
         A retry that arrives while the first attempt still runs, or after it
-        finished, gets the same operation with ``owner=False`` and joins its
-        result.  The provider therefore runs once per ``operation_id`` while
+        finished, gets the same operation with ``owner=False``. The caller must
+        check its request binding before joining the result. The provider runs
+        once per ``operation_id`` while
         the state is retained, which is the property #406's retry budget needs.
         """
         operation_id = _validated(operation_id, "operation_id")
@@ -120,9 +131,7 @@ class OperationRegistry:
             if existing is not None:
                 if existing.task_id != task_id:
                     # Do not disclose that another task owns this id.
-                    raise OperationNotFoundError(
-                        "unknown operation", operation_id=operation_id
-                    )
+                    raise OperationNotFoundError("unknown operation", operation_id=operation_id)
                 if existing.capability_id != capability_id:
                     # Joining would hand this caller a result of another
                     # capability, which its route then casts to the wrong
@@ -144,15 +153,77 @@ class OperationRegistry:
             self._operations[operation_id] = operation
             return operation, True
 
+    def bind_request(self, operation: Operation, fingerprint: str) -> None:
+        """Seal the owner's validated request before handing work to an executor/store."""
+        with self._lock:
+            ensure_not_cancelled(operation)
+            if self._operations.get(operation.operation_id) is not operation or operation.terminal:
+                raise InvalidInputError("cannot bind an inactive operation")
+            if operation.request_fingerprint not in {None, fingerprint}:
+                raise InvalidInputError("operation_id is already used for another request")
+            operation.request_fingerprint = fingerprint
+            self._signal(operation, request_ready=True)
+
+    async def wait_for(self, operation: Operation, *, request_ready: bool = False) -> None:
+        """Wait without occupying the worker pool needed by the owner or cancellation."""
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[None] = loop.create_future()
+        waiter = (request_ready, loop, future)
+        event = operation.request_ready if request_ready else operation.done_event
+        with self._lock:
+            if event.is_set():
+                return
+            operation.waiters.add(waiter)
+        try:
+            await future
+        finally:
+            with self._lock:
+                operation.waiters.discard(waiter)
+
+    @staticmethod
+    def _signal(operation: Operation, *, request_ready: bool = False) -> None:
+        """Called under the registry lock, including from provider/cancel threads."""
+        event = operation.request_ready if request_ready else operation.done_event
+        event.set()
+        for waiter in tuple(operation.waiters):
+            ready, loop, future = waiter
+            if ready == request_ready:
+                try:
+                    loop.call_soon_threadsafe(_wake_waiter, future)
+                except RuntimeError:
+                    if not loop.is_closed():
+                        raise
+                    # The loop can close after registration or while scheduling.
+                    # Mark the orphan cancelled; its callbacks cannot run on a
+                    # closed loop. Do not prevent notification of live waiters.
+                    with contextlib.suppress(RuntimeError):
+                        future.cancel()
+                operation.waiters.discard(waiter)
+
+    def check_request(self, operation: Operation, fingerprint: str) -> None:
+        """Check a retry without changing the owner, its identity or its terminal state."""
+        with self._lock:
+            if operation.request_fingerprint == fingerprint:
+                return
+            if operation.request_fingerprint is None and (
+                operation.error is not None or operation.cancel_requested
+            ):
+                # Preparation was refused/cancelled before an execution existed;
+                # propagate that refusal, never a successful unrelated response.
+                return
+            raise InvalidInputError(
+                "operation_id is already used for another request",
+                field="operation_id",
+                operation_id=operation.operation_id,
+            )
+
     def cancel(self, operation_id: str, *, task_id: str | None) -> Operation:
         operation_id = _validated(operation_id, "operation_id")
         task_id = _validated(task_id, "task_id")
         with self._lock:
             operation = self._operations.get(operation_id)
             if operation is None or operation.task_id != task_id:
-                raise OperationNotFoundError(
-                    "unknown operation", operation_id=operation_id
-                )
+                raise OperationNotFoundError("unknown operation", operation_id=operation_id)
             if operation.state == "running":
                 operation.state = "cancel_requested"
                 operation.cancel_event.set()
@@ -165,23 +236,26 @@ class OperationRegistry:
         *,
         result: Any = None,
         error: BaseException | None = None,
-    ) -> None:
+    ) -> OperationState:
+        """Commit and return the authoritative terminal decision under the lock."""
         with self._lock:
             if operation.terminal:
-                return
-            if operation.cancel_event.is_set() and state == "finished":
+                return operation.state
+            if operation.cancel_event.is_set() or isinstance(error, OperationCancelledError):
                 state = "cancelled"
             operation.state = state
             operation.finished_at = time.time()
-            operation.result = result
-            operation.error = error
+            operation.result = result if state == "finished" else None
+            operation.error = None if state == "finished" else _retained_error(operation, error)
             self._terminal_order.append(operation.operation_id)
             while len(self._terminal_order) > self._max_terminal_entries:
                 old = self._terminal_order.pop(0)
                 current = self._operations.get(old)
                 if current is not None and current.terminal:
                     self._operations.pop(old, None)
-            operation.done_event.set()
+            self._signal(operation)
+            self._signal(operation, request_ready=True)
+            return state
 
     def release(self, operation: Operation, *, error: BaseException) -> None:
         """Finish an operation refused before execution without retaining its id.
@@ -201,8 +275,9 @@ class OperationRegistry:
             operation.state = "cancelled" if cancelled else "failed"
             operation.finished_at = time.time()
             operation.result = None
-            operation.error = error
-            operation.done_event.set()
+            operation.error = _retained_error(operation, error, preparation=True)
+            self._signal(operation)
+            self._signal(operation, request_ready=True)
             if not cancelled:
                 self._operations.pop(operation.operation_id, None)
                 return
@@ -218,6 +293,32 @@ class OperationRegistry:
             return self._operations.get(operation_id)
 
 
+def _wake_waiter(future: asyncio.Future[None]) -> None:
+    if not future.done():
+        future.set_result(None)
+
+
+def _retained_error(
+    operation: Operation, error: BaseException | None, *, preparation: bool = False
+) -> Exception:
+    """A retry must never inherit control exceptions from its owner's coroutine."""
+    if operation.state == "cancelled":
+        return OperationCancelledError(
+            "operation was cancelled", operation_id=operation.operation_id
+        )
+    if isinstance(error, Exception):
+        return error
+    if preparation:
+        return ProviderUnavailableError(
+            "operation preparation was interrupted; retry later",
+            operation_id=operation.operation_id,
+        )
+    return ProviderExecutionError(
+        "operation owner was interrupted; execution outcome is unknown",
+        operation_id=operation.operation_id,
+    )
+
+
 def ensure_not_cancelled(operation: Operation | None) -> None:
     """Raise before publishing a result from a cancelled operation."""
     if operation is not None and operation.cancel_requested:
@@ -230,9 +331,7 @@ def _validated(value: str | None, name: str) -> str:
     if value is None or not value:
         raise InvalidInputError(f"{name} is required with operation headers")
     if not _IDENTIFIER.fullmatch(value):
-        raise InvalidInputError(
-            f"{name} must be 1-200 log-safe characters", field=name
-        )
+        raise InvalidInputError(f"{name} must be 1-200 log-safe characters", field=name)
     return value
 
 

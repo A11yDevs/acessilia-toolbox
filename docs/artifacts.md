@@ -50,6 +50,10 @@ and execution by artifact id use the filename. Records written before
 Public responses should avoid exposing storage credentials. Presigned URLs
 may be used when appropriate.
 
+Calls with an operation id also follow [operation request identity](operation-identity.md):
+upload retries must match bytes, filename and media type; execution retries by
+reference match the canonical artifact id without downloading it again.
+
 ## Content-addressable storage
 
 Where practical, derive immutable artifact identity from content:

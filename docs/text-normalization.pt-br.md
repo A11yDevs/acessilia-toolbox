@@ -92,10 +92,10 @@ python scripts/derive_providers_config.py --check
 - Ids de job/operação, digests de entrada e chaves de cache têm papéis distintos.
   Usar novo id de operação quando entrada/provider/versão mudar. A junção atual
   é local ao processo e pode ser expulsa/reiniciada; não é idempotência
-  distribuída durável. A junção existente não valida a identidade completa da
-  entrada ([Toolbox #173](https://github.com/A11yDevs/acessilia-toolbox/issues/173));
-  consumidores não devem reutilizar ids para trabalho alterado ou pular a
-  verificação de fingerprints. O executor observa cancelamento antes/depois do provider
+  distribuída durável. A [vinculação da requisição](operation-identity.pt-br.md)
+  recusa requisições alteradas com `400 invalid_input`; consumidores ainda devem
+  usar novo id para trabalho alterado e validar fingerprints e contexto por alvo.
+  O executor observa cancelamento antes/depois do provider
   e antes da publicação; reconhecimento não significa preempção síncrona.
   Cancelamento observado nessas verificações impede o trabalho de publicação
   subsequente; não desfaz gravações já iniciadas ou concluídas entre elas.
