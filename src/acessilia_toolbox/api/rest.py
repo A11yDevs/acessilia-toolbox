@@ -8,7 +8,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Mapping
-from typing import Annotated, Any, BinaryIO, Literal, cast
+from typing import Annotated, Any, BinaryIO, cast
 from urllib.parse import quote
 
 import httpx
@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 
 from acessilia_toolbox import __version__
 from acessilia_toolbox.api.auth import require_api_key
+from acessilia_toolbox.api.blocking import run_blocking
 from acessilia_toolbox.api.operation_identity import (
     artifact_identity,
     execution_binding,
@@ -120,24 +121,34 @@ def _begin_operation(
     )
 
 
-def _finish_operation(
+def _record_failure(
     request: Request,
     operation: Operation | None,
-    state: Literal["cancelled", "finished", "failed"],
+    error: BaseException,
     *,
-    result: Any = None,
-    error: BaseException | None = None,
+    execution_started: bool,
 ) -> None:
     if operation is None:
         return
-    # A provider failure after a cancel is still a cancelled operation: the
-    # caller asked to stop, and no result was published.
-    operations(request).finish(
-        operation,
-        "cancelled" if operation.cancel_requested else state,
-        result=result,
-        error=error,
-    )
+    if execution_started or isinstance(error, OperationCancelledError):
+        operations(request).finish(operation, "failed", error=error)
+    else:
+        operations(request).release(operation, error=error)
+    if operation.state == "cancelled" and isinstance(error, Exception):
+        # Honor the terminal decision for HTTP errors too. Control exceptions
+        # still propagate to the owner's runtime after cleanup.
+        raise OperationCancelledError(
+            "operation was cancelled", operation_id=operation.operation_id
+        ) from None
+
+
+def _commit_success(request: Request, operation: Operation | None, result: Any) -> None:
+    if operation is not None:
+        final = operations(request).finish(operation, "finished", result=result)
+        if final == "cancelled":
+            raise OperationCancelledError(
+                "operation was cancelled", operation_id=operation.operation_id
+            )
 
 
 def _release_operation(
@@ -182,7 +193,7 @@ async def _operation_input(
         raise InvalidInputError("provide either a file or an artifact_id, not both")
     if file is not None:
         await _check_upload_stream(file)
-        return await run_in_threadpool(
+        return await run_blocking(
             upload_identity, file, max_bytes=MAX_UPLOAD_BYTES, default_filename=default_filename
         )
     if artifact_id:
@@ -403,17 +414,11 @@ async def execute_capability(
                 operation=operation,
             )
         ensure_not_cancelled(operation)
-        if operation is not None:
-            operations(request).finish(operation, "finished", result=response)
+        _commit_success(request, operation, response)
         return response
     except BaseException as exc:
         if owner:
-            if isinstance(exc, OperationCancelledError):
-                _finish_operation(request, operation, "cancelled", error=exc)
-            elif execution_started:
-                _finish_operation(request, operation, "failed", error=exc)
-            else:
-                _release_operation(request, operation, exc)
+            _record_failure(request, operation, exc, execution_started=execution_started)
         raise
     finally:
         if owner:
@@ -440,7 +445,7 @@ async def _execution_input(
         )
     elif artifact_id and file is None:
         payload = stack.enter_context(tempfile.TemporaryFile())  # noqa: SIM115
-        ref = await run_in_threadpool(
+        ref = await run_blocking(
             runner.retrieve_artifact_to, artifact_id, payload, max_bytes=MAX_UPLOAD_BYTES
         )
         filename, media_type = ref.filename or "artifact", ref.media_type
@@ -468,7 +473,7 @@ async def _execute_prepared(
     operation: Operation | None = None,
 ) -> ExecutionResponse:
 
-    result = await run_in_threadpool(
+    result = await run_blocking(
         runner.execute,
         capability_id,
         payload,
@@ -569,7 +574,7 @@ async def store_artifact(
         # the object is kept and only the reference is withheld.
         ensure_not_cancelled(operation)
         execution_started = True
-        stored = await run_in_threadpool(
+        stored = await run_blocking(
             runner.store_artifact_stream,
             file.file,
             media_type=file.content_type or "application/octet-stream",
@@ -577,17 +582,11 @@ async def store_artifact(
         )
         reference = reference_of(stored)
         ensure_not_cancelled(operation)
-        if operation is not None:
-            operations(request).finish(operation, "finished", result=reference)
+        _commit_success(request, operation, reference)
         return reference
     except BaseException as exc:
         if owner:
-            if isinstance(exc, OperationCancelledError):
-                _finish_operation(request, operation, "cancelled", error=exc)
-            elif execution_started:
-                _finish_operation(request, operation, "failed", error=exc)
-            else:
-                _release_operation(request, operation, exc)
+            _record_failure(request, operation, exc, execution_started=execution_started)
         raise
     finally:
         if owner:
@@ -672,16 +671,16 @@ async def _check_upload_stream(file: UploadFile) -> None:
             raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
         if not file.size:
             raise InvalidInputError("empty payload")
-        await file.seek(0)
+        await run_blocking(file.file.seek, 0)
         return
     size = 0
-    while chunk := await file.read(1024 * 1024):
+    while chunk := await run_blocking(file.file.read, 1024 * 1024):
         size += len(chunk)
         if size > MAX_UPLOAD_BYTES:
             raise UploadTooLargeError(f"upload exceeds {MAX_UPLOAD_BYTES} bytes")
     if not size:
         raise InvalidInputError("empty payload")
-    await file.seek(0)
+    await run_blocking(file.file.seek, 0)
 
 
 async def _read_upload(file: UploadFile) -> bytes:

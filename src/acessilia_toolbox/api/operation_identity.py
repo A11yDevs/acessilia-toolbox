@@ -76,6 +76,7 @@ def execution_binding(
             "no_cache": no_cache,
         }
     )
-    # Pin the resolved selections used for binding; do not resolve new defaults
-    # between hashing the request and invoking the executor.
+    # Registries are deployment configuration, stable throughout a request.
+    # Pin selections so execution does not resolve defaults again. Concurrent
+    # registry mutation / hot reload is not a supported configuration mechanism.
     return identity, descriptor.id, manifest.version

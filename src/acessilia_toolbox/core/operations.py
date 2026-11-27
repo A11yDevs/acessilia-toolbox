@@ -26,6 +26,7 @@ the replica that owns the operation.  Both limits are explicit in ADR-0019.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import threading
 import time
@@ -36,6 +37,8 @@ from acessilia_toolbox.core.errors import (
     InvalidInputError,
     OperationCancelledError,
     OperationNotFoundError,
+    ProviderExecutionError,
+    ProviderUnavailableError,
 )
 
 OperationState = Literal[
@@ -65,8 +68,8 @@ class Operation:
     #: The response or error of the owner request, kept for a retry that joins
     #: the same operation instead of running the provider twice.
     result: Any = None
-    error: BaseException | None = None
-    request_fingerprint: str | None = None
+    error: Exception | None = None
+    request_fingerprint: str | None = field(default=None, repr=False)
     request_ready: threading.Event = field(default_factory=threading.Event)
     waiters: set[tuple[bool, asyncio.AbstractEventLoop, asyncio.Future[None]]] = field(
         default_factory=set,
@@ -185,9 +188,17 @@ class OperationRegistry:
         for waiter in tuple(operation.waiters):
             ready, loop, future = waiter
             if ready == request_ready:
-                operation.waiters.discard(waiter)
-                if not loop.is_closed():
+                try:
                     loop.call_soon_threadsafe(_wake_waiter, future)
+                except RuntimeError:
+                    if not loop.is_closed():
+                        raise
+                    # The loop can close after registration or while scheduling.
+                    # Mark the orphan cancelled; its callbacks cannot run on a
+                    # closed loop. Do not prevent notification of live waiters.
+                    with contextlib.suppress(RuntimeError):
+                        future.cancel()
+                operation.waiters.discard(waiter)
 
     def check_request(self, operation: Operation, fingerprint: str) -> None:
         """Check a retry without changing the owner, its identity or its terminal state."""
@@ -225,16 +236,17 @@ class OperationRegistry:
         *,
         result: Any = None,
         error: BaseException | None = None,
-    ) -> None:
+    ) -> OperationState:
+        """Commit and return the authoritative terminal decision under the lock."""
         with self._lock:
             if operation.terminal:
-                return
-            if operation.cancel_event.is_set() and state == "finished":
+                return operation.state
+            if operation.cancel_event.is_set() or isinstance(error, OperationCancelledError):
                 state = "cancelled"
             operation.state = state
             operation.finished_at = time.time()
-            operation.result = result
-            operation.error = error
+            operation.result = result if state == "finished" else None
+            operation.error = None if state == "finished" else _retained_error(operation, error)
             self._terminal_order.append(operation.operation_id)
             while len(self._terminal_order) > self._max_terminal_entries:
                 old = self._terminal_order.pop(0)
@@ -243,6 +255,7 @@ class OperationRegistry:
                     self._operations.pop(old, None)
             self._signal(operation)
             self._signal(operation, request_ready=True)
+            return state
 
     def release(self, operation: Operation, *, error: BaseException) -> None:
         """Finish an operation refused before execution without retaining its id.
@@ -262,7 +275,7 @@ class OperationRegistry:
             operation.state = "cancelled" if cancelled else "failed"
             operation.finished_at = time.time()
             operation.result = None
-            operation.error = error
+            operation.error = _retained_error(operation, error, preparation=True)
             self._signal(operation)
             self._signal(operation, request_ready=True)
             if not cancelled:
@@ -283,6 +296,27 @@ class OperationRegistry:
 def _wake_waiter(future: asyncio.Future[None]) -> None:
     if not future.done():
         future.set_result(None)
+
+
+def _retained_error(
+    operation: Operation, error: BaseException | None, *, preparation: bool = False
+) -> Exception:
+    """A retry must never inherit control exceptions from its owner's coroutine."""
+    if operation.state == "cancelled":
+        return OperationCancelledError(
+            "operation was cancelled", operation_id=operation.operation_id
+        )
+    if isinstance(error, Exception):
+        return error
+    if preparation:
+        return ProviderUnavailableError(
+            "operation preparation was interrupted; retry later",
+            operation_id=operation.operation_id,
+        )
+    return ProviderExecutionError(
+        "operation owner was interrupted; execution outcome is unknown",
+        operation_id=operation.operation_id,
+    )
 
 
 def ensure_not_cancelled(operation: Operation | None) -> None:

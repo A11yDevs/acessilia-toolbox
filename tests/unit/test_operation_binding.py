@@ -33,6 +33,8 @@ def test_request_binding_is_sealed_and_does_not_expose_fingerprints_in_state():
         registry.check_request(entry, different)
     assert entry.request_fingerprint == first
     assert "fingerprint" not in str(entry.payload())
+    assert first not in repr(entry)
+    assert "request_fingerprint" not in repr(entry)
 
 
 def test_preparation_refusal_wakes_identity_waiters_and_allows_a_new_owner():

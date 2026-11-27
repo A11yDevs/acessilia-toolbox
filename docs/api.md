@@ -292,10 +292,12 @@ The caller owns `task_id` and `operation_id`; the SDK creates a new
 complete request matches: route, resolved capability/provider bindings, input,
 parameters, language and cache policy. Upload identity includes bytes, effective
 filename and media type; artifact references use the canonical content id.
-Changing the request returns `400 invalid_input`, without running again or
-changing the owner's state. An identical retry needs no additional execution
-slot. Preparation refusals, such as exhausted capacity or invalid parameters,
-release the id so a corrected retry can be admitted; cancellation still wins.
+While a sealed identity is retained, a conflicting validated request returns
+`400 invalid_input`, without running again or changing the owner's state; an
+identical retry needs no additional execution slot. Preparation refusals, such as
+exhausted capacity or invalid parameters, release the id. Attached retries can
+receive the preparation refusal; after release, a later request can become a new
+owner and needs an execution slot. Cancellation still wins.
 Identifiers are 1–200 log-safe characters and require each other
 (`operation_id` requires `task_id`). See [operation request identity](operation-identity.md)
 for canonicalization, lifecycle and resource limits.
